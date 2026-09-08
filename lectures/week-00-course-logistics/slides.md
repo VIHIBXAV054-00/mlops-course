@@ -402,7 +402,7 @@ uv --version
 docker --version && docker compose version
 
 # 2. Get the course repository
-git clone <course-repo-url> && cd <course-repo>
+git clone https://vihibxav054-00.github.io/mlops-course && cd mlops-course
 
 # 3. Run the week 1 lab from a clean clone
 cd labs/week-01-env-setup/starter
