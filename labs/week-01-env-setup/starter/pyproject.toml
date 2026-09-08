@@ -1,0 +1,27 @@
+[project]
+name = "week-01-env-setup"
+version = "0.1.0"
+description = "Week 1 guided environment setup lab"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "scikit-learn>=1.8.0",
+    # UPPER BOUND, deliberate. With `>=2.0.0` alone, Week 1's stale lock
+    # re-resolved to pandas 3.0.5 on a fresh clone while Weeks 2-5 sat at
+    # 2.3.3, and any future `uv lock` would have carried the rest of the
+    # course across a major version one week at a time. The pinned baseline
+    # (LR F1 0.5785 / accuracy 0.7344) is unaffected by 3.x -- measured both
+    # ways on data/diabetes.csv -- so this is skew protection, not a bug fix.
+    # Lift it for every week at once, after re-measuring the pins.
+    "pandas>=2.0.0,<3",
+    "python-dotenv>=1.0.0",
+]
+
+[dependency-groups]
+test = [
+    "pytest>=8.0.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

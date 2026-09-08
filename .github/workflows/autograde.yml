@@ -1,0 +1,82 @@
+# Course autograding — runs each lab's tests on push / PR.
+#
+# This is COURSE GRADING INFRASTRUCTURE, not part of any lab exercise. Week 7
+# teaches you to author your own CI workflows for your project; this file just
+# checks the labs. It auto-discovers every lab, so new weeks are picked up with
+# no edits.
+#
+# ACTION PINS — verified 2026-08-06 against the GitHub API, and re-verify each
+# term. Two things to check, not one:
+#
+#   1. is there a NEWER major?  (all six pins here were 1-4 majors behind when
+#      Week 7 was written, despite this comment having asked for a check since
+#      Week 1)
+#   2. does the tag you are about to write actually EXIST?  `astral-sh/setup-uv`
+#      publishes releases past its newest major tag: v9.0.0 is released, and
+#      there is no `v9` tag, so `@v9` fails at "Set up job" with "unable to find
+#      version v9". Pin the exact release when a major tag is missing.
+name: Autograde labs
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  labs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v9.0.0
+
+      # A STALE LOCK MUST FAIL, NOT SILENTLY RE-RESOLVE. `uv sync` and `uv run`
+      # both rewrite a lock that has drifted from its pyproject.toml, so without
+      # this gate CI would install whatever resolves on the day and still report
+      # green. That is exactly how Week 1 shipped a lock with no pandas entry in
+      # it: the declared `pandas>=2.0.0` had never been locked, and the first
+      # `uv run pytest` re-resolved it to a new major version.
+      #
+      # `uv lock --check` resolves and asserts nothing moved, without writing.
+      # `--locked` / `--frozen` below are the same guarantee at install time.
+      - name: Check every lab's uv.lock is up to date
+        run: |
+          set -e
+          shopt -s nullglob
+          rc=0
+          for proj in labs/*/starter labs/*; do
+            [ -f "$proj/pyproject.toml" ] || continue
+            if [ ! -f "$proj/uv.lock" ]; then
+              echo "::error file=$proj/pyproject.toml::$proj has no uv.lock — run \`uv lock\` there and commit it"
+              rc=1
+              continue
+            fi
+            if ( cd "$proj" && uv lock --check >/dev/null 2>&1 ); then
+              echo "ok    $proj"
+            else
+              echo "::error file=$proj/uv.lock::$proj/uv.lock is out of date with pyproject.toml — run \`uv lock\` there and commit the result"
+              rc=1
+            fi
+          done
+          exit "$rc"
+
+      - name: Run every lab's tests
+        run: |
+          set -e
+          shopt -s nullglob
+          ran=0
+          # Student bundle layout: labs/<week>/starter/ ; also support a flat labs/<week>/
+          for proj in labs/*/starter labs/*; do
+            [ -f "$proj/pyproject.toml" ] || continue
+            echo "::group::$proj"
+            # --locked: fail if the lock is stale. --frozen: never re-resolve.
+            ( cd "$proj" && uv sync --locked --all-groups && uv run --frozen pytest -q )
+            echo "::endgroup::"
+            ran=$((ran+1))
+          done
+          if [ "$ran" -eq 0 ]; then
+            echo "No labs with a pyproject.toml found — nothing to grade yet."
+          else
+            echo "Ran tests for $ran lab project(s)."
+          fi

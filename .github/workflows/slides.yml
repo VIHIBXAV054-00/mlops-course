@@ -1,0 +1,89 @@
+# Build every published Slidev deck and deploy it to GitHub Pages.
+#
+# THIS FILE LIVES IN THE PUBLIC COURSE REPO, and that placement is the whole
+# progressive-slides mechanism: this repo only ever contains the weeks that have
+# been released, so the deck list this workflow discovers IS the released list.
+# Nothing here filters by date, and nothing here needs to — the filtering
+# happened in the instructor repo's build_student_bundle.sh before the push.
+#
+# GENERATED FILE. It is copied in from the instructor repo
+# (scripts/templates/slides.yml) on every weekly release, so edits made here are
+# overwritten. Change it there.
+#
+# Verify action and @slidev/cli versions before each term.
+name: Build & deploy slides
+
+on:
+  push:
+    branches: [main]
+    paths: ['lectures/**']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22          # current Slidev requires Node >= 22
+      - name: Install Slidev + default theme
+        # Installed explicitly so the build is non-interactive: in CI Slidev
+        # cannot prompt to auto-install the theme ("theme not found"). Pin these
+        # versions once a term for reproducibility if desired.
+        run: npm init -y >/dev/null 2>&1 && npm install -D @slidev/cli @slidev/theme-default
+      - name: Build every lecture deck
+        run: |
+          set -e
+          REPO="${{ github.event.repository.name }}"
+          mkdir -p dist
+          shopt -s nullglob
+          weeks=()
+          for deck in lectures/*/slides.md; do
+            week="$(basename "$(dirname "$deck")")"
+            # Relative base (./) + hash routing (set in each deck's headmatter) so the
+            # SPA works in a Pages subdirectory without server rewrites. --out MUST be
+            # absolute: Slidev resolves a relative --out against the slides file's dir.
+            # cd into the deck: Slidev resolves a deck's styles/index.css against the
+            # CWD, not against the slides file, so building by path from the repo root
+            # silently drops those styles. --out stays absolute (see above).
+            ( cd "lectures/$week" && npx slidev build slides.md --base ./ --out "$GITHUB_WORKSPACE/dist/$week" )
+            weeks+=("$week")
+          done
+          # Write the landing page LAST so a deck build can never clobber it.
+          {
+            echo "<!doctype html><meta charset=utf-8><title>Course slides</title>"
+            echo "<h1>Lecture slides</h1>"
+            echo "<ul>"
+            for week in "${weeks[@]}"; do echo "<li><a href=\"./$week/\">$week</a></li>"; done
+            echo "</ul>"
+            # Say why the list is short in September. Without this the site reads
+            # as broken rather than as not-yet-released.
+            echo "<p>Weeks are published one at a time, on the morning of each"
+            echo "lecture. See <code>RELEASED.md</code> in the course repository"
+            echo "for the schedule.</p>"
+          } > dist/index.html
+          echo "Built decks: ${weeks[*]}"
+          ls -la dist
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5

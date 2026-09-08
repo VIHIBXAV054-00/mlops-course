@@ -1,0 +1,24 @@
+/* Deck-wide style overrides shared by every lecture deck.
+ *
+ * Each deck imports this from its own styles/index.css:
+ *     @import '../../_shared/slides.css';
+ *
+ * Why styles/index.css and not a <style> block in a slide: Slidev puts a slide's own
+ * styles in a LAZILY-LOADED chunk, so they are absent when someone deep-links into the
+ * middle of a deck or exports it — measured, the override did not apply on slide 28
+ * until slide 1 had rendered. styles/index.css lands in the main bundle instead.
+ *
+ * Why every build must cd into the deck folder: Slidev resolves styles/index.css
+ * against the CURRENT WORKING DIRECTORY, not against slides.md. scripts/build_slides.sh
+ * and .github/workflows/slides.yml both cd; a build by path from the repo root would
+ * silently drop all of this.
+ */
+
+/* The default theme styles the paragraph immediately after an h1 as a subtitle
+ * (.slidev-layout h1 + p { opacity: .5 }), which greys out the first paragraph of any
+ * slide whose body does not begin with a list. The doubled class outranks the theme
+ * without resorting to !important. */
+.slidev-layout.slidev-layout h1 + p {
+  opacity: 1;
+  margin-top: 0;
+}

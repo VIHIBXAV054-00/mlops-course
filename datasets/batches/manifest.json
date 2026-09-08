@@ -1,0 +1,36 @@
+{
+  "source": "../diabetes.csv",
+  "seed": 42,
+  "drift_col": "glucose",
+  "drift_strength": 1.2,
+  "note": "Teaching simulation. Rows are real; only batch assignment is biased.",
+  "batches": {
+    "batch_01_baseline.csv": {
+      "window": [
+        "2024-01-01",
+        "2024-03-30"
+      ],
+      "rows": 461,
+      "target_distribution": {
+        "0": 0.7115,
+        "1": 0.2885
+      },
+      "glucose_mean": 111.89,
+      "glucose_std": 29.28
+    },
+    "batch_02_new_arrival.csv": {
+      "window": [
+        "2024-03-31",
+        "2024-06-28"
+      ],
+      "rows": 307,
+      "target_distribution": {
+        "0": 0.5603,
+        "1": 0.4397
+      },
+      "glucose_mean": 134.41,
+      "glucose_std": 31.11,
+      "glucose_PSI_vs_baseline": 0.5854
+    }
+  }
+}

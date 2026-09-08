@@ -1,0 +1,96 @@
+{
+  "source": "datasets/batches/batch_01_baseline.csv",
+  "note": "DELIBERATELY CORRUPTED teaching material for the Week 5 data-validation lab. Values have been edited. Never train on this file.",
+  "base_rows": 60,
+  "total_rows": 61,
+  "md5": "873300d072058ff129c9f4aa72eee58b",
+  "bytes": 4326,
+  "error_classes": {
+    "schema \u2014 wrong dtype": 1,
+    "semantic \u2014 out of range": 1,
+    "semantic \u2014 impossible sign": 1,
+    "semantic \u2014 invalid label": 1,
+    "completeness \u2014 missing value": 1,
+    "semantic \u2014 unit change": 3,
+    "schema \u2014 unparseable date": 1,
+    "schema \u2014 unexpected column": 1,
+    "uniqueness \u2014 duplicated row": 1
+  },
+  "cell_faults": [
+    {
+      "row": 3,
+      "column": "glucose",
+      "error_class": "schema \u2014 wrong dtype",
+      "value": "unknown",
+      "why": "A non-numeric string in a numeric column. Whoever exported this file used a sentinel word instead of an empty cell, which turns the whole column into text."
+    },
+    {
+      "row": 7,
+      "column": "age",
+      "error_class": "semantic \u2014 out of range",
+      "value": 250,
+      "why": "Nobody is 250 years old. A plausible-looking integer in a column with no upper bound declared."
+    },
+    {
+      "row": 11,
+      "column": "insulin",
+      "error_class": "semantic \u2014 impossible sign",
+      "value": -1,
+      "why": "A negative concentration. Often a sentinel for 'not measured' picked by whoever wrote the export, with nobody downstream told."
+    },
+    {
+      "row": 15,
+      "column": "outcome",
+      "error_class": "semantic \u2014 invalid label",
+      "value": 2,
+      "why": "A third class in a binary target. Silently trains a model on a label that does not exist."
+    },
+    {
+      "row": 19,
+      "column": "blood_pressure",
+      "error_class": "completeness \u2014 missing value",
+      "value": null,
+      "why": "An empty cell where the contract says a value is required."
+    },
+    {
+      "row": 23,
+      "column": "bmi",
+      "error_class": "semantic \u2014 unit change",
+      "value": "x10",
+      "why": "BMI multiplied by ten, as if the exporter switched units or dropped a decimal separator. THE SUBTLE ONE: still numeric, still positive, invisible to a row count."
+    },
+    {
+      "row": 27,
+      "column": "bmi",
+      "error_class": "semantic \u2014 unit change",
+      "value": "x10",
+      "why": "Second occurrence of the same unit change, so the report shows a pattern rather than a one-off typo."
+    },
+    {
+      "row": 31,
+      "column": "bmi",
+      "error_class": "semantic \u2014 unit change",
+      "value": "x10",
+      "why": "Third occurrence."
+    },
+    {
+      "row": 39,
+      "column": "measurement_date",
+      "error_class": "schema \u2014 unparseable date",
+      "value": "2024-13-45",
+      "why": "A date that cannot exist. Month 13, day 45 \u2014 the kind of thing a hand-edited spreadsheet produces."
+    }
+  ],
+  "file_faults": [
+    {
+      "column": "notes",
+      "error_class": "schema \u2014 unexpected column",
+      "why": "A column nobody agreed to. Harmless here, but it means the producer changed the file without telling the consumer \u2014 and the next change might not be harmless."
+    },
+    {
+      "row": 60,
+      "error_class": "uniqueness \u2014 duplicated row",
+      "why": "An exact copy of row 5. Double-counts one patient in training and in the metrics."
+    }
+  ]
+}
