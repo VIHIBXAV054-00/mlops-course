@@ -1,7 +1,7 @@
 # Lifecycle of Artificial Intelligence Systems
 
 A 14-week, hands-on MLOps course for software-engineering students. One running
-example — a diabetes-prediction pipeline — is carried from a laptop script to a
+example — a diabetes-prediction pipeline — is carried from a script to a
 monitored production service, adding one lifecycle capability each week
 (reproducible runtimes, experiment tracking, data versioning, validation,
 evaluation gates, CI/CT, orchestration, serving, rollout, observability, drift,
@@ -17,13 +17,14 @@ Rendered slides for the published weeks: **<https://vihibxav054-00.github.io/mlo
 This repository grows as the term goes. Each week's lecture deck, lab starter
 and study notes appear on the **morning of that week's lecture**; homework
 briefs appear in the week the syllabus says they are handed out; reference
-solutions appear about a week after the lab was taught.
+solutions appear the week after the lab.
 
-So a folder you expected being absent is normal — it has not been published
-yet, not lost. [`RELEASED.md`](RELEASED.md) lists what is out and the date each
-remaining week arrives. To pick up what is new, pull (below).
+[`RELEASED.md`](RELEASED.md) lists what is out and the date each
+remaining week arrives.
 
-## Getting the materials (once, in Week 1)
+## Getting the materials
+
+### Once in Week 1:
 
 **Fork this repository, then keep it up to date.** The fork is yours to commit
 lab work into; the `upstream` remote is where new weeks come from.
@@ -34,15 +35,15 @@ gh repo fork VIHIBXAV054-00/mlops-course --clone --remote
 cd mlops-course
 
 # 2. If you forked in the browser instead, clone your fork and add upstream:
-#    git clone https://github.com/<your-username>/mlops-course.git
-#    cd mlops-course
-#    git remote add upstream https://github.com/VIHIBXAV054-00/mlops-course.git
+# git clone https://github.com/<your-username>/mlops-course.git
+# cd mlops-course
+# git remote add upstream https://github.com/VIHIBXAV054-00/mlops-course.git
 
 # 3. Check it worked — you want BOTH origin (yours) and upstream (the course):
 git remote -v
 ```
 
-Then **every week, before the lab**:
+### Every week, before the lab:
 
 ```bash
 git pull upstream main      # fetch the new week
@@ -88,32 +89,24 @@ You need a laptop with **16 GB RAM** and:
 - **kubectl** — https://kubernetes.io/docs/tasks/tools/ (needed from Week 9 onward)
 
 `kind` runs a Kubernetes cluster inside Docker; both are single binaries and neither needs a
-cloud account. From Week 9, **do not run the Compose stack and the cluster at the same time** on
-16 GB — you will not need to, because the Week 9 serving container is self-contained.
+cloud account. From Week 9, **do not run the Compose stack and the cluster at the same time** because the Week 9 serving container is self-contained.
 
 From **Week 10** the cluster also runs a serving control plane (cert-manager, Istio, Knative and
-KServe): about 2.5 GB of images and ~2.3 GiB of RAM before your model is even deployed, installed by
-a `make` target in the lab. Still no new host tool, and still nothing to sign up for — but keep the
-Compose stack down that week.
+KServe): about 2.5 GB of images and ~2.3 GiB of RAM, installed by a `make` target in the lab. Keep the Compose stack down that week.
 
 **Week 11 is the reverse**: delete the cluster (`kind delete cluster --name mlops`) and bring the
 Compose stack back, now with Prometheus and Grafana alongside the existing four services. Nothing
-that week needs Kubernetes. Still **no new host tool** — `promtool` ships inside the Prometheus
-image and is run through `docker compose`.
+that week needs Kubernetes.
 
 **Week 12 adds nothing to install and nothing to run.** The cluster stays down, the Compose stack
 stays up, and there is **no new service and no new port** — because the drift monitor is a *job*
 rather than a server. It does add one substantial Python dependency (`evidently`), and it is declared
-in a dependency **group** so the serving container never installs it.
+in a dependency **group**.
 
-**Week 13 adds one container and no Python dependency at all.** Alertmanager on **5570**, pinned in
-`compose.yaml`, with `amtool` inside it — so there is no new host tool either. Governance turns out to
-be `hashlib`, `json`, string formatting and YAML: `uv.lock` moves by the project name and nothing else.
-The cluster stays down.
+**Week 13 adds one container.** Alertmanager on **5570**, pinned in `compose.yaml`, with `amtool` inside it — so there is no new host tool either. Governance turns out to
+be `hashlib`, `json`, string formatting and YAML: `uv.lock` moves by the project name and nothing else. The cluster stays down.
 
-**Week 14 has no lab.** The syllabus reserves the slot as a spare session; the lecture is a summary and
-an LLMOps outlook, and the revision guide for the written exam is
-`docs/exam-revision.md`, published in Week 13. Nothing new to install, ever again.
+**Week 14 has no lab.** The syllabus reserves the slot as a spare session; the lecture is a summary and an LLMOps outlook, and the revision guide for the written exam is `docs/exam-revision.md`, published in Week 13.
 
 Python itself is installed for you by `uv`. Windows, macOS, and Linux are all supported.
 
@@ -140,15 +133,12 @@ official tutorial each lab is based on.
 
 The five homework assignments are **not** done in this repository. In Week 2 you
 create your own **private** project repo from the project template — click *Use
-this template* on **<https://github.com/VIHIBXAV054-00/mlops-project-template>** — and grow it across HW1-HW5. Keeping it
-separate is what lets this repository keep updating underneath you without ever
-touching your graded work.
+this template* on **<https://github.com/VIHIBXAV054-00/mlops-project-template>** — and grow it across HW1-HW5.
 
 In Week 2 you also choose a dataset and prediction task (see
 [`homework/project-topic/`](homework/project-topic/)) that you carry through all
 five homework assignments. Need ideas? See the
-[dataset catalogue](datasets/README.md). If you have no preference, the course
-Pima diabetes dataset is the fallback.
+[dataset catalogue](datasets/README.md).
 
 ## Licensing
 

@@ -4,9 +4,6 @@ title: Week 0 — Course Logistics
 info: |
   Opening session for "Lifecycle of Artificial Intelligence Systems": how the semester
   runs, what is assessed, what to install, and where to read more.
-  Deliberate deviation from the AGENTS.md deck standard: this is an administrative
-  briefing, not a subject lecture, so it carries no case studies and is intentionally
-  shorter than the ~60-slide target. The subject lecture is week-01-intro.
 class: text-left
 transition: slide-left
 mdc: true

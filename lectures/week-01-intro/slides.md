@@ -2,7 +2,7 @@
 theme: default
 title: Week 1 — Introduction to MLOps
 info: |
-  A two-hour introductory lecture for the course "Lifecycle of Artificial Intelligence Systems".
+  An introductory lecture for the course "Lifecycle of Artificial Intelligence Systems".
 class: text-left
 transition: slide-left
 mdc: true
