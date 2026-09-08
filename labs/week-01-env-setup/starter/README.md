@@ -8,7 +8,7 @@ description:
 
 # Week 1 Lab: Environment Setup and Baseline ML Pipeline
 
-You will train a model that predicts whether a patient will develop diabetes, using real diagnostic measurements (glucose, BMI, age, ...) from 768 patients. This is not a throwaway example: **this exact pipeline is the project you will version, track, validate, deploy, and monitor for the next 13 weeks.** Today it runs on your laptop and prints metrics to a terminal. By Week 14 it will be a monitored service running on Kubernetes.
+You will train a model that predicts whether a patient will develop diabetes, using real diagnostic measurements (glucose, BMI, age, ...) from 768 patients. **This exact pipeline is the project you will version, track, validate, deploy, and monitor for the next 13 weeks.**
 
 ## Lab goals
 
@@ -20,8 +20,6 @@ After finishing this lab, you should be able to:
 - run and modify a baseline Scikit-learn training pipeline
 - write a basic unit test with pytest
 
-## Based on (official tutorials)
-
 This lab follows the official getting-started guides with minimal changes — keep them open as references:
 
 - Scikit-learn: https://scikit-learn.org/stable/getting_started.html (Pipeline + fit/predict pattern)
@@ -31,7 +29,7 @@ This lab follows the official getting-started guides with minimal changes — ke
 
 `data/diabetes.csv` — the Pima Indians Diabetes dataset (originally from the US National Institute of Diabetes and Digestive and Kidney Diseases, via the UCI ML Repository). 768 patients, 8 diagnostic features, binary outcome (diabetes within 5 years). 34.9% positive rate.
 
-> Look closely at the data sometime: some patients have a BMI of 0.0 or a glucose level of 0 — medically impossible values that are really missing data in disguise. Our pipeline currently ignores this. Remember that. It becomes important in Week 5.
+> Watch out: some patients have a BMI of 0.0 or a glucose level of 0 — medically impossible values that are really missing data in disguise. Our pipeline currently ignores this.
 
 ## Prerequisites
 
@@ -77,7 +75,7 @@ cp .env.example .env
 
 Open `.env` and review the variables. You will change them in the exercises.
 
-**Never commit `.env` to Git.** It is listed in `.gitignore`. (`.env.example` is committed instead — that pattern is how teams document required configuration without leaking secrets.)
+**Never commit `.env` to Git.** It is listed in `.gitignore`. (`.env.example` is committed instead — that is how teams document required configuration without leaking secrets.)
 
 ## Step 4 — Run the baseline pipeline
 
@@ -135,7 +133,7 @@ Beat the baseline. Currently the best F1 is **0.5785**.
 1. In `src/week_01_env_setup/model.py`, add a function `train_random_forest(x_train, y_train, settings)` that returns a fitted `RandomForestClassifier(random_state=settings.random_seed)` (import it from `sklearn.ensemble`; no scaler needed for trees).
 2. Update `src/week_01_env_setup/cli.py` to train and evaluate **both** models and print each under a clear heading.
 3. Tune hyperparameters if you like (`n_estimators`, `max_depth`, ...). Keep `random_state` fixed so your result is reproducible.
-4. Bring your best F1 to the next session. There will be a leaderboard. Note how quickly "which run produced that number?" becomes hard to answer — we fix that in Week 3 with MLflow.
+4. Bring your best F1 to the next session. There will be a leaderboard. Note how quickly "which run produced that number?" becomes hard to answer.
 
 ### Exercise 3 — Write a test for data splitting (10 min)
 
@@ -207,4 +205,4 @@ starter/
 
 ## Next steps
 
-In Week 2 this project gets its first real infrastructure: MLflow, MinIO, and Postgres running via Docker Compose, so your experiments stop living only in your terminal scrollback.
+In Week 2 this project gets its first real infrastructure: MLflow, MinIO, and Postgres running via Docker Compose.

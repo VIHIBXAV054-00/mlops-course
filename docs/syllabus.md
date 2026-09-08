@@ -4,7 +4,7 @@
 
 The primary objective of this course is to equip students with an engineering mindset to understand and practically apply the complete model lifecycle management of Artificial Intelligence (AI) systems. The curriculum spans from initial requirements and data pipelines through development and validation, all the way to operations and continuous, feedback-driven improvement. 
 
-Built heavily upon industrial MLOps practices, the course covers reproducibility, versioning and experiment tracking, automated quality assurance (testing and evaluation), CI/CD-based deployment, observability (monitoring and drift detection), incident management, and governance. Furthermore, the course provides an outlook on LLM-based systems (RAG pipelines, agentic architectures), with a specific focus on their operational challenges.
+Built heavily upon industrial MLOps practices, the course covers reproducibility, versioning and experiment tracking, automated quality assurance (testing and evaluation), CI/CD-based deployment, observability (monitoring and drift detection), incident management, and governance.
 
 Upon successful completion, students will be capable of independently designing and maintaining production-ready, scalable, end-to-end AI pipelines that meet modern industrial and research standards. They will also be prepared to assume various roles within the AI system lifecycle (e.g., Data Scientist, Machine Learning Engineer, MLOps Engineer) and effectively collaborate and communicate with stakeholders across the entire process.
 
@@ -14,7 +14,7 @@ Upon successful completion, students will be capable of independently designing 
 
 The course is designed for software engineering students. Expected background:
 
-* **Programming:** Solid general programming skills and Git basics. Working Python familiarity (the course uses Python throughout but does not teach it).
+* **Programming:** Solid general programming skills and Git basics. Python is the primary language used in labs.
 * **Machine Learning:** A completed introductory ML course. We assume students have seen train/test splits, basic models, and evaluation metrics; Week 1 only briefly refreshes these. The ML used in labs is deliberately simple (Scikit-learn on tabular data) — the focus of this course is the engineering lifecycle, not modeling.
 * **No prior experience assumed** with Docker, MLflow, DVC, Prefect, Kubernetes, or monitoring tooling — these are taught from scratch.
 
@@ -25,7 +25,7 @@ The course is designed for software engineering students. Expected background:
 
 ## Technical Requirements
 
-Students need a laptop with Docker support and at least 16 GB RAM (later weeks run several services locally: Postgres, MLflow, MinIO, Prometheus, Grafana, and a local Kubernetes cluster). Setup is covered in the Week 1 lab. Windows, macOS, and Linux are all supported.
+Students need a laptop with Docker support and at least 16 GB RAM (later weeks run several services locally). Setup is covered in the Week 1 lab. Windows, macOS, and Linux are all supported.
 
 ---
 
@@ -54,7 +54,7 @@ The following table details the theoretical lectures, practical laboratory exerc
 
 ## Assessment
 
-This is a **mid-semester-grade** subject: everything is assessed during the teaching period, and nothing happens in the examination period.
+This is a **mid-semester-grade** subject.
 
 ### Requirements during the teaching period
 
@@ -76,23 +76,23 @@ The homework mean includes **all five** assignments, including any that were not
 
 | Component | Repeatable? |
 | :--- | :--- |
-| A missed or failed **laboratory exercise** | **No** — labs cannot be made up. |
+| A missed or failed **laboratory exercise** | **No** |
 | **Homework** | **One** of the five, during the retake week. |
-| **ZH** | Once, during the retake week. There is no second retake. |
+| **ZH** | Once, during the retake week. |
 
 ### Delivery
 
-* **Odd weeks (in person):** a practice-oriented lecture, followed by a related laboratory exercise in which students apply the new material by solving tasks independently under the lab leader's supervision.
+* **Odd weeks (in person):** a practice-oriented lecture, followed by a related laboratory exercise in which students apply the new material by solving tasks independently under supervision.
 * **Even weeks (online / at home, asynchronous):** students study a short theoretical summary ([`docs/notes/`](notes/)) and then complete the laboratory tasks on their own; the lab leaders evaluate the submissions.
 * **Homework** is developed independently, project-style, with optional consultation.
 
 ### Project work
 
-All five homework assignments build incrementally on a single student project. The project topic (dataset + prediction task) is chosen and approved in Week 2; the canonical course dataset may be used as a fallback. See [`datasets/README.md`](../datasets/README.md) for the topic catalogue.
+All five homework assignments build incrementally on a single project. The project topic (dataset + prediction task) is chosen and approved in Week 3; the canonical course dataset may be used as a fallback. See [`datasets/README.md`](../datasets/README.md) for the topic catalogue.
 
 ### Written test (ZH)
 
-Held in Week 14 and covering lecture material from all fourteen weeks. The revision guide — what is examinable per week, the recurring question shapes, and worked answers — is [`docs/exam-revision.md`](exam-revision.md). <!-- TODO: Week 14 is an asynchronous week — schedule the in-person slot, or move the ZH to the last in-person session (Wed 2 December, Week 13). Confirm room and format. -->
+Held in the last weeks and covering lecture material from all previous weeks. The revision guide — what is examinable per week, the recurring question shapes, and worked answers — is [`docs/exam-revision.md`](exam-revision.md).
 
 ### Grade boundaries
 
@@ -108,19 +108,19 @@ These convert the weighted score into a grade **only once all three requirements
 
 ### AI tool policy
 
-Use of AI assistants is permitted and encouraged — this is an industry reality the course embraces. The condition is accountability: **students must understand and be able to explain every artifact they submit**, and may be asked to do so in person. "The assistant wrote it" is not an answer to a question about why a threshold, a configuration value or a design decision is what it is.
+Use of AI assistants is permitted — this is an industry reality the course embraces. The condition is accountability: **students must understand and be able to explain every artifact they submit**.
 
 ---
 
 ## Assignment Deadlines Summary
 
-**Each assignment is released on the odd (in-person) week whose lab it depends on, and is due three to four weeks later** (the last two windows are shorter, because the semester ends). The windows overlap on purpose: the work is project-style and runs alongside the rest of the semester rather than in a one-week sprint. Each assignment is released only after every lab it depends on has been taught.
+**Each assignment is released on the odd (in-person) week whose lab it depends on, and is due three to four weeks later** (the last two windows are shorter, because the semester ends).
 
 *Submissions are due by 23:59 (Budapest) on the Sunday closing the deadline week, via the student's own project repository.*
 
 | | Released | Due | Window | What it covers |
 | :--- | :--- | :--- | :--- | :--- |
-| **Project topic** | Week 1 | **Week 2** (Sun 20 Sep) | 2 weeks | Dataset + prediction task, approved by the instructor. — [brief](../homework/project-topic/README.md) |
+| **Project topic** | Week 1 | **Week 3** (Sun 27 Sep) | 2 weeks | Dataset + prediction task, approved by the instructor. — [brief](../homework/project-topic/README.md) |
 | **HW 1** | Week 5 (5 Oct) | **Week 8** (Sun 1 Nov) | 4 weeks | Basic MLOps project with data versioning, experiment tracking, and model management. — [brief](../homework/hw-01-data-versioning-and-tracking/README.md) |
 | **HW 2** | Week 7 (19 Oct) | **Week 10** (Sun 15 Nov) | 4 weeks | Automated data validation, evaluation, and documented quality thresholds ("go/no-go"). — [brief](../homework/hw-02-validation-and-evaluation-gates/README.md) |
 | **HW 3** | Week 9 (2 Nov) | **Week 12** (Sun 29 Nov) | 4 weeks | End-to-end Prefect flow with parameterization and retry handling. — [brief](../homework/hw-03-orchestration/README.md) |

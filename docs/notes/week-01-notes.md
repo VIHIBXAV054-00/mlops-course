@@ -1,8 +1,8 @@
 # Week 1 — Introduction to MLOps — Study Notes
 
-These notes accompany the Week 1 lecture and lab. They are meant for self-study: read them after the lecture to consolidate the ideas, and before the lab to know what you are building toward. The course's running example — a diabetes-prediction pipeline — starts here and is carried, one capability at a time, all the way to a monitored production service by Week 14.
+These notes accompany the Week 1 lecture and lab. They are meant for self-study: read them after the lecture to consolidate the ideas, and before the lab to know what you are building toward.
 
-## Why this matters
+## Why do we need MLOps?
 
 In November 2021 Zillow shut down its house-flipping business after its pricing model systematically overpaid for homes as the market shifted. Roughly $300M was written off in a single quarter. There was no crashed server and no failing test: every request returned HTTP 200, latency was fine, the dashboards were green. The model was simply wrong about the world, and nothing in the system was built to notice.
 
@@ -21,18 +21,9 @@ That is the gap MLOps exists to close. Traditional software is *deterministic*: 
 
 **Reproducibility is not free.** In the lab you will run the same code twice and change only the random seed, and get a different model and a different score. The lesson generalises: a metric like "F1 = 0.84" is meaningless on its own. It is an engineering artifact only when you can say *which code, which data snapshot, and which configuration* produced it. Most of this course is about building the systems that capture exactly that.
 
-**Roles across the lifecycle.** Real teams split the work. A *Data Scientist* focuses on framing the problem, the data, and model quality; a *Machine Learning Engineer* productionises models and builds pipelines; an *MLOps / ML Platform Engineer* builds the infrastructure (tracking, serving, monitoring) the others rely on. The boundaries blur in small teams, but knowing the roles helps you understand who owns which failure.
+**Roles across the lifecycle.** An ML system in production touches far more people than the "ML" job titles suggest. Around the loop itself: a *product owner / business* owns the objective and the go/no-go; a *domain expert* owns what the data actually *means* and which errors cost; a *data engineer* owns pipelines, schemas and freshness; a *data scientist* owns framing, experiments and offline evaluation; an *ML engineer* owns training and inference code that has to run unattended; and *MLOps / platform* owns CI/CD, the registry, rollout and observability. Then there is the rest of the cast, which is easy — and expensive — to forget: a *software / backend engineer* owns the product the model is embedded in, *SRE / on-call* owns availability, incident response and the pager, *security & privacy* owns access, PII, retention and the supply chain, *legal / compliance / risk* owns documentation, auditability and regulatory duty, *QA / test* owns acceptance testing and release evidence, and *end users / operators* own the decisions the output feeds. In a small team one person holds five of these rows whether or not anybody says so, so the point of the list is not the org chart: it is knowing what responsibilities must be fulfilled.
 
-**The starter toolchain.** Week 1 introduces only the foundation: **Git** for code versioning, **uv** for reproducible Python environments (a pinned `pyproject.toml` + lockfile), and **Docker** for reproducible runtimes. Later weeks layer on MLflow (tracking), DVC (data versioning), Prefect (orchestration), KServe (serving), and Prometheus/Grafana/Evidently (monitoring). The guiding idea introduced now: keep the *ML* trivial and spend the engineering effort on the *lifecycle*.
-
-## Key terms
-
-- **MLOps** — engineering practices for the full ML lifecycle: reproducibility, versioning, automation, deployment, monitoring, governance.
-- **Triad of change** — code, data, and model; any of the three can change system behaviour.
-- **CACE** — "Changing Anything Changes Everything"; the entanglement property of ML systems.
-- **Reproducibility** — recreating a result exactly from recorded code + data + config.
-- **Technical debt (ML)** — hidden, compounding maintenance cost from ad-hoc ML systems (glue code, pipeline jungles, undeclared consumers).
-- **Random seed** — the value that fixes otherwise-random steps (e.g. the train/test split); changing it changes the learned model.
+**The starter toolchain.** Week 1 introduces only the foundation: **Git** for code versioning, **uv** for reproducible Python environments (a pinned `pyproject.toml` + lockfile), and **Docker** for reproducible runtimes. Later weeks layer on MLflow (tracking), DVC (data versioning), Prefect (orchestration), KServe (serving), and Prometheus/Grafana/Evidently (monitoring).
 
 ## How this connects to the lab
 
@@ -56,4 +47,4 @@ Start here, then go deeper if you want:
 1. Give one failure that DevOps monitoring would catch and one it would miss but MLOps should catch.
 2. Why is "F1 = 0.84" not, by itself, a reproducible result? What three things must accompany it?
 3. In the triad of change, which two elements have no equivalent in traditional software, and why does that make ML systems harder to maintain?
-4. Name the three roles across the lifecycle and one responsibility each.
+4. Name the six roles on the lifecycle loop and one responsibility each. Then pick a five-person startup: which of the remaining rows would you be holding, and which failure does that leave unowned?
