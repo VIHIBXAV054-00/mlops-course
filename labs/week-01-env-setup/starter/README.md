@@ -164,7 +164,7 @@ Beat the baseline. Currently the best F1 is **0.5785**.
 docker run --rm python:3.12-slim python -c "print('Docker works')"
 ```
 
-If it prints `Docker works`, you are ready for Week 2 — where this pipeline gets real infrastructure.
+If it prints `Docker works`, you are ready for Week 2.
 
 ---
 

@@ -6,11 +6,9 @@
 # no edits.
 #
 # ACTION PINS — verified 2026-08-06 against the GitHub API, and re-verify each
-# term. Two things to check, not one:
+# term. Two things to check:
 #
-#   1. is there a NEWER major?  (all six pins here were 1-4 majors behind when
-#      Week 7 was written, despite this comment having asked for a check since
-#      Week 1)
+#   1. is there a NEWER major?  (all six pins here were 1-4 majors behind when this was written)
 #   2. does the tag you are about to write actually EXIST?  `astral-sh/setup-uv`
 #      publishes releases past its newest major tag: v9.0.0 is released, and
 #      there is no `v9` tag, so `@v9` fails at "Set up job" with "unable to find
@@ -34,9 +32,7 @@ jobs:
       # A STALE LOCK MUST FAIL, NOT SILENTLY RE-RESOLVE. `uv sync` and `uv run`
       # both rewrite a lock that has drifted from its pyproject.toml, so without
       # this gate CI would install whatever resolves on the day and still report
-      # green. That is exactly how Week 1 shipped a lock with no pandas entry in
-      # it: the declared `pandas>=2.0.0` had never been locked, and the first
-      # `uv run pytest` re-resolved it to a new major version.
+      # green.
       #
       # `uv lock --check` resolves and asserts nothing moved, without writing.
       # `--locked` / `--frozen` below are the same guarantee at install time.

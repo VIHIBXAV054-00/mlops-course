@@ -1,14 +1,13 @@
 # Build every published Slidev deck and deploy it to GitHub Pages.
 #
-# THIS FILE LIVES IN THE PUBLIC COURSE REPO, and that placement is the whole
-# progressive-slides mechanism: this repo only ever contains the weeks that have
+# THIS FILE LIVES IN THE PUBLIC COURSE REPO: this repo only ever contains the weeks that have
 # been released, so the deck list this workflow discovers IS the released list.
-# Nothing here filters by date, and nothing here needs to — the filtering
+# Nothing here filters by date, the filtering
 # happened in the instructor repo's build_student_bundle.sh before the push.
 #
 # GENERATED FILE. It is copied in from the instructor repo
 # (scripts/templates/slides.yml) on every weekly release, so edits made here are
-# overwritten. Change it there.
+# overwritten.
 #
 # Verify action and @slidev/cli versions before each term.
 name: Build & deploy slides
