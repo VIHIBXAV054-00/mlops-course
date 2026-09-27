@@ -7,10 +7,12 @@ MLflow settings. Any test that would require a live MLflow server is
 decorated with @pytest.mark.skip so the starter passes out of the box.
 """
 import pytest
+import mlflow
 
 from week_02_local_services.config import load_settings
 from week_02_local_services.data import build_dataset, load_dataframe
 from week_02_local_services.model import evaluate_model, train_logistic_regression
+from week_02_local_services.cli import main
 
 
 def test_dataframe_loads() -> None:
@@ -60,24 +62,23 @@ def test_seed_42_metrics() -> None:
     assert metrics["accuracy"] == pytest.approx(0.7344, abs=0.001)
 
 
-@pytest.mark.skip(
-    reason="Exercise 3 — implement MLflow logging in cli.py, then remove this skip."
-)
 def test_mlflow_run_logged() -> None:
-    """After Exercise 3: confirm that main() logs a run to the tracking server.
+    """Confirm that main() logs a run with params and metrics."""
+    settings = load_settings()
+    client = mlflow.tracking.MlflowClient(settings.mlflow_tracking_uri)
 
-    TODO(student) — Exercise 3, step 4:
-    1. Ensure the stack is running: docker compose up -d --wait
-    2. Delete the @pytest.mark.skip line above.
-    3. Implement this test:
-       - Call main() (from week_02_local_services.cli import main)
-       - Use the MLflow client to query the last run in the experiment:
-           import mlflow
-           client = mlflow.tracking.MlflowClient(settings.mlflow_tracking_uri)
-           runs = client.search_runs(experiment_ids=[...])
-           assert len(runs) > 0
-       - Assert the run has params and at least one metric.
-    Note: this test requires a running MLflow server. Guard it with a
-    reachability check or document that it needs the stack.
-    """
-    raise NotImplementedError
+    main()
+
+    experiment = client.get_experiment_by_name(settings.mlflow_experiment_name)
+    assert experiment is not None
+    runs = client.search_runs(
+        experiment_ids=[experiment.experiment_id],
+        order_by=["start_time DESC"],
+        max_results=1,
+    )
+    assert runs
+    run = runs[0]
+    assert run.data.params["random_seed"] == str(settings.random_seed)
+    assert run.data.params["test_size"] == str(settings.test_size)
+    assert run.data.params["max_iter"] == str(settings.max_iter)
+    assert set(run.data.metrics) >= {"accuracy", "precision", "recall", "f1"}

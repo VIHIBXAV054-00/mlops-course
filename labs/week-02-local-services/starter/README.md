@@ -79,8 +79,8 @@ Complete these exercises in order — each builds on the previous.
 Open `compose.yaml` and find the `minio` and `minio-create-bucket` service blocks marked `TODO(student)`.
 
 Fill in:
-- `minio`: the image (`minio/minio:RELEASE.2024-06-13T22-53-53Z`), command, environment variables, volume mount, and healthcheck
-- `minio-create-bucket`: the image (`minio/mc:RELEASE.2025-08-13T08-35-41Z`), and the entrypoint that creates the bucket
+- `minio`: the pinned image from MinIO's Quay registry, command, environment variables, volume mount, and healthcheck
+- `minio-create-bucket`: the pinned `quay.io/minio/mc` image, and the entrypoint that creates the bucket
 
 Then start only the storage services:
 

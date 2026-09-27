@@ -48,7 +48,7 @@ services:
   # TODO(student) — Exercise 1:
   # Fill in the MinIO service definition below.
   # Requirements:
-  #   - Use image: minio/minio:RELEASE.2024-06-13T22-53-53Z  (pinned version)
+  #   - Use the pinned image from MinIO's current Quay registry.
   #   - Pass MINIO_ROOT_USER and MINIO_ROOT_PASSWORD from environment
   #   - command: server /data --console-address ":9001"
   #   - Expose port 9000 (S3 API) and 9001 (web console) to the host
@@ -62,18 +62,18 @@ services:
   #   docker compose up -d minio
   # Then open http://localhost:5511 and log in with your .env credentials.
   minio:
-    image: # TODO(student): fill in pinned minio/minio image tag
+    image: quay.io/minio/minio:RELEASE.2024-08-03T04-33-23Z.hotfix.ca75c7346 # TODO(student): fill in pinned MinIO image tag
     environment:
-      MINIO_ROOT_USER: # TODO(student): reference ${MINIO_ROOT_USER}
-      MINIO_ROOT_PASSWORD: # TODO(student): reference ${MINIO_ROOT_PASSWORD}
-    command: # TODO(student): server /data --console-address ":9001"
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}  # TODO(student): reference ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}    # TODO(student): reference ${MINIO_ROOT_PASSWORD}
+    command: server /data --console-address ":9001" # TODO(student): server /data --console-address ":9001"
     ports:
       - "${MINIO_API_PORT:-5510}:9000"
       - "${MINIO_CONSOLE_PORT:-5511}:9001"
     volumes:
       - minio-data:/data
     healthcheck:
-      test: # TODO(student): ["CMD-SHELL", "mc ready local || exit 1"]
+      test: ["CMD-SHELL", "mc ready local || exit 1"] # TODO(student): ["CMD-SHELL", "mc ready local || exit 1"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -83,7 +83,7 @@ services:
   # TODO(student) — Exercise 1 (continued):
   # Fill in the bucket-creation job below.
   # Requirements:
-  #   - Use image: minio/mc:RELEASE.2025-08-13T08-35-41Z  (pinned version)
+  #   - Use the pinned image from MinIO's current Quay registry.
   #   - depends_on: minio: condition: service_healthy
   #   - The entrypoint should run:
   #       mc alias set minio http://minio:9000 <user> <password> &&
@@ -91,15 +91,15 @@ services:
   #     Use shell variable substitution or reference env vars directly.
   # After the bucket is created, confirm it appears in the MinIO console.
   minio-create-bucket:
-    image: # TODO(student): fill in pinned minio/mc image tag
+    image: quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z # TODO(student): fill in pinned mc image tag
     depends_on:
       minio:
         condition: service_healthy
     entrypoint: >
       bash -c "
         # TODO(student): set the mc alias and create the bucket
-        # mc alias set minio http://minio:9000 ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD} &&
-        # mc mb --ignore-existing minio/${MINIO_BUCKET}
+        mc alias set minio http://minio:9000 ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD} &&
+        mc mb --ignore-existing minio/${MINIO_BUCKET}
         echo 'TODO: implement bucket creation'
       "
 
@@ -125,14 +125,14 @@ services:
       context: .
       dockerfile: mlflow.Dockerfile
     environment:
-      MLFLOW_S3_ENDPOINT_URL: # TODO(student): http://minio:9000
-      AWS_ACCESS_KEY_ID: # TODO(student): ${MINIO_ROOT_USER}
-      AWS_SECRET_ACCESS_KEY: # TODO(student): ${MINIO_ROOT_PASSWORD}
+      MLFLOW_S3_ENDPOINT_URL: http://minio:9000 # TODO(student): http://minio:9000
+      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER} # TODO(student): ${MINIO_ROOT_USER}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD} # TODO(student): ${MINIO_ROOT_PASSWORD}
     command:
       - --backend-store-uri
-      - # TODO(student): postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      - postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       - --artifacts-destination
-      - # TODO(student): s3://${MINIO_BUCKET}
+      - s3://${MINIO_BUCKET}
       - --host
       - "0.0.0.0"
       - --port
@@ -140,7 +140,7 @@ services:
       - --allowed-hosts
       # NOTE: MLflow's host check does NOT strip the port, so you must allow the
       # host:port form. The "host:*" wildcard accepts any port.
-      - # TODO(student): "localhost,127.0.0.1,mlflow,localhost:*,127.0.0.1:*,mlflow:*"
+      - "localhost,127.0.0.1,mlflow,localhost:*,127.0.0.1:*,mlflow:*"
     ports:
       - "${MLFLOW_PORT:-5500}:5000"
     depends_on:
