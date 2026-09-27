@@ -45,10 +45,9 @@ services:
     restart: unless-stopped
 
   # ── MinIO: S3-compatible object store ──────────────────────────────────────
-  # TODO(student) — Exercise 1:
-  # Fill in the MinIO service definition below.
+  # Exercise 1: MinIO object storage.
   # Requirements:
-  #   - Use the pinned image from MinIO's current Quay registry.
+  #   - Use the pinned MinIO image.
   #   - Pass MINIO_ROOT_USER and MINIO_ROOT_PASSWORD from environment
   #   - command: server /data --console-address ":9001"
   #   - Expose port 9000 (S3 API) and 9001 (web console) to the host
@@ -62,28 +61,27 @@ services:
   #   docker compose up -d minio
   # Then open http://localhost:5511 and log in with your .env credentials.
   minio:
-    image: quay.io/minio/minio:RELEASE.2024-08-03T04-33-23Z.hotfix.ca75c7346 # TODO(student): fill in pinned MinIO image tag
+    image: minio/minio:RELEASE.2024-06-13T22-53-53Z
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER}  # TODO(student): reference ${MINIO_ROOT_USER}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}    # TODO(student): reference ${MINIO_ROOT_PASSWORD}
-    command: server /data --console-address ":9001" # TODO(student): server /data --console-address ":9001"
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    command: server /data --console-address ":9001"
     ports:
       - "${MINIO_API_PORT:-5510}:9000"
       - "${MINIO_CONSOLE_PORT:-5511}:9001"
     volumes:
       - minio-data:/data
     healthcheck:
-      test: ["CMD-SHELL", "mc ready local || exit 1"] # TODO(student): ["CMD-SHELL", "mc ready local || exit 1"]
+      test: ["CMD-SHELL", "mc ready local || exit 1"]
       interval: 5s
       timeout: 5s
       retries: 10
     restart: unless-stopped
 
   # ── minio-create-bucket: one-shot bucket initialisation ────────────────────
-  # TODO(student) — Exercise 1 (continued):
-  # Fill in the bucket-creation job below.
+  # Exercise 1: create the artifacts bucket after MinIO is healthy.
   # Requirements:
-  #   - Use the pinned image from MinIO's current Quay registry.
+  #   - Use the pinned MinIO client image.
   #   - depends_on: minio: condition: service_healthy
   #   - The entrypoint should run:
   #       mc alias set minio http://minio:9000 <user> <password> &&
@@ -91,21 +89,19 @@ services:
   #     Use shell variable substitution or reference env vars directly.
   # After the bucket is created, confirm it appears in the MinIO console.
   minio-create-bucket:
-    image: quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z # TODO(student): fill in pinned mc image tag
+    image: minio/mc:RELEASE.2025-08-13T08-35-41Z
     depends_on:
       minio:
         condition: service_healthy
-    entrypoint: >
-      bash -c "
-        # TODO(student): set the mc alias and create the bucket
+    entrypoint:
+      - /bin/sh
+      - -c
+      - >-
         mc alias set minio http://minio:9000 ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD} &&
         mc mb --ignore-existing minio/${MINIO_BUCKET}
-        echo 'TODO: implement bucket creation'
-      "
 
   # ── MLflow tracking server ──────────────────────────────────────────────────
-  # TODO(student) — Exercise 2:
-  # Complete the mlflow service command and environment variables below.
+  # Exercise 2: configure the MLflow tracking server.
   # The server needs to know:
   #   --backend-store-uri: where to write metadata (Postgres)
   #   --artifacts-destination: where to store artifacts (MinIO bucket)
@@ -125,9 +121,9 @@ services:
       context: .
       dockerfile: mlflow.Dockerfile
     environment:
-      MLFLOW_S3_ENDPOINT_URL: http://minio:9000 # TODO(student): http://minio:9000
-      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER} # TODO(student): ${MINIO_ROOT_USER}
-      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD} # TODO(student): ${MINIO_ROOT_PASSWORD}
+      MLFLOW_S3_ENDPOINT_URL: http://minio:9000
+      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
     command:
       - --backend-store-uri
       - postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}

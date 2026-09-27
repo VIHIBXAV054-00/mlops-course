@@ -6,6 +6,9 @@ and metric shapes — the same guarantees Week 1 tests gave, plus the new
 MLflow settings. Any test that would require a live MLflow server is
 decorated with @pytest.mark.skip so the starter passes out of the box.
 """
+import urllib.error
+import urllib.request
+
 import pytest
 import mlflow
 
@@ -63,8 +66,13 @@ def test_seed_42_metrics() -> None:
 
 
 def test_mlflow_run_logged() -> None:
-    """Confirm that main() logs a run with params and metrics."""
+    """Confirm that main() logs a run when the tracking server is available."""
     settings = load_settings()
+    try:
+        urllib.request.urlopen(settings.mlflow_tracking_uri + "/health", timeout=2)
+    except (urllib.error.URLError, OSError):
+        pytest.skip("MLflow tracking server not reachable — start the stack first.")
+
     client = mlflow.tracking.MlflowClient(settings.mlflow_tracking_uri)
 
     main()

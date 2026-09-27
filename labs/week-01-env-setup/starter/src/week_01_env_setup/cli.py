@@ -27,3 +27,6 @@ def main() -> None:
     print("Random Forest metrics:")
     model = train_random_forest(x_train, y_train, settings)
     print(json.dumps(evaluate_model(model, x_test, y_test), indent=2))
+    print("Decision Tree metrics:") 
+    model = train_decision_tree(x_train, y_train, settings)
+    print(json.dumps(evaluate_model(model, x_test, y_test), indent=2))

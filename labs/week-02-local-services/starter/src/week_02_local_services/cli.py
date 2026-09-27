@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 
 import mlflow
+import mlflow.sklearn
 
 from .config import load_settings
 from .data import build_dataset, load_dataframe
@@ -33,15 +34,14 @@ def main() -> None:
         mlflow.log_param("random_seed", settings.random_seed)
         mlflow.log_param("test_size", settings.test_size)
         mlflow.log_param("max_iter", settings.max_iter)
-        
+
         model = train_logistic_regression(x_train, y_train, settings)
         metrics = evaluate_model(model, x_test, y_test)
-        
+
         for name, value in metrics.items():
             mlflow.log_metric(name, value)
-            
-        # Log the fitted pipeline as a model artifact so it lands in MinIO.
-        mlflow.sklearn.log_model(model, "model")
+
+        mlflow.sklearn.log_model(model, name="model")
 
         print("Logistic Regression metrics:")
         print(json.dumps(metrics, indent=2))
