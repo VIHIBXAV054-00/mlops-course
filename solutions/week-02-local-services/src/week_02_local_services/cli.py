@@ -33,7 +33,7 @@ def main() -> None:
     # ── Log a tracked run ──────────────────────────────────────────────────
     # Everything inside the `with` block belongs to one run.
     # params and metrics go to Postgres (via the tracking server).
-    # The model artifact goes to MinIO (proxied through the tracking server).
+    # The model artifact goes to Silo (proxied through the tracking server).
     with mlflow.start_run():
         # Log configuration params so the run is fully reproducible
         mlflow.log_param("random_seed", settings.random_seed)
@@ -48,7 +48,7 @@ def main() -> None:
         for name, value in metrics.items():
             mlflow.log_metric(name, value)
 
-        # Log the fitted pipeline as a model artifact — this lands in MinIO
+        # Log the fitted pipeline as a model artifact — this lands in Silo
         # name= is the directory name inside the logged model (MLflow 3 renamed artifact_path)
         mlflow.sklearn.log_model(model, name="model")
 
@@ -62,4 +62,4 @@ def main() -> None:
     print(f"Run ID:         {run_id}")
     print()
     print(f"Open the MLflow UI:     {settings.mlflow_tracking_uri}")
-    print(f"Open the MinIO console: http://127.0.0.1:5511")
+    print(f"Open the Silo console: http://127.0.0.1:5511")

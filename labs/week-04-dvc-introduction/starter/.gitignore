@@ -1,0 +1,30 @@
+# Environment and secrets — never commit
+.env
+
+# Python virtual environment and caches
+.venv/
+__pycache__/
+.pytest_cache/
+*.pyc
+*.pyo
+*.egg-info/
+
+# Docker Compose volumes directory (if using bind mounts)
+volumes/
+
+# Build artifacts
+build/
+dist/
+
+# DVC machine-local state.
+#
+# Note what is NOT here: `.dvc/` itself. DVC hard-fails `dvc init` if the .dvc
+# directory is git-ignored, and .dvc/config MUST be committed — it is the shared
+# remote definition. `dvc init` writes these same three entries into
+# .dvc/.gitignore for you; they are repeated here as a safety net.
+#
+# DVC also writes data/.gitignore listing the files it tracks. That file is
+# generated, and committing it is part of Exercise 2 — do not pre-empt it here.
+.dvc/cache/
+.dvc/tmp/
+.dvc/config.local

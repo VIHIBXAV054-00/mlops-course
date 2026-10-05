@@ -1,0 +1,29 @@
+[project]
+name = "week-03-mlflow-integration"
+version = "0.1.0"
+description = "Week 3 guided lab — MLflow experiment tracking and model registry"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "scikit-learn>=1.8.0",
+    "pandas>=2.0.0,<3",       # upper bound: every week stays on one major
+    "python-dotenv>=1.0.0",
+    "mlflow==3.13.0",         # must match the server pin in mlflow.Dockerfile
+    "boto3>=1.38.0",
+    "matplotlib>=3.9.0",
+]
+
+[dependency-groups]
+test = [
+    "pytest>=8.0.0",
+]
+
+[tool.pytest.ini_options]
+markers = ["live: requires the Docker Compose stack to be running"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/week_03_mlflow_integration"]

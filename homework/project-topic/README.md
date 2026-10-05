@@ -1,6 +1,6 @@
 # Define Project Topic
 
-**Due:** end of Week 3 (submit before the Week 4 class)
+**Due:** 23:59 (Budapest) on Sunday of **Week 3** (27 September)
 **Grading:** Approve / Request changes
 
 ---
@@ -69,7 +69,7 @@ dataset under `data/` and fill in `docs/DATA_DICTIONARY.md` while you're there.)
 ## Submission
 
 1. Commit `docs/proposal.md` (and your dataset + `docs/DATA_DICTIONARY.md`) to **your project repo**.
-2. Share the repo link with your instructor, or open a pull request, per the method your instructor specified.
+2. Submit the URL of that commit in the project-topic assignment in Moodle.
 3. Your instructor will respond with one of:
    - **Approved** — proceed to HW1 with this dataset
    - **Request changes** — revise per feedback and resubmit before HW1 deadline

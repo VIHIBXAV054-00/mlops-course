@@ -6,7 +6,7 @@ from sklearn.model_selection import train_test_split
 from .config import Settings
 
 # Unchanged from Week 1 — the dataset and split logic are not touched this week.
-# Week 2's complexity budget is spent entirely on infrastructure (Compose, MLflow, MinIO).
+# Week 2's complexity budget is spent entirely on infrastructure (Compose, MLflow, Silo).
 
 FEATURE_COLUMNS = [
     "pregnancies",

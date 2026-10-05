@@ -240,7 +240,7 @@ traceability slide later depends on.
 | Output | Where it goes | Why |
 | --- | --- | --- |
 | <span v-click="1">Params, metrics, tags</span> | <span v-click="3">**Postgres** — backend store</span> | <span v-click="4">Small, structured, queryable</span> |
-| <span v-click="2">Artifacts, the model</span> | <span v-click="5">**MinIO** — artifact store</span> | <span v-click="6">Large opaque blobs, fetched whole</span> |
+| <span v-click="2">Artifacts, the model</span> | <span v-click="5">**Silo** — artifact store</span> | <span v-click="6">Large opaque blobs, fetched whole</span> |
 
 
 ---
@@ -661,10 +661,10 @@ mlflow.register_model(model_uri=f"runs:/{best_run_id}/model",
 </span>
 
 <!--
-The lab uses form B, and there is a second, sharper reason covered in registry.py: only the
-runs:/ URI form records run_id on the resulting ModelVersion against the open-source registry.
-Register from the model_info.model_uri that log_model returns (models:/m-<id> in MLflow 3) and
-run_id comes back empty — which silently breaks the traceability chain two slides from now.
+The lab uses form B with a runs:/ URI because it names the source run in the call itself.
+Do not tell students the models:/m-<id> URI that log_model returns breaks traceability: on
+mlflow==3.13.0 it records run_id too (measured). The runs:/ form is a readability choice, and
+it costs a harmless "has no artifacts at artifact path 'model'" warning.
 -->
 
 ---
@@ -787,7 +787,7 @@ it should itch.
    → its metrics: `f1=0.6240`, `roc_auc=0.8166`, `recall=0.5821`
    → its tags: `git_commit=88eeb7d`
    → its artifacts: the ROC curve and confusion matrix used to justify it
-4. **`git checkout 88eeb7d`** → the exact training code
+4. **`git checkout 88eeb7d`** → the training code (Exercise 6 makes you check this hop)
 
 <!--
 
@@ -819,7 +819,7 @@ Advantages of the alias:
 
 | Trap | What you see | What is wrong |
 | --- | --- | --- |
-| Registering from `model_info.model_uri` | `make trace` dead-ends | `run_id` is **empty**; use `runs:/<run_id>/model` |
+| Logging from uncommitted code | `git_commit` looks fine | The commit is **not** the code that ran |
 | `params.C = 1.0` in a filter | Zero rows, no error | Param values are **strings**: `'1.0'` |
 | Docker naming | Week 2's containers come back | Compose names the project after the *directory* |
 | A sweep opening 12 figures | `More than 20 figures...` | No `plt.close(fig)` after `log_figure` |
@@ -828,6 +828,10 @@ Advantages of the alias:
 <!--
 Every one of these was measured while building the lab, and every one is in the README's
 troubleshooting table so students can find it mid-session.
+
+Say the first row and move on. Do not explain it: Exercise 6 makes each student find it in
+their own trace. Measured in the starter: the commit a student's runs record contains 17
+TODO(student) stubs across tracking.py, registry.py and plots.py.
 
 Pre-empt the registration warning here — "Run with id ... has no artifacts at artifact path
 'model'" — or ten students will report it as a bug.
@@ -893,15 +897,17 @@ backgroundSize: 60%
 
 | # | Exercise | What you prove |
 | --- | --- | --- |
-| 4 | Find the winner without scrolling | A server-side `search_runs` filter ranks the runs — and F1 and ROC-AUC disagree |
-| 5 | Register the winning model | `diabetes-classifier` version 1 exists and links back to its source run |
-| 6 | Promote with an alias, then trace back | `@staging` and `@champion` on one version, and a four-hop walk to the params |
+| 4 | Choose the winner, and defend it | A server-side query ranks the runs; F1 and ROC-AUC disagree, and **you** pick |
+| 5 | Register the run you chose | Two immutable versions that link back to their source run |
+| 6 | Promote, trace back, find the broken link | `@staging` and `@champion` with your reason attached, and a walk that ends at... |
+| 7 | Roll the alias back | The pointer moves back; the registry forgets unless you record it |
 
-Exercises 4 and 6 also want a **written answer**, in `answers.md`.
+Exercises 4, 6 and 7 want a **written answer**, in `answers.md`, committed with your code.
 
 <!--
 Exercise 4 is the one students under-estimate. The written half is not a formality: the two
-metrics genuinely disagree, and "the highest F1 wins" is marked wrong.
+metrics genuinely disagree, and "the highest F1 wins" on its own is marked wrong. The run they
+pick is the one they register, promote and trace, so the decision carries through the lab.
 -->
 
 ---
@@ -924,72 +930,42 @@ Check the course page for the exact submission link before presenting.
 
 ---
 
-# What you will do in Exercise 3
+# What you will do in Exercises 3–7
 
-```python
-# src/week_03_mlflow_integration/tracking.py (solution)
-with mlflow.start_run(run_name=run_name, nested=nested) as run:
-    mlflow.log_params({"model_family": family, "random_seed": settings.random_seed,
-                       "test_size": settings.test_size, **hyperparams})
-    mlflow.set_tags({"model_family": family, "git_commit": git_commit(),
-                     "sweep": sweep_tag})
+The first two exercises hand you the API calls. From Exercise 3 on, the TODO states **what**
+the code must do and links the reference page; working out **how** is the exercise.
 
-    model = build_model(family, hyperparams, settings)
-    model.fit(x_train, y_train)
-    metrics = evaluate_model(model, x_test, y_test)
-    mlflow.log_metrics(metrics)
-
-    mlflow.log_figure(roc_curve_figure(model, x_test, y_test), "plots/roc_curve.png")
-
-    mlflow.sklearn.log_model(model, name="model",
-                             signature=infer_signature(x_train, model.predict(x_train)),
-                             input_example=x_train.head(3))
-```
-
-Compare with Week 2's version on slide 4: batched calls, tags, a plot, and a signature.
+| # | You write | The test checks |
+| --- | --- | --- |
+| 3 | one loop | six children, each with a parent, both baselines reproduced |
+| 4 | one `search_runs` call | only the latest sweep's children, ranked by the server |
+| 5 | one registration | a version whose `run_id` is the run you chose |
+| 6 | promotion + trace | five evidence tags, both aliases, a walk that resolves |
+| 7 | a rollback with two guards | a refused bad target; tags on the version you left |
 
 <!--
-Two things to point at explicitly.
+Do not show solution code for these in the lecture. The previous version of this deck did,
+and the lab collapsed into transcription.
 
-First, name="model". MLflow 3 deprecates the older artifact_path= spelling, and passing both
-is an error. Mention it because every tutorial written before MLflow 3 uses artifact_path.
-
-Second, the signature. infer_signature is what populates the Schema tab in the UI, and it is
-what a serving runtime reads to validate incoming requests in Week 9. It also emits a warning
-on our dataset about integer columns not being able to hold missing values — which is a true
-statement about our disguised zeros, and which we are deliberately not fixing until Week 5.
+Warn them about one thing only: run.data.params values come back as STRINGS. "42", not 42.
 -->
 
 ---
 
-# What you will do in Exercise 6
+# The question Exercise 6 asks
 
-```python
-# src/week_03_mlflow_integration/registry.py (solution)
-client = MlflowClient(settings.mlflow_tracking_uri)
-
-# Read the evidence back from the SOURCE RUN, so the tag cannot drift
-source_run_id = client.get_model_version(name, version).run_id
-metrics = client.get_run(source_run_id).data.metrics
-client.set_model_version_tag(name, version, "validation_f1", f"{metrics['f1']:.4f}")
-client.set_model_version_tag(name, version, "promoted_by", settings.model_owner)
-
-# The promotion itself: two aliases on one version
-client.set_registered_model_alias(name, "staging", version)
-client.set_registered_model_alias(name, "champion", version)
-
-# ...and the walk back
-version = client.get_model_version_by_alias(name, "staging")
-run = client.get_run(version.run_id)
-print(run.data.params, run.data.tags["git_commit"])
+```mermaid
+flowchart LR
+    AL["@staging"] --> V["version 2"] --> R["run 6459..."] --> G["git_commit=0e16e7c"] --> Q{"is this the code<br/>that trained it?"}
 ```
 
+`make trace` will print a commit. Exercise 6 asks you to check it with Git.
+
 <!--
-Fifteen lines for the entire governance story of the week.
-
-Warn them: run.data.params values come back as STRINGS. "42", not 42. Every student hits this.
-
-And note there is no transition_model_version_stage anywhere in this file — by design.
+Leave the question open. Every student's runs are logged from uncommitted code during the
+session, so every student's answer is "no", and they find out with git diff, not from a slide.
+Come back to this slide at the start of Week 4, next to the dashed data edge: two links in
+the chain that looked solid and were not.
 -->
 
 ---
@@ -1020,6 +996,7 @@ And note there is no transition_model_version_stage anywhere in this file — by
 - **Who was champion in March.** The open-source registry keeps **no alias history**. If you need it, you record it yourself, in version tags or an audit log.
 - **Stopping someone deploying an unpromoted run.** Nothing prevents `runs:/<run_id>/model` going straight to production.
 - **Reproducing the run.** You recorded the commit, not the environment. `uv.lock` is doing that job.
+- **Code nobody committed.** `git_dirty` says a run cannot be reproduced from Git. It does not make it reproducible.
 
 <!--
 -->
@@ -1055,7 +1032,7 @@ Let that sit for a beat. It is the same shape as the Epic argument: a record exi
 Week 4 closes the last link:
 
 - **DVC**: dataset snapshots tracked by content hash, with a tiny `.dvc` pointer file committed to Git
-- **MinIO as the S3-compatible DVC remote** — the same object store from Week 2, now holding data as well as artifacts
+- **Silo as the S3-compatible DVC remote** — the same object store from Week 2, now holding data as well as artifacts
 - `dvc.yaml` pipeline stages, so prepare → train → evaluate becomes a declared, reproducible graph
 - **linking a data version to an MLflow run**, so the chain reaches from `@staging` all the way to the bytes
 

@@ -119,6 +119,10 @@ Expected: **3 passed, 1 skipped**. The skipped test is yours to write in Exercis
 
 Complete these exercises before the next lab session.
 
+Two exercises ask for a **written answer**. Put those in a file called `answers.md` in this
+directory, and **commit it with your code**. It is part of your submission, and it is read
+alongside your solution.
+
 ### Exercise 1 — Same code, different model (5 min)
 
 1. Run the pipeline twice without changing anything. Confirm the metrics are identical both times.
@@ -148,12 +152,13 @@ Beat the baseline. Currently the best F1 is **0.5785**.
 
 ### Exercise 5 — Commit your work (5 min)
 
-1. Run `git status` from the repository root. You should see your modified files — and you should **not** see `.env` or `.venv/` (that is `.gitignore` doing its job).
+1. Run `git status` from the repository root. `answers.md` should appear among your modified
+   files — and you should **not** see `.env` or `.venv/` (that is `.gitignore` doing its job).
 2. Stage and commit with a meaningful message:
 
    ```bash
    git add labs/week-01-env-setup/starter
-   git commit -m "week01: add random forest model and split test"
+   git commit -m "week01: add random forest model, split test, and written answers"
    ```
 
 3. Run `git log --oneline -3` and confirm your commit is on top. From now on, every exercise ends with a commit — version control is the first MLOps habit.
@@ -205,4 +210,4 @@ starter/
 
 ## Next steps
 
-In Week 2 this project gets its first real infrastructure: MLflow, MinIO, and Postgres running via Docker Compose.
+In Week 2 this project gets its first real infrastructure: MLflow, Silo, and Postgres running via Docker Compose.

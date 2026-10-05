@@ -41,21 +41,65 @@ cd mlops-course
 
 # 3. Check it worked — you want BOTH origin (yours) and upstream (the course):
 git remote -v
+
+# 4. Make `git pull` merge the new week into your work, not rebase it:
+git config pull.rebase false
 ```
 
 ### Every week, before the lab:
 
 ```bash
-git pull upstream main      # fetch the new week
+git pull upstream main      # merge the new week into your fork
+git push                    # update your fork on GitHub
 ```
 
-If that pull reports a conflict, it is nearly always in a lab file you edited.
-Your work is in your fork's history and is not lost — the recovery is:
+Work only in the lab folder of the week, `labs/week-XX-topic/starter/`. The
+course changes the other files every week. If you edit only your lab folder,
+the pull merges without a conflict.
+
+If git says that your local changes would be overwritten, you have work that is
+not committed yet. Commit it (see below), then pull again.
+
+### After the lab: commit and submit
 
 ```bash
-git stash                   # park your changes
-git pull upstream main      # take the new week cleanly
-git stash pop               # replay your changes on top
+git add labs/week-XX-topic/starter
+git commit -m "Week XX lab"
+git push
+git log -1 --format=%H      # the commit ID (SHA) to submit
+```
+
+Submit the URL of that commit in the week's Moodle assignment:
+`https://github.com/<your-username>/mlops-course/commit/<SHA>`. Open the
+URL before you submit: if GitHub shows your changes, the link is right.
+
+Never rebase `main` and never use `git push --force`. Both change the commit
+IDs, and the commits you submitted in Moodle would disappear from your fork.
+
+### If the pull reports a conflict
+
+A conflict means that the course corrected a lab file that you also edited. The
+course announcement says which file changed. Your work is safe in your commits.
+
+```bash
+git status                  # lists the files with a conflict
+# In each file, keep the lines you need and delete the
+# <<<<<<<, ======= and >>>>>>> marker lines.
+git add <file>
+git commit                  # finishes the merge
+git push
+```
+
+To stop and go back to the state before the pull: `git merge --abort`.
+
+Do not edit a conflict in `uv.lock` by hand. Resolve `pyproject.toml` first if
+it also has a conflict, then take the course version of the lock and lock again:
+
+```bash
+cd labs/week-XX-topic/starter
+git checkout --theirs uv.lock
+uv lock
+git add uv.lock
 ```
 
 Do **not** push to `upstream`; you have no write access to it, by design.

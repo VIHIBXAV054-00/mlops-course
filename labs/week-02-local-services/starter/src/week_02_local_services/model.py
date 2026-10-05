@@ -8,7 +8,7 @@ from sklearn.preprocessing import StandardScaler
 from .config import Settings
 
 # Unchanged from Week 1 — the baseline pipeline is intentionally trivial.
-# All week-2 complexity is in the infrastructure layer (Compose, MLflow, MinIO).
+# All week-2 complexity is in the infrastructure layer (Compose, MLflow, Silo).
 
 
 def train_logistic_regression(x_train, y_train, settings: Settings) -> Pipeline:

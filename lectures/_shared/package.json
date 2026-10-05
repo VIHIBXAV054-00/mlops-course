@@ -1,0 +1,6 @@
+{
+  "name": "bme-mlops-course-shared",
+  "private": true,
+  "description": "Slidev addon shared by every lecture deck: course components and assets. Not a workspace package.",
+  "keywords": ["slidev-addon"]
+}

@@ -1,0 +1,27 @@
+# Week 4: the training pipeline, declared as a graph.
+#
+# Each stage names what it runs (cmd), what it reads (deps, including source
+# files), which params it uses, and what it writes (outs).
+# See the graph: make dag   Run it: make repro
+# Reference: https://doc.dvc.org/user-guide/project-structure/dvcyaml-files
+
+stages:
+
+  prepare:
+    cmd: uv run python src/main.py prepare
+    deps:
+      - data/measurements.csv
+      - src/week_04_dvc_introduction/pipeline.py
+      - src/week_04_dvc_introduction/data.py
+    params:
+      - random_seed
+      - prepare.test_size
+    outs:
+      - data/processed/train.csv
+      - data/processed/test.csv
+
+  # TODO(student) — Exercise 5: add the stages `train` and `evaluate`, each run as
+  # `uv run python src/main.py <stage>`. Read the stage functions in pipeline.py to
+  # find which files each one reads and writes, and which params it uses. Keep the
+  # small JSON files in Git (`cache: false`); metrics/metrics.json goes under
+  # `metrics:`.

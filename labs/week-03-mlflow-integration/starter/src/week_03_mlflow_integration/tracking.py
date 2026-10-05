@@ -71,7 +71,8 @@ def git_commit() -> str:
     """Return the current git commit, or "unknown" outside a git checkout.
 
     This is the single most valuable tag you can log: it is the link from a
-    recorded metric back to the exact code that produced it.
+    recorded metric back to the code — but only to COMMITTED code. See
+    git_dirty() below, and Exercise 6.
     """
     try:
         result = subprocess.run(
@@ -82,6 +83,30 @@ def git_commit() -> str:
             check=True,
         )
         return result.stdout.strip()
+    except (subprocess.SubprocessError, OSError):
+        return "unknown"
+
+
+def git_dirty() -> str:
+    """Return "true" if this directory has uncommitted changes, else "false".
+
+    `git_commit()` names the last commit, not the code that actually ran. With
+    uncommitted edits the two differ, and `git checkout <git_commit>` hands you
+    code that never produced the run. Tags are strings, hence "true"/"false";
+    "unknown" outside a git checkout.
+
+    `answers.md` is excluded: your written answers are committed with the lab,
+    but editing them cannot change what a run computed.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "status", "--porcelain", "--", ".", ":(exclude)answers.md"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=True,
+        )
+        return "true" if result.stdout.strip() else "false"
     except (subprocess.SubprocessError, OSError):
         return "unknown"
 
@@ -136,6 +161,8 @@ def log_training_run(
         if sweep_tag is not None:
             tags["sweep"] = sweep_tag
         mlflow.set_tags(tags)
+        #
+        # TODO(student) — Exercise 6, part 3: you will come back to this call.
 
         model = build_model(family, hyperparams, settings)
         model.fit(x_train, y_train)
@@ -165,8 +192,7 @@ def log_training_run(
         # TODO(student) — Exercise 1d:
         # mlflow.sklearn.log_model(
         #     model,
-        #     name="model",          <- NOT artifact_path=, which MLflow 3
-        #                               deprecates (older tutorials all use it).
+        #     name="model",
         #     signature=infer_signature(x_train, model.predict(x_train)),
         #     input_example=x_train.head(3),
         # )
@@ -191,18 +217,21 @@ def run_sweep(settings: Settings) -> list[RunResult]:
     with one less dependency).
 
     TODO(student) — Exercise 3:
-    1. Loop over SWEEP_GRID and call log_training_run() once per cell, passing
-       `sweep_tag=SWEEP_TAG` and `nested=True`. The `nested=True` is what makes
-       each run a CHILD of the parent run opened below — without it you get
-       seven unrelated top-level runs and the UI tree is flat.
-    2. Append each RunResult to `results`.
-    3. Run `make sweep`, then open the UI: you should see one "sweep" run with
-       six children. Select all six -> Compare -> Parallel Coordinates.
-    4. Delete the @pytest.mark.skip lines in tests/test_tracking.py.
+    Log one CHILD run per cell of SWEEP_GRID inside the parent run opened below,
+    reusing log_training_run(), and collect the RunResults in `results`.
+    Every child must carry the SWEEP_TAG. Read log_training_run's keyword
+    arguments: one of them decides whether a run becomes a child of the run
+    that is already open, or a sibling of it. Get it wrong and the UI shows
+    seven unrelated top-level runs instead of one tree.
+    Reference: https://mlflow.org/docs/latest/ml/getting-started/hyperparameter-tuning/
 
-    Note that every cell must reuse the SAME train/test split (log_training_run
-    calls build_dataset with the same seed). If each cell re-randomised the
-    split, the comparison would be meaningless.
+    Then: `make sweep`, open the UI, expand the "sweep" run, select its six
+    children -> Compare -> Parallel Coordinates. Delete the Exercise 3 skip
+    markers in tests/test_tracking.py.
+
+    Every cell reuses the SAME train/test split (log_training_run calls
+    build_dataset with the same seed). If each cell re-randomised the split,
+    the comparison would be meaningless.
     """
     connect(settings)
 
@@ -241,36 +270,66 @@ def run_sweep(settings: Settings) -> list[RunResult]:
     return results
 
 
-def search_sweep_runs(settings: Settings, *, min_f1: float = 0.0) -> pd.DataFrame:
-    """Query the tracking server for this sweep's child runs, best first.
+def latest_sweep_id(settings: Settings) -> str | None:
+    """Return the run_id of the most recent sweep parent, or None if none exists.
 
-    `filter_string` is evaluated by the tracking server against Postgres — this
-    is not a full dump filtered in pandas. That is the whole payoff of Week 2's
-    relational backend store.
+    Every `make sweep` adds six more children to the experiment. Comparing runs
+    from two different sweeps (say, one before and one after a code change) is
+    exactly the mix-up a query should prevent, so searches scope to one sweep.
+    """
+    mlflow.set_tracking_uri(settings.mlflow_tracking_uri)
+    try:
+        parents = mlflow.search_runs(
+            experiment_names=[settings.mlflow_experiment_name],
+            filter_string=f"tags.sweep_parent = '{SWEEP_TAG}'",
+            order_by=["attributes.start_time DESC"],
+            max_results=1,
+            output_format="list",
+        )
+    except MlflowException:
+        # The experiment does not exist yet — nothing has been logged.
+        return None
+    return parents[0].info.run_id if parents else None
+
+
+def search_sweep_runs(
+    settings: Settings, *, metric: str = "f1", min_f1: float = 0.0
+) -> pd.DataFrame:
+    """Query the tracking server for the latest sweep's child runs, best first.
+
+    The `filter_string` travels to the tracking server and becomes part of a SQL
+    query against Postgres, so only matching rows come back over the network.
+    That is the payoff of Week 2's relational backend store — it matters when
+    the experiment holds ten thousand runs rather than a dozen.
 
     Watch the quoting: tag and param values need single quotes inside the Python
     string, metric comparisons are bare numbers, and the operator is `=` not `==`.
 
     TODO(student) — Exercise 4:
-    Replace the empty DataFrame below with a real mlflow.search_runs() call:
-        experiment_names=[settings.mlflow_experiment_name]
-        filter_string=f"tags.sweep = '{SWEEP_TAG}' and metrics.f1 > {min_f1}"
-        order_by=["metrics.f1 DESC", "attributes.start_time DESC"]
-        max_results=50
-        output_format="pandas"
-    Only the CHILD runs carry the `sweep` tag, so this filter returns exactly
-    the six comparable rows — the metric-less parent is excluded automatically.
-
-    Then prove to yourself the filter runs server-side: call this with
-    min_f1=0.99 and confirm you get ZERO rows back. If the filtering happened
-    in pandas after downloading everything, you would still get six.
+    Replace the empty frame below with ONE mlflow.search_runs() call over this
+    experiment that returns a pandas DataFrame where:
+      - the rows are the children of the sweep `parent_id` names, and nothing
+        else (not the parent, not the children of an older sweep). Hint: MLflow
+        tags every nested run with the id of its parent. The UI hides these
+        system tags; print the columns of an unfiltered
+        mlflow.search_runs(experiment_names=[...]) frame to find it;
+      - every row has metrics.f1 > min_f1;
+      - the SERVER does the ranking by `metric`, best first. Do not sort in pandas.
+    Syntax reference: https://mlflow.org/docs/latest/ml/search/search-runs/
+    Test it with `make best`, then `make best METRIC=roc_auc`, then call it with
+    min_f1=0.99 and confirm the frame is empty. Delete the Exercise 4 skip
+    markers in tests/test_tracking.py.
     """
     mlflow.set_tracking_uri(settings.mlflow_tracking_uri)
+    parent_id = latest_sweep_id(settings)
+    if parent_id is None:
+        return pd.DataFrame()
+
     try:
         return mlflow.search_runs(
             experiment_names=[settings.mlflow_experiment_name],
-            filter_string=f"tags.sweep = '{SWEEP_TAG}' and metrics.f1 > {min_f1}",
-            order_by=["metrics.f1 DESC", "attributes.start_time DESC"],
+            filter_string=f"tags.`mlflow.parentRunId` = '{parent_id}' and metrics.{metric} > {min_f1}",
+            order_by=[f"metrics.{metric} DESC", "attributes.start_time DESC"],
             max_results=50,
             output_format="pandas",
         )
@@ -280,9 +339,9 @@ def search_sweep_runs(settings: Settings, *, min_f1: float = 0.0) -> pd.DataFram
         return pd.DataFrame()
 
 
-def find_best_run(settings: Settings) -> str:
-    """Return the run_id of the highest-F1 run in the sweep."""
-    frame = search_sweep_runs(settings)
+def find_best_run(settings: Settings, *, metric: str = "f1") -> str:
+    """Return the run_id of the latest sweep's best run by `metric`."""
+    frame = search_sweep_runs(settings, metric=metric)
     if frame.empty:
         raise RuntimeError(
             "No sweep runs found. Run 'make sweep' first (Exercise 3)."
@@ -290,11 +349,24 @@ def find_best_run(settings: Settings) -> str:
     return str(frame.iloc[0]["run_id"])
 
 
+def query_runs(settings: Settings, filter_string: str, order_by: str | None) -> pd.DataFrame:
+    """Run an arbitrary search across the whole experiment (the stretch exercise)."""
+    mlflow.set_tracking_uri(settings.mlflow_tracking_uri)
+    return mlflow.search_runs(
+        experiment_names=[settings.mlflow_experiment_name],
+        filter_string=filter_string,
+        order_by=[order_by] if order_by else None,
+        max_results=50,
+        output_format="pandas",
+    )
+
+
 def format_comparison_table(frame: pd.DataFrame) -> str:
     """Render the interesting columns of a search result for the terminal."""
     if frame.empty:
         return "(no runs)"
     columns = [
+        "run_id",
         "tags.mlflow.runName",
         "params.model_family",
         "params.C",
@@ -305,4 +377,5 @@ def format_comparison_table(frame: pd.DataFrame) -> str:
         "metrics.recall",
     ]
     present = [column for column in columns if column in frame.columns]
-    return frame[present].to_string(index=False, na_rep="-")
+    # A forest has no C and a logreg has no n_estimators: show "-", not "None".
+    return frame[present].fillna("-").to_string(index=False)

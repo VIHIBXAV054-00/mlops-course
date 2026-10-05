@@ -31,28 +31,23 @@ from .config import Settings
 def register_best_model(settings: Settings, run_id: str) -> ModelVersion | None:
     """Register a run's model into the registry as a new version.
 
-    IMPORTANT — use the `runs:/<run_id>/model` URI form, NOT the
-    `model_info.model_uri` returned by `log_model` (which is `models:/<model_id>`
-    in MLflow 3). Against the open-source registry only the `runs:/` form
-    records `run_id` on the resulting ModelVersion, and that `run_id` is what
-    makes the Exercise 6 traceability chain a single hop instead of a dead end.
-
-    You will see a warning here — "Run with id ... has no artifacts at artifact
-    path 'model', registering model based on models:/m-... instead". That is
-    expected, not an error: MLflow 3 stores logged-model files outside the run's
-    own artifact root. The version is still created and still links to the run.
-
     TODO(student) — Exercise 5:
-    Return a real registration instead of the stub below:
-        mlflow.register_model(
-            model_uri=f"runs:/{run_id}/model",
-            name=settings.registered_model_name,
-            tags={"registered_from": "week3-sweep"},
-        )
-    Then run `make register` TWICE and watch the version number go 1 -> 2.
-    Versions are immutable and monotonic: you never edit version 1, you register
-    version 2. Open the UI's Models tab and follow the "Source run" link back to
-    the sweep run it came from.
+    Create a new version of the registered model `settings.registered_model_name`
+    from the model logged by run `run_id`, tagged `registered_from=week3-sweep`,
+    and return the ModelVersion.
+    Reference (read "Adding an MLflow Model to the Model Registry"):
+    https://mlflow.org/docs/latest/ml/model-registry/workflow/
+
+    The docs show two URI forms. We use `runs:/<run_id>/<name>`, where <name>
+    is the `name=` you gave log_model in Exercise 1, because it states the
+    source run in the call itself. On mlflow==3.13.0 it prints this warning,
+    which is expected and not an error: "Run with id ... has no artifacts at
+    artifact path 'model', registering model based on models:/m-... instead".
+    MLflow 3 stores logged-model files outside the run's artifact root.
+
+    Then register the same run twice (`make register RUN_ID=...` twice) and
+    watch the version number go up. Delete the Exercise 5 skip marker in
+    tests/test_registry.py.
     """
     mlflow.set_tracking_uri(settings.mlflow_tracking_uri)
     return mlflow.register_model(
@@ -76,7 +71,9 @@ def latest_version(settings: Settings) -> ModelVersion:
     return max(versions, key=lambda v: int(v.version))
 
 
-def promote_to_staging(settings: Settings, version: str) -> ModelVersion | None:
+def promote_to_staging(
+    settings: Settings, version: str, reason: str | None = None
+) -> ModelVersion | None:
     """Promote a version: attach the evidence, then move the alias.
 
     "Promote to staging" is two things, and only the second is an API call:
@@ -88,39 +85,28 @@ def promote_to_staging(settings: Settings, version: str) -> ModelVersion | None:
       2. A POINTER MOVE — `set_registered_model_alias`. Nothing is copied. The
          version does not change. Only the name now resolves elsewhere.
 
-    We set TWO aliases on the same version on purpose. A stage could never do
-    that, and alias coexistence is the headline reason MLflow replaced stages.
+    TODO(student) — Exercise 6, part 1. Using the `client` below:
 
-    TODO(student) — Exercise 6, part 1. Build this function in three steps.
+    A. Read the evidence from the version's SOURCE RUN, not from a variable you
+       happen to hold, so the tags cannot drift from what was measured.
+    B. Tag the VERSION with these keys (the tests check the names):
+         validation_f1, validation_roc_auc   the run's metrics, formatted "%.4f"
+         promoted_by                         settings.model_owner
+         promoted_at                         now, UTC, ISO 8601, to the second
+         promotion_reason                    `reason`, only when one is given
+       and tag the REGISTERED MODEL with:
+         owner  settings.model_owner      task  "diabetes-binary-classification"
+    C. Move BOTH aliases, settings.model_alias ("staging") and "champion", to
+       `version`. Neither name is built into MLflow; you chose them.
+    D. Return the version that settings.model_alias now resolves to.
 
-    Step A — pull the evidence from the SOURCE RUN, not from a variable you are
-    holding, so the tag can never drift from what was actually measured:
-        source_run_id = client.get_model_version(name, version).run_id
-        metrics = client.get_run(source_run_id).data.metrics
-
-    Step B — record the evidence as version tags with
-    client.set_model_version_tag(name, version, key, value):
-        "validation_f1"      f"{metrics['f1']:.4f}"
-        "validation_roc_auc" f"{metrics['roc_auc']:.4f}"
-        "promoted_by"        settings.model_owner
-        "promoted_at"        datetime.now(timezone.utc).isoformat(timespec="seconds")
-    And two facts about the registered model as a whole, with
-    client.set_registered_model_tag(name, key, value):
-        "owner"  settings.model_owner
-        "task"   "diabetes-binary-classification"
-
-    Step C — move the pointer. THIS is the promotion:
-        client.set_registered_model_alias(name, settings.model_alias, version)
-        client.set_registered_model_alias(name, "champion", version)
-    Two aliases on one version. Look for both in the UI's Models tab, and note
-    that neither is a built-in MLflow concept — you invented both names.
-
-    Finally return client.get_model_version_by_alias(name, settings.model_alias)
-    so the caller sees the version the alias now resolves to.
+    The MlflowClient methods you need: get_model_version, get_run,
+    set_model_version_tag, set_registered_model_tag, set_registered_model_alias,
+    get_model_version_by_alias. Signatures:
+    https://mlflow.org/docs/latest/api_reference/python_api/mlflow.client.html
 
     Do NOT reach for transition_model_version_stage(). It still exists in this
-    MLflow version but is deprecated and absent from the current API reference —
-    see the lecture slide on stages vs. aliases.
+    MLflow version but is deprecated. See the lecture slide on stages vs. aliases.
     """
     client = MlflowClient(settings.mlflow_tracking_uri)
     name = settings.registered_model_name
@@ -152,26 +138,24 @@ def trace_alias(settings: Settings) -> dict:
     hop is one lookup a human can do months later, from a laptop, having never
     seen the training code.
 
-    TODO(student) — Exercise 6, part 2. Walk the four hops:
+    TODO(student) — Exercise 6, part 2. Walk the hops with the client:
 
-      1. alias   -> version:  client.get_model_version_by_alias(name, alias)
-      2. version -> run:      version.run_id
-                              (fall back to
-                               client.get_logged_model(version.model_id).source_run_id
-                               so the chain survives a version that was
-                               registered from a models:/ URI instead)
-      3. run     -> evidence: run = client.get_run(run_id), then read
-                              run.data.params, run.data.metrics, and
-                              run.data.tags["git_commit"]
-      4. commit  -> code:     `git checkout <git_commit>` — that hop is yours,
-                              not MLflow's
+      1. alias   -> version    (which client method resolves an alias?)
+      2. version -> run        (the version records its source run's id; if it
+                                is empty, raise RuntimeError — the chain is broken)
+      3. run     -> evidence   (the run's params, metrics and tags)
+      4. commit  -> code       `git checkout <git_commit>`. That hop is yours,
+                                not MLflow's, and Exercise 6 part 2 asks you
+                                to actually take it.
 
     Return a dict with these keys, which is what the CLI prints:
         model_uri, version, aliases, run_id, run_name, git_commit,
         params, metrics, version_tags
+    (run_name is the run's `mlflow.runName` tag. Exercise 6, part 3 adds one
+    more key here.)
 
-    One thing to notice when it works: run.data.params values come back as
-    STRINGS, not the ints and floats you logged. "42", not 42.
+    One thing to notice when it works: params come back as STRINGS, not the
+    ints and floats you logged. "42", not 42.
     """
     client = MlflowClient(settings.mlflow_tracking_uri)
     name, alias = settings.registered_model_name, settings.model_alias
@@ -194,12 +178,42 @@ def trace_alias(settings: Settings) -> dict:
     }
 
 
+def roll_back(
+    settings: Settings, to_version: str, reason: str
+) -> tuple[str, ModelVersion] | None:
+    """Point both aliases back at an earlier version, and record why.
+
+    A rollback is the same pointer move as a promotion, in the other direction.
+    Rolling back what a serving container actually runs is Week 10; this is
+    the registry half.
+
+    TODO(student) — Exercise 7:
+    1. Find the version settings.model_alias points at NOW.
+    2. Refuse, with ValueError and before anything moves, if `to_version`
+       - is the version the alias already points at, or
+       - has no `promoted_at` tag. A version that never passed promotion is
+         not a known-good target, and "rolling back" to it would be an
+         unreviewed promotion in disguise.
+       (A `to_version` that does not exist already raises in get_model_version.)
+    3. Tag the version you are rolling back FROM with
+         rolled_back_at   now, UTC, ISO 8601
+         rolled_back_to   to_version
+         rollback_reason  reason
+    4. Move BOTH aliases, settings.model_alias and "champion", to `to_version`.
+    5. Return (the version you rolled back from, the ModelVersion the alias
+       now resolves to).
+    Delete the Exercise 7 skip markers in tests/test_registry.py.
+    """
+    _ = (settings, to_version, reason)  # silence unused-argument warnings until you implement
+    return None  # placeholder — the CLI reports this as "not implemented yet"
+
+
 def load_aliased_model(settings: Settings):
     """Load the model the alias currently points at.
 
     Two things worth noticing. First, the URI names a ROLE, not a version — the
     caller never changes when the champion changes. Second, this download goes
-    through the tracking server's artifact proxy, so the client needs no MinIO
+    through the tracking server's artifact proxy, so the client needs no Silo
     credentials at all. Check your `.env`: there are no AWS_* variables in it.
     """
     mlflow.set_tracking_uri(settings.mlflow_tracking_uri)

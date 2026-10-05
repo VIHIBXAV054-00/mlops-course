@@ -27,7 +27,7 @@ A PSI above ~0.25 indicates a major distribution shift, so the `glucose` drift h
 
 ## How the course uses these
 
-- **Week 4 (DVC):** version `batch_01_baseline.csv` first; later commit `batch_02_new_arrival.csv` as a new data version to demonstrate dataset lineage and `dvc` diffs.
+- **Week 4 (DVC):** uses its own copy in `week04/`: the same rows split into three batches (`batch_01.csv` to `batch_03.csv`), so the dataset gets three versions. See `week04/README.md`.
 - **Weeks 11–12 (monitoring / drift):** treat `batch_01` as the training/reference window and `batch_02` as live production traffic; the glucose PSI and the rising positive rate are the drift the dashboards and Evidently report should flag.
 
 (Weeks 1–2 do **not** use these batches — they use the full snapshot.)

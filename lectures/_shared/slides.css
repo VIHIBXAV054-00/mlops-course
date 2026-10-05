@@ -33,3 +33,107 @@
   font-weight: 600;
   line-height: 1.4;
 }
+/* Footnotes carry the sources of a slide. Keep them small, at the bottom, and out of
+ * the way. Write them as `text[^1][]` in the body and `[^1]: source` below; see
+ * .agents/skills/05_slide_conventions.md. */
+.slidev-layout .footnotes {
+  position: absolute;
+  left: 3.5rem;
+  right: 3.5rem;
+  bottom: 0.6rem;
+  font-size: 0.62rem;
+  line-height: 1.3;
+  opacity: 0.65;
+}
+.slidev-layout .footnotes-sep { display: none; }
+.slidev-layout .footnotes ol { margin: 0; padding-left: 1rem; }
+.slidev-layout .footnotes li { margin: 0; }
+
+/* A short source line for slides that show a figure (used where a footnote marker
+ * has no natural place, e.g. under an image). */
+.slidev-layout .src {
+  position: absolute;
+  left: 3.5rem;
+  right: 3.5rem;
+  bottom: 0.6rem;
+  font-size: 0.62rem;
+  opacity: 0.55;
+}
+
+/* A large icon in the top-right corner, so a text slide still has a visual anchor.
+ * Usage: <carbon-data-base class="icon-corner" />  (icon sets: carbon, ph; browse at
+ * https://icones.js.org). Both sets ship with @slidev/cli, so they always resolve. */
+.slidev-layout .icon-corner {
+  position: absolute;
+  top: 1.9rem;
+  right: 3rem;
+  font-size: 3.2rem;
+  color: #4338ca;
+  opacity: 0.85;
+}
+/* Keep a long title clear of the corner icon. */
+.slidev-layout:has(.icon-corner) h1 { padding-right: 5.5rem; }
+
+/* Box-and-arrow diagrams drawn in HTML, the default diagram style (first used in Week 4).
+ * <div class="flow">
+ *   <div class="node"><ph-file-csv class="ic" /><b>Title</b><br><small>detail</small></div>
+ *   <div class="arrow-l">dvc push<span class="arrow">→</span></div>
+ *   <div class="node"><img class="logo" src="/aws-s3-logo.png" alt="Amazon S3" /><b>Remote</b></div>
+ * </div>
+ * Add `on` to the arrow being taught and `dim` to the parts that are not; `fail` marks a
+ * failed step. `no-shrink` keeps a node at its width (set the width inline: see the
+ * building-slidev-decks skill, "Layout traps"). */
+.flow { display: flex; align-items: center; justify-content: center; gap: 0.75rem; margin: 0.75rem 0; }
+.flow .node { border: 2px solid #4338ca; border-radius: 0.75rem; background: #eef2ff; color: #1e1b4b; padding: 0.5rem 0.9rem; text-align: center; line-height: 1.25; }
+.flow .node .ic { font-size: 2.2rem; display: block; margin: 0 auto 0.2rem; }
+.flow .node small { display: block; opacity: 0.75; }
+.flow .node.no-shrink { flex: none; }
+.flow .arrow { font-size: 1.8rem; color: #64748b; }
+.flow .arrow-l { display: flex; flex-direction: column; align-items: center; color: #64748b; font-size: 0.75rem; line-height: 1.2; min-width: 7rem; text-align: center; }
+.flow .arrow-l .arrow { font-size: 1.6rem; }
+.flow .arrow-l.on { color: #4338ca; font-weight: 700; }
+.flow .dim { opacity: 0.3; }
+.flow .fail { color: #dc2626; font-weight: 700; }
+.flow .mono { font-family: ui-monospace, monospace; font-size: 0.85rem; }
+.flow .changed { color: #dc2626; font-weight: 700; }
+.flow .logo { height: 2.2rem; display: inline-block; margin: 0 0.2rem 0.2rem; }
+/* Colour a node by its role, so the parts of a diagram can be told apart:
+ * <div class="node amber">…</div>. The default node is indigo. */
+.flow .node.amber { border-color: #d97706; background: #fffbeb; color: #451a03; }
+.flow .node.green { border-color: #16a34a; background: #f0fdf4; color: #052e16; }
+.flow .node.sky { border-color: #0284c7; background: #f0f9ff; color: #082f49; }
+.flow .node.violet { border-color: #7c3aed; background: #f5f3ff; color: #2e1065; }
+.flow .node.rose { border-color: #e11d48; background: #fff1f2; color: #4c0519; }
+/* A bracket that splits one node into parts below it: put .split-stem and .split-bar
+ * between a node and a flow of its parts; set the bar's width to the distance between
+ * the parts' centres. */
+.split-stem { width: 2px; height: 0.7rem; background: #4338ca; margin: 0 auto; }
+.split-bar { height: 0.7rem; margin: 0 auto; border: 2px solid #4338ca; border-bottom: none; }
+
+/* Cards with a logo or icon on top: a tool landscape, open questions. Set the columns with
+ * style="grid-template-columns:repeat(3,1fr)". A logo loads as a CSS background, so a
+ * missing file leaves an empty space instead of breaking the build:
+ * <div class="card"><div class="logo" style="background-image:url(/dvc-logo.png)"></div><b>DVC</b>…</div> */
+.cards { display: grid; gap: 0.75rem; margin-top: 0.75rem; }
+.cards .card { border: 2px solid #4338ca; border-radius: 0.75rem; background: #eef2ff; color: #1e1b4b; padding: 0.6rem 0.8rem; text-align: center; line-height: 1.3; font-size: 0.9rem; }
+.cards .card .ic { font-size: 2.2rem; display: block; margin: 0 auto 0.3rem; }
+.cards .card .logo { height: 2.6rem; margin-bottom: 0.3rem; background: center / contain no-repeat; }
+.cards .card b { display: block; font-size: 1rem; }
+/* Pick one card out of a set on a click: :class="$clicks >= 1 ? 'card picked' : 'card'",
+ * and 'card faded' on the others. */
+.cards .card { transition: opacity 0.3s, background 0.3s, box-shadow 0.3s; }
+.cards .card.picked { border-color: #16a34a; background: #f0fdf4; color: #052e16; box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.35); }
+.cards .card.faded { opacity: 0.4; }
+.cards .card code { font-size: 0.7rem; white-space: nowrap; }
+/* Inline code inside the light cards and diagram boxes. In dark mode the theme's own dark
+ * code background made it unreadable. */
+.cards .card code, .flow .node code { background: rgba(67, 56, 202, 0.12); color: #1e1b4b; }
+
+/* On image-right slides, keep the footnotes in the text column, off the image. */
+.grid-cols-2 > .slidev-layout .footnotes { right: 52%; }
+
+/* A slide with many sources (frontmatter `class: fn-inline`): the footnotes run on as
+ * one paragraph instead of one line each. */
+.fn-inline .footnotes li { display: inline; margin-right: 0.8rem; }
+.fn-inline .footnotes ol { list-style: none; padding-left: 0; }
+.fn-inline .footnotes p { display: inline; margin: 0; }

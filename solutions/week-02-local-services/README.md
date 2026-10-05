@@ -7,8 +7,8 @@ Instructors can use it to verify student submissions.
 
 | File | Exercise | What changed |
 | --- | --- | --- |
-| `compose.yaml` | 1 | `minio` service: filled image, command, environment, volume, healthcheck |
-| `compose.yaml` | 1 | `minio-create-bucket`: filled image and bucket-creation entrypoint |
+| `compose.yaml` | 1 | `s3` service: filled image, command, environment, volume, healthcheck |
+| `compose.yaml` | 1 | `s3-create-bucket`: filled image and bucket-creation entrypoint |
 | `compose.yaml` | 2 | `mlflow` service: filled `MLFLOW_S3_ENDPOINT_URL`, `AWS_*` env, `--backend-store-uri`, `--artifacts-destination`, `--allowed-hosts` |
 | `src/week_02_local_services/cli.py` | 3 | Added `mlflow.set_tracking_uri`, `mlflow.set_experiment`, `mlflow.start_run()`, `log_param`, `log_metric`, `log_model` |
 | `tests/test_smoke.py` | 3 | `test_mlflow_run_logged` changed from `@pytest.mark.skip` to a reachability-guarded live test |
@@ -30,7 +30,7 @@ uv run python src/main.py
 
 # 5. Open the UIs
 #    MLflow:   http://localhost:5500
-#    MinIO:    http://localhost:5511  (login: values from .env)
+#    Silo:    http://localhost:5511  (login: values from .env)
 
 # 6. Run tests (no stack required for first 5; test_mlflow_run_logged needs the stack)
 uv run pytest tests/ -v
@@ -66,7 +66,7 @@ Experiment:     diabetes-week2
 Run ID:         <32-character hex run ID>
 
 Open the MLflow UI:     http://127.0.0.1:5500
-Open the MinIO console: http://127.0.0.1:5511
+Open the Silo console: http://127.0.0.1:5511
 ```
 
 **Seed-42 metrics (consistent with Week 1):**
@@ -105,7 +105,7 @@ tests/test_smoke.py::test_mlflow_run_logged SKIPPED (MLflow tracking server not 
 
 ## Verifying the storage split (Exercise 4)
 
-### MinIO (artifacts)
+### Silo (artifacts)
 
 Open http://localhost:5511, log in with credentials from `.env`, and browse the
 `mlflow-artifacts` bucket.

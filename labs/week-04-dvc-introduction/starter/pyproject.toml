@@ -1,0 +1,68 @@
+[project]
+name = "week-04-dvc-introduction"
+version = "0.1.0"
+description = "Week 4 guided lab — DVC data versioning with Silo as the S3 remote"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "scikit-learn>=1.8.0",
+    # UPPER BOUND, deliberate. With `>=2.0.0` alone, Week 1's stale lock
+    # re-resolved to pandas 3.0.5 on a fresh clone while Weeks 2-5 sat at
+    # 2.3.3, and any future `uv lock` would have carried the rest of the
+    # course across a major version one week at a time. The pinned baseline
+    # (LR F1 0.5785 / accuracy 0.7344) is unaffected by 3.x -- measured both
+    # ways on data/diabetes.csv -- so this is skew protection, not a bug fix.
+    # Lift it for every week at once, after re-measuring the pins.
+    "pandas>=2.0.0,<3",
+    "python-dotenv>=1.0.0",
+    # PINNED, not >=. The tracking server is pinned to 3.13.0 in
+    # mlflow.Dockerfile, and mlflow 3.15.0 changed the default
+    # `serialization_format` of log_model from cloudpickle to skops — which
+    # silently renames the logged artifact from model.pkl to model.skops and
+    # invalidates every Silo path documented in Weeks 2-4. Client and server
+    # move together, deliberately.
+    "mlflow==3.13.0",
+    # DVC with the S3 remote extra (resolves dvc-s3>=3.2.1,<4).
+    "dvc[s3]>=3.67.1",
+    # We call joblib and yaml directly, so declare them rather than relying on
+    # scikit-learn / mlflow to keep pulling them in transitively.
+    "joblib>=1.4.0",
+    "pyyaml>=6.0",
+]
+
+# NOTE ON boto3 — deliberately ABSENT.
+#
+# Weeks 2-3 listed `boto3>=1.38.0` here, but nothing on the client side ever
+# imported it: the MLflow client talks only to the tracking server, which
+# proxies artifacts to Silo on its behalf. boto3 is also not a hard MLflow
+# dependency (it appears only under mlflow's extras/databricks/gateway/genai).
+#
+# It is worth removing rather than merely unnecessary. `dvc[s3]` reaches S3 via
+# dvc-s3 -> s3fs -> aiobotocore -> botocore, and aiobotocore caps botocore
+# (<1.43.47 at the time of writing) well below what a current boto3 requires
+# (>=1.43.62). uv still resolves both by backtracking boto3 to an older
+# release, so this is a silent downgrade rather than an error — which is
+# exactly the kind of thing that breaks a lab six months from now.
+#
+# The SERVER still pins boto3, correctly, in mlflow.Dockerfile.
+#
+# matplotlib is dropped too: the ROC/confusion plots are Week 3's lesson, and
+# Week 4's complexity budget belongs to DVC.
+
+[dependency-groups]
+test = [
+    "pytest>=8.0.0",
+]
+
+[tool.pytest.ini_options]
+markers = [
+    "live: requires the Docker Compose stack to be running",
+    "dvc: requires a DVC-initialised repo (Exercise 1)",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/week_04_dvc_introduction"]

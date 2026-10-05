@@ -1,4 +1,4 @@
-"""Tests for structured logging, the sweep, and run search (Exercises 1-4).
+"""Tests for structured logging, the sweep, and run search (Exercises 1-4, 6).
 
 Every test here is marked `live`: it needs the Docker Compose stack. The
 `live_settings` fixture in conftest.py skips them automatically when the stack
@@ -81,9 +81,10 @@ def test_sweep_preserves_locked_baseline(live_settings, sweep_results) -> None:
 
 
 def test_search_and_best_run(live_settings, sweep_results) -> None:
-    """Exercise 4: the filter is a real server-side predicate, not pandas."""
+    """Exercise 4: the query returns the latest sweep's children, ranked."""
     frame = search_sweep_runs(live_settings)
-    assert len(frame) == len(SWEEP_GRID)
+    # Exactly this session's six children: not the parent, not earlier sweeps.
+    assert set(frame["run_id"]) == {result.run_id for result in sweep_results}
 
     # order_by=["metrics.f1 DESC"] means the server sorted this, not us.
     f1_values = list(frame["metrics.f1"])
@@ -91,6 +92,28 @@ def test_search_and_best_run(live_settings, sweep_results) -> None:
 
     assert find_best_run(live_settings) == str(frame.iloc[0]["run_id"])
 
-    # An impossible threshold returns zero rows. If the filter were applied in
-    # pandas after a full dump, this would still return all six.
+    # The metric clause of the filter is really applied.
     assert search_sweep_runs(live_settings, min_f1=0.99).empty
+
+
+@pytest.mark.skip(reason="Exercise 4 — implement search_sweep_runs(), then delete this skip marker.")
+def test_search_ranks_by_any_metric(live_settings, sweep_results) -> None:
+    """Exercise 4: ranking by ROC-AUC picks a different winner than F1."""
+    frame = search_sweep_runs(live_settings, metric="roc_auc")
+    auc_values = list(frame["metrics.roc_auc"])
+    assert auc_values == sorted(auc_values, reverse=True)
+
+    # The measured disagreement the Exercise 4 written answer is about.
+    assert frame.iloc[0]["tags.mlflow.runName"] == "logreg-C=1.0"
+    assert find_best_run(live_settings, metric="f1") != find_best_run(
+        live_settings, metric="roc_auc"
+    )
+
+
+@pytest.mark.skip(reason="Exercise 6, part 3 — record git_dirty, then delete this skip marker.")
+def test_run_records_working_tree_state(live_settings, sweep_results) -> None:
+    """Exercise 6, part 3: every run says whether its git_commit is the truth."""
+    client = MlflowClient(live_settings.mlflow_tracking_uri)
+    for result in sweep_results:
+        tags = client.get_run(result.run_id).data.tags
+        assert tags.get("git_dirty") in {"true", "false"}

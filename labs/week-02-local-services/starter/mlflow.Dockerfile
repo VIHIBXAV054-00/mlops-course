@@ -1,7 +1,7 @@
 # Pinned MLflow tracking server image.
 # Installs MLflow plus the two backend dependencies:
 #   - psycopg2-binary: PostgreSQL driver for the backend store
-#   - boto3: AWS/S3 SDK for the artifact store (MinIO is S3-compatible)
+#   - boto3: AWS/S3 SDK for the artifact store (Silo is S3-compatible)
 #
 # Using a dedicated Dockerfile instead of `pip install` in the compose command
 # is the week's lesson about reproducible runtimes: the image is pinned,

@@ -1,0 +1,12 @@
+# Pipeline hyperparameters. DVC records these values in dvc.lock (Exercise 5).
+# They moved here from .env because DVC can only track values that are in files.
+
+random_seed: 42
+
+prepare:
+  test_size: 0.25
+
+train:
+  family: logreg
+  C: 1.0
+  max_iter: 1000

@@ -1,9 +1,6 @@
 # Environment and secrets — never commit
 .env
 
-# Your written exercise answers
-answers.md
-
 # Python virtual environment and caches
 .venv/
 __pycache__/

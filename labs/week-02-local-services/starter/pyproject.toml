@@ -1,7 +1,7 @@
 [project]
 name = "week-02-local-services"
 version = "0.1.0"
-description = "Week 2 guided lab — local services stack (MLflow + MinIO + Postgres)"
+description = "Week 2 guided lab — local services stack (MLflow + Silo + Postgres)"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [

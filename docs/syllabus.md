@@ -36,9 +36,9 @@ The following table details the theoretical lectures, practical laboratory exerc
 | Week | Lecture Topic | Laboratory Exercise | Assignments |
 | :--- | :--- | :--- | :--- |
 | **Week 1** | **Introduction to MLOps:** Goals, role in ML practice, ML lifecycle vs. DevOps. Concepts of reproducibility, scalability, and automation. Roles and tool overview (Git, Docker, MLflow, CI/CD). | **Dev Environment:** Cross-platform setup (Python, Git, Docker). Repo structure, entry points, `.env` configs, and running/versioning a baseline ML pipeline. | - |
-| **Week 2** | **Reproducible Runtimes:** Developer runs vs. reproducible environments. The role and storage of artifacts and metadata. | **Local Services:** Docker Compose setup separating artifacts (MinIO), metadata (MLflow), and databases (Postgres). "One-command" startup. | — |
+| **Week 2** | **Reproducible Runtimes:** Developer runs vs. reproducible environments. The role and storage of artifacts and metadata. | **Local Services:** Docker Compose setup separating artifacts (Silo), metadata (MLflow), and databases (Postgres). "One-command" startup. | — |
 | **Week 3** | **Experiment Tracking:** MLflow from an engineering perspective. Logging parameters, metrics, plots. Model registry: versions, aliases, promotion, and traceability. | **MLflow Integration:** Running the baseline model, logging metrics/plots, registering models, and promoting to staging. | **Project topic due (W3)** |
-| **Week 4** | **Data Versioning:** Data lifecycle (DVC + MinIO). Dataset snapshots, pipeline stages, and data lineage basics. | **DVC Introduction:** Adding data to DVC with MinIO as the S3-compatible remote storage, `dvc.yaml` pipeline setup, and linking runs to MLflow. | - |
+| **Week 4** | **Data Versioning:** Data lifecycle (DVC + Silo). Dataset snapshots, pipeline stages, and data lineage basics. | **DVC Introduction:** Adding data to DVC with Silo as the S3-compatible remote storage, `dvc.yaml` pipeline setup, and linking runs to MLflow. | - |
 | **Week 5** | **Data Quality:** Data contracts and quality gates. Types of data errors, training-serving skew, and automated validation. Tooling landscape (Pandera, Great Expectations). | **Data Validation:** Introduction to Pandera schemas. Inserting validation into the data prep pipeline. | **HW1 out** |
 | **Week 6** | **Model Quality Gates:** Automated evaluation and decision points. Metric regression, acceptance criteria, slice-based evaluation, and basic Responsible AI/fairness checks. | **Evaluation Pipeline:** Recording baseline metrics, implementing regression tests, slice metric calculation, and "go/no-go" rules. | — |
 | **Week 7** | **CI/CT Principles:** Continuous Training vs. classic CI. Versioning strategies (branching, release tags) and automated testing (unit, data, eval tests). | **CI Workflow:** Creating a GitHub Actions workflow covering linting, testing, model training, and evaluation. | **HW2 out** |
@@ -116,7 +116,7 @@ Use of AI assistants is permitted — this is an industry reality the course emb
 
 **Each assignment is released on the odd (in-person) week whose lab it depends on, and is due three to four weeks later** (the last two windows are shorter, because the semester ends).
 
-*Submissions are due by 23:59 (Budapest) on the Sunday closing the deadline week, via the student's own project repository.*
+*Submissions are due by 23:59 (Budapest) on the Sunday closing the deadline week, via the student's own project repository. Students submit the URL of the graded commit in Moodle. Lab work is also submitted in Moodle; Microsoft Teams is used for announcements and questions only.*
 
 | | Released | Due | Window | What it covers |
 | :--- | :--- | :--- | :--- | :--- |

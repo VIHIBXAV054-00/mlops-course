@@ -184,6 +184,7 @@ Both days should start at the same time, all semester.
 | 11 | 8 |
 
 **This semester:** You need to complete **9 out of 12** labs (—1 lab due to TDK on 18 Nov).
+The Week 11 lab material is still released, and you can submit it in Moodle, but it does not count.
 
 **Missed or failed labs cannot be made up.**
 
@@ -227,10 +228,10 @@ Discourage images, text and anything needing a GPU.
 
 Three to four weeks each.
 
-Deadlines are **Sunday 23:59**, via your project repository.
+Deadlines are **Sunday 23:59** (Budapest). Submit in Moodle.
 
 <!--
-Confirm the deadline day with the group — Sunday night is the default but some cohorts prefer Friday so the weekend is genuinely free.
+Sunday 23:59 is the deadline for every homework; Moodle holds the dates.
 
 Late policy: state your own.
 The official requirements allow exactly one homework to be made up in the retake week; anything softer than that during the semester is your call and should be announced now.
@@ -426,11 +427,12 @@ index, an old uv, and a clone inside OneDrive/iCloud.
 | Datasets and the topic catalogue | `datasets/` |
 | Reading map — books, courses, papers, per week | `docs/resources.md` |
 | ZH revision guide | `docs/exam-revision.md` |
+| Lab and homework submissions, deadlines, grades | **Moodle** |
+| Announcements and questions | Microsoft Teams |
 
 <!--
-Fill in the actual channels before the first class: repository URL, the slides site, and
-where announcements go (Teams / Moodle / Neptun). Say which one is authoritative for
-deadlines — one channel, not three.
+Fill in the repository URL and the slides site before the first class. Moodle is the one
+place for submissions and deadlines; Teams is for announcements and questions only.
 -->
 
 ---

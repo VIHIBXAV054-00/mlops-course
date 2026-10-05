@@ -266,7 +266,7 @@ Walk through each plane. The key insight is WHY the split exists — see next sl
 
 **Example software:**
 - Amazon S3, Google Cloud Storage, or Azure Blob Storage
-- MinIO for self-hosted or local development
+- MinIO, or its community fork Silo, for self-hosted or local development
 
 **What questions does it let us answer?**
 - Which model artifact belongs to this run, and can I download it?
@@ -277,15 +277,22 @@ Walk through each plane. The key insight is WHY the split exists — see next sl
 
 ---
 
-# Object store in our stack: MinIO
+# Object store in our stack: Silo
 
-**MinIO** is an S3-compatible object store you run locally.
+**Silo** is an S3-compatible object store you run locally. It is a community fork of MinIO,
+whose free images left Docker Hub in September 2026[^1][].
 
 Its API is identical to AWS S3.
 
 - Objects live in **buckets** (like top-level folders)
 - Each object has a **key** (path) and binary content
 - No SQL, no joins — just `PUT`, `GET`, `LIST`
+
+[^1]: Removal dated 11–14 September 2026 in "MinIO Vanished From Docker Hub", bex.co, 25 September 2026, https://bex.co/blog/2026/09/25/minio-docker-hub-removal-quay-repoint; `minio/minio` returned 404 when checked on 3 October 2026. Fork: PGSTY Silo, https://github.com/pgsty/silo.
+
+<!--
+The course used MinIO until its images were removed from Docker Hub. Silo is a drop-in fork, so the lab still uses the MINIO_* variables inside the container.
+-->
 
 ---
 
@@ -297,7 +304,7 @@ Every ML run produces three kinds of outputs. Each needs a different storage bac
 graph LR
     RUN["⚙️ A Training Run"] --> CODE["💻 Code\n(Version Control — Git)"]
     RUN --> META["📊 Metadata\n(Relational DB — Postgres)"]
-    RUN --> ART["📦 Artifacts\n(Object Store — MinIO)"]
+    RUN --> ART["📦 Artifacts\n(Object Store — Silo)"]
 
     CODE -->|"text, diffable, low-volume"| GIT["📝 git push"]
     META -->|"params, metrics, tags, run lineage"| PG["🗄️ postgres://…"]
@@ -312,7 +319,7 @@ Walk through each plane. The key insight is WHY the split exists — see next sl
 
 # Metadata vs. artifacts
 
-| | Metadata (Postgres) | Artifacts (MinIO) |
+| | Metadata (Postgres) | Artifacts (Silo) |
 | --- | --- | --- |
 | **Content** | accuracy=0.578, seed=42, run_id=abc | `model.pkl`, `confusion_matrix.png` |
 | **Volume** | Small — kBs per run | Large — MBs/GBs per run |
@@ -356,7 +363,7 @@ graph TD
     subgraph "Docker Compose network"
         MLF["mlflow:5000\n(tracking server)"]
         PG["postgres:5432\n(backend store)"]
-        MINIO["minio:9000\n(artifact store)"]
+        MINIO["s3:9000\n(artifact store)"]
     end
 
     CLI -->|"HTTP REST\nMLFLOW_TRACKING_URI=http://127.0.0.1:5500"| MLF
@@ -366,7 +373,7 @@ graph TD
 
 <!--
 The key teaching point: the client only needs the tracking URI.
-The server holds MinIO credentials; artifacts are proxied through the server.
+The server holds Silo credentials; artifacts are proxied through the server.
 -->
 
 ---
@@ -382,7 +389,7 @@ MLFLOW_TRACKING_URI=http://127.0.0.1:5500
 It does **not** need:
 - `MLFLOW_S3_ENDPOINT_URL`
 - `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`
-- Any knowledge that MinIO exists
+- Any knowledge that Silo exists
 
 The server holds those credentials and proxies all artifact reads/writes.
 
@@ -395,7 +402,7 @@ sequenceDiagram
     participant P as Pipeline (client)
     participant S as MLflow server
     participant DB as Postgres
-    participant OBJ as MinIO
+    participant OBJ as Silo
 
     P->>S: POST /api/2.0/mlflow/runs/create
     S->>DB: INSERT INTO runs (run_id, …)
@@ -413,7 +420,7 @@ sequenceDiagram
 
 <!--
 Walk through this slowly. Each arrow is a real HTTP call or DB write.
-The student can verify steps 2-3 in Postgres (Exercise 4) and step 4 in the MinIO console.
+The student can verify steps 2-3 in Postgres (Exercise 4) and step 4 in the Silo console.
 -->
 
 ---
@@ -430,8 +437,8 @@ docker compose up -d --wait
 
 This week's stack has four services:
 1. **postgres** — metadata store
-2. **minio** — artifact store
-3. **minio-create-bucket** — one-shot job that creates the bucket on first run
+2. **s3** — artifact store (Silo)
+3. **s3-create-bucket** — one-shot job that creates the bucket on first run
 4. **mlflow** — tracking server
 
 <!--
@@ -446,7 +453,7 @@ Keep focus on WHY each service exists, not the YAML syntax yet.
 
 ```yaml
 image: postgres:16.3       # pinned — everyone gets the same binary
-image: minio/minio:latest  # NOT pinned — avoid; "latest" changes
+image: pgsty/silo:latest   # NOT pinned — avoid; "latest" changes
 ```
 
 The pinned Docker image is an **immutable, versioned artifact**.
@@ -478,7 +485,7 @@ Wipe with `docker compose down -v`.
 depends_on:
   postgres:
     condition: service_healthy
-  minio-create-bucket:
+  s3-create-bucket:
     condition: service_completed_successfully
 ```
 
@@ -494,13 +501,13 @@ Inside that network, **service names are DNS hostnames**:
 
 ```
 postgres://user:pass@postgres:5432/mlflowdb     ← "postgres" resolves inside compose
-http://minio:9000                                 ← "minio" resolves inside compose
+http://s3:9000                                    ← "s3" resolves inside compose
 ```
 
 From your host machine:
 ```
 http://127.0.0.1:5500     ← MLflow UI (mapped from mlflow:5000)
-http://127.0.0.1:5511     ← MinIO console (mapped from minio:9001)
+http://127.0.0.1:5511     ← Silo console (mapped from s3:9001)
 ```
 
 This separation between internal DNS names and host port mappings is fundamental to how compose stacks work.
@@ -537,16 +544,16 @@ State the deviation explicitly as required by AGENTS.md and TASK_W2.md.
 graph LR
     subgraph "Host ports"
         H5000["localhost:5500\n(MLflow UI)"]
-        H9000["localhost:5510\n(MinIO API)"]
-        H9001["localhost:5511\n(MinIO console)"]
+        H9000["localhost:5510\n(Silo API)"]
+        H9001["localhost:5511\n(Silo console)"]
         H5432["localhost:5532\n(Postgres)"]
     end
 
     subgraph "Compose network (mlflow-net)"
         MLF["mlflow"]
         PG["postgres:16.3"]
-        MINIO["minio/minio:RELEASE..."]
-        BUCKET["minio/mc\n(one-shot bucket create)"]
+        MINIO["pgsty/silo:RELEASE..."]
+        BUCKET["pgsty/mc\n(one-shot bucket create)"]
     end
 
     H5000 <--> MLF
@@ -572,10 +579,10 @@ open during the lab.
 
 | # | Exercise | What you prove |
 | --- | --- | --- |
-| 1 | Stand up storage (MinIO) | MinIO service and bucket-bootstrap job work; bucket visible in console |
-| 2 | Wire the tracking server | MLflow uses Postgres for metadata, MinIO for artifacts; UI loads |
+| 1 | Stand up storage (Silo) | Silo service and bucket-bootstrap job work; bucket visible in console |
+| 2 | Wire the tracking server | MLflow uses Postgres for metadata, Silo for artifacts; UI loads |
 | 3 | Log a tracked run | Pipeline run appears in UI with params + metrics + model artifact |
-| 4 | Verify the storage split | Model file is in MinIO bucket; metadata rows are in Postgres |
+| 4 | Verify the storage split | Model file is in Silo bucket; metadata rows are in Postgres |
 | 5 | Reproducibility check | Re-run with same seed → identical metrics, now centrally recorded |
 
 > Each exercise builds on the previous one.
@@ -585,8 +592,8 @@ open during the lab.
 # Key takeaways
 
 - A developer run lives on one laptop and is unreproducible. A reproducible run has its metadata in a DB and its artifacts in an object store, both addressable and queryable.
-- **Code → Git. Metadata → Postgres. Artifacts → MinIO.** The split is driven by access pattern and volume.
-- MLflow tracking server is the single endpoint that writes metadata to Postgres and proxies artifacts to MinIO. The client only needs the tracking URI.
+- **Code → Git. Metadata → Postgres. Artifacts → Silo.** The split is driven by access pattern and volume.
+- MLflow tracking server is the single endpoint that writes metadata to Postgres and proxies artifacts to Silo. The client only needs the tracking URI.
 - Docker Compose gives you ordered startup (healthchecks), a shared network (service DNS), and one command to bring everything up.
 - Pinning Docker image versions is the same discipline as pinning Python dependencies — reproducible runtime management, just at the OS/service layer.
 
