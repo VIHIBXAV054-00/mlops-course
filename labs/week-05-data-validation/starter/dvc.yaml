@@ -1,0 +1,60 @@
+# Week 5: the training pipeline, declared as a graph.
+#
+# Each stage names what it runs (cmd), what it reads (deps, including source
+# files), which params it uses, and what it writes (outs).
+# See the graph: make dag   Run it: make repro
+# Reference: https://doc.dvc.org/user-guide/project-structure/dvcyaml-files
+
+stages:
+
+  # TODO(student) Exercise 4: add a stage `validate`, run as
+  # `uv run python src/main.py validate`. Its deps are the data file and the three
+  # modules whose code it runs: pipeline.py, schemas.py and validation.py. Its out
+  # is the report; keep it in Git (`cache: false`). Then make `prepare` wait for it.
+
+  prepare:
+    cmd: uv run python src/main.py prepare
+    deps:
+      - data/measurements.csv
+      - src/week_05_data_validation/pipeline.py
+      - src/week_05_data_validation/data.py
+    params:
+      - random_seed
+      - prepare.test_size
+    outs:
+      - data/processed/train.csv
+      - data/processed/test.csv
+
+  train:
+    cmd: uv run python src/main.py train
+    deps:
+      - data/processed/train.csv
+      - src/week_05_data_validation/pipeline.py
+      - src/week_05_data_validation/model.py
+      - src/week_05_data_validation/schemas.py
+      - src/week_05_data_validation/validation.py
+      - src/week_05_data_validation/dvc_link.py
+    params:
+      - random_seed
+      - train.family
+      - train.C
+      - train.max_iter
+      - train.impute_strategy
+    outs:
+      - models/model.pkl
+      - models/mlflow_run_id.json:
+          cache: false
+
+  evaluate:
+    cmd: uv run python src/main.py evaluate
+    deps:
+      - models/model.pkl
+      - models/mlflow_run_id.json
+      - data/processed/test.csv
+      - src/week_05_data_validation/pipeline.py
+      - src/week_05_data_validation/model.py
+      - src/week_05_data_validation/schemas.py
+      - src/week_05_data_validation/validation.py
+    metrics:
+      - metrics/metrics.json:
+          cache: false

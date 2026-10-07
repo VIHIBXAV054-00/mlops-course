@@ -1,32 +1,28 @@
-# Week 2 Lab — Local Services Stack
+# Week 2 Lab — Local Services Stack (starter)
 #
-# Four services:
-#   postgres           — relational backend store (metadata: params, metrics, tags)
-#   s3                 — object store (artifacts: model files, plots)
-#   s3-create-bucket   — one-shot job that creates the artifacts bucket
-#   mlflow             — tracking server (proxies between client, Postgres, and Silo)
+#   postgres             relational backend store — params, metrics, tags
+#   s3                   object store — model files and plots
+#   s3-create-bucket     one-shot job that creates the artifacts bucket
+#   mlflow               tracking server, between the client and the two stores
 #
-# Canonical tutorial: https://mlflow.org/docs/latest/ml/tracking/tutorials/remote-server/
-# Required deviation: mlflow server is containerized (fourth compose service) rather than
-#   run on the host, so the whole stack starts with a single "docker compose up -d --wait".
+# Tutorial: https://mlflow.org/docs/latest/ml/tracking/tutorials/remote-server/
+# Deviation: the tracking server is containerized rather than run on the host,
+# so the whole stack starts with one command.
 #
-# Usage:
 #   cp .env.example .env
-#   docker compose up -d --wait    # bring all four services up and wait for healthchecks
-#   docker compose down            # stop (data persists in named volumes)
-#   docker compose down -v         # stop AND wipe volumes (fresh start)
+#   docker compose up -d --wait    # start, and wait for healthchecks
+#   docker compose down            # stop; data persists in the named volumes
+#   docker compose down -v         # stop and wipe the volumes
 
-# Explicit project name. Compose otherwise defaults the project name to the base
-# DIRECTORY name — which is "starter"/"solution" for EVERY lab in this course, so
-# without this every week would silently share one project, one set of containers,
-# and one set of volumes.
+# A per-lab project name. Without it Compose uses the directory name
+# ("starter"), which every lab in this course shares — and so would their
+# containers and volumes.
 name: week02-local-services-starter
 
 services:
 
   # ── Postgres: relational backend store ─────────────────────────────────────
-  # Stores experiment names, run IDs, parameters, metrics, and tags.
-  # Image pinned to 16.3 for reproducibility.
+  # Experiment names, run IDs, params, metrics, tags. Image pinned.
   postgres:
     image: postgres:16.3
     environment:
@@ -47,100 +43,92 @@ services:
   # ── Silo: S3-compatible object store ───────────────────────────────────────
   # Silo is a community fork of MinIO (MinIO's own images left Docker Hub in
   # September 2026). It keeps MinIO's MINIO_* variables, `mc` client and console.
-  # Exercise 1:
-  # Fill in the Silo service definition below.
-  # Requirements:
-  #   - Use image: pgsty/silo:RELEASE.2026-09-16T00-00-00Z  (pinned version)
-  #   - Set MINIO_ROOT_USER and MINIO_ROOT_PASSWORD from S3_ACCESS_KEY and
-  #     S3_SECRET_KEY in .env (Silo keeps MinIO's variable names)
-  #   - command: server /data --console-address ":9001"
-  #   - Expose port 9000 (S3 API) and 9001 (web console) to the host
-  #     (host ports are remapped: S3_API_PORT=5510 → 9000, S3_CONSOLE_PORT=5511 → 9001)
-  #   - Mount a named volume "s3-data" to /data
-  #   - Add a healthcheck that uses:
-  #       test: ["CMD-SHELL", "mc ready local || exit 1"]
-  #       interval: 5s, timeout: 5s, retries: 10
-  #     (mc is bundled with the pgsty/silo image)
-  # After filling this in, run:
-  #   docker compose up -d s3
-  # Then open http://localhost:5511 and log in with your .env credentials.
+  #
+  # TODO(student) — Exercise 1: fill in the empty keys of the `s3` service.
+  # The ports, volume and timings are done; the postgres service above is a
+  # complete example of the same shape.
+  #   - image: Silo, pinned to the release the README names.
+  #   - environment: the root user and password come from S3_ACCESS_KEY and
+  #     S3_SECRET_KEY in .env. Look at how postgres reads its .env values.
+  #   - command: start the server with its data in /data and the web console
+  #     on the container port 9001.
+  #   - healthcheck test: same form as the postgres healthcheck. The image
+  #     ships the `mc` client, with an alias named `local` that points at this
+  #     server. Find the mc command that reports whether a server is ready.
+  # Container guide: https://silo.pigsty.io/operations/deployments/baremetal-deploy-minio-as-a-container/
+  # mc commands: https://silo.pigsty.io/reference/minio-mc/
   s3:
-    image: pgsty/silo:RELEASE.2026-09-16T00-00-00Z
+    image:
     environment:
-      MINIO_ROOT_USER: ${S3_ACCESS_KEY}
-      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY}
-    command: server /data --console-address ":9001"
+      MINIO_ROOT_USER:
+      MINIO_ROOT_PASSWORD:
+    command:
     ports:
       - "${S3_API_PORT:-5510}:9000"
       - "${S3_CONSOLE_PORT:-5511}:9001"
     volumes:
       - s3-data:/data
     healthcheck:
-      test: ["CMD-SHELL", "mc ready local || exit 1"]
+      test:
       interval: 5s
       timeout: 5s
       retries: 10
     restart: unless-stopped
 
   # ── s3-create-bucket: one-shot bucket initialisation ───────────────────────
-  # Exercise 1 (continued):
-  # Fill in the bucket-creation job below.
-  # Requirements:
-  #   - Use image: pgsty/mc:RELEASE.2026-09-16T00-00-00Z  (pinned version)
-  #   - depends_on: s3: condition: service_healthy
-  #   - The entrypoint should run:
-  #       mc alias set s3 http://s3:9000 <user> <password> &&
-  #       mc mb --ignore-existing s3/<bucket>
-  #     Use shell variable substitution or reference env vars directly.
-  # After the bucket is created, confirm it appears in the Silo console.
+  # TODO(student) — Exercise 1: write the job that creates MLflow's bucket.
+  #   - image: the `pgsty/mc` client, pinned to the same release as Silo.
+  #   - entrypoint: two mc commands. The first gives the server an alias, with
+  #     the keys from .env. Inside the compose network, a service's name is its
+  #     hostname, and Silo's S3 API listens on 9000. The second creates the
+  #     bucket named by MLFLOW_BUCKET.
+  #   - The job runs on every `docker compose up`, so the second command must
+  #     succeed when the bucket already exists. The mc reference has a flag
+  #     for that.
+  # mc commands: https://silo.pigsty.io/reference/minio-mc/
   s3-create-bucket:
-    image: pgsty/mc:RELEASE.2026-09-16T00-00-00Z
+    image:
     depends_on:
       s3:
         condition: service_healthy
     entrypoint: >
       bash -c "
-        mc alias set s3 http://s3:9000 ${S3_ACCESS_KEY}${S3_SECRET_KEY} &&
-        mc mb --ignore-existing s3/${MLFLOW_BUCKET}
+        echo 'TODO(student): create the bucket'
       "
 
   # ── MLflow tracking server ──────────────────────────────────────────────────
-  # Exercise 2: configure the MLflow tracking server.
-  # The server needs to know:
-  #   --backend-store-uri: where to write metadata (Postgres)
-  #   --artifacts-destination: where to store artifacts (Silo bucket)
-  #   --host 0.0.0.0 --port 5000
-  #   --allowed-hosts: required by MLflow 3.5.0+ security middleware when host=0.0.0.0
-  # And these env vars (Silo S3 credentials for the server):
-  #   MLFLOW_S3_ENDPOINT_URL=http://s3:9000
-  #   AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY (= Silo root creds)
-  #
-  # Notes:
-  #   - "postgres" and "s3" are the service names above — they are DNS names
-  #     inside the compose network. Use them as hostnames in the URIs.
-  #   - The healthcheck uses the /health endpoint (returns 200 when ready).
-  #   - depends_on: postgres healthy + s3-create-bucket completed.
+  # TODO(student) — Exercise 2: fill in the empty values of the mlflow service.
+  #   - environment: the server, not your Python client, stores the artifacts in
+  #     Silo. Give it Silo's S3 endpoint inside the compose network, and the
+  #     Silo keys from .env under the AWS_* names the S3 library reads.
+  #   - --backend-store-uri: a PostgreSQL connection URI built from the
+  #     POSTGRES_* values in .env. Use the service name as the hostname, and
+  #     the container port, not the host port.
+  #   - --artifacts-destination: the bucket from Exercise 1, as an s3:// URI.
+  #   - --allowed-hosts: the names the server is reached by: localhost,
+  #     127.0.0.1 and mlflow. The check compares the whole Host header, port
+  #     included, so allow each name with any port as well.
+  # Tutorial: https://mlflow.org/docs/latest/ml/tracking/tutorials/remote-server/
+  # Allowed hosts: https://mlflow.org/docs/latest/self-hosting/security/network/
   mlflow:
     build:
       context: .
       dockerfile: mlflow.Dockerfile
     environment:
-      MLFLOW_S3_ENDPOINT_URL: http://s3:9000
-      AWS_ACCESS_KEY_ID: ${S3_ACCESS_KEY}
-      AWS_SECRET_ACCESS_KEY: ${S3_SECRET_KEY}
+      MLFLOW_S3_ENDPOINT_URL:
+      AWS_ACCESS_KEY_ID:
+      AWS_SECRET_ACCESS_KEY:
     command:
       - --backend-store-uri
-      - postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      -
       - --artifacts-destination
-      - s3://${MLFLOW_BUCKET}
+      -
       - --host
       - "0.0.0.0"
       - --port
       - "5000"
       - --allowed-hosts
-      # NOTE: MLflow's host check does NOT strip the port, so you must allow the
-      # host:port form. The "host:*" wildcard accepts any port.
-      - "localhost,127.0.0.1,mlflow,localhost:*,127.0.0.1:*,mlflow:*"
+      -
     ports:
       - "${MLFLOW_PORT:-5500}:5000"
     depends_on:

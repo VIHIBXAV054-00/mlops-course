@@ -1,0 +1,18 @@
+{
+  "name": "bme-vik-mlops",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Slidev lecture decks for 'Lifecycle of Artificial Intelligence Systems' (BME VIK).",
+  "license": "SEE LICENSE IN LICENSE",
+  "packageManager": "pnpm@12.4.1",
+  "engines": {
+    "node": ">=22"
+  },
+  "devDependencies": {
+    "@slidev/cli": "52.19.1",
+    "@slidev/theme-default": "0.25.0",
+    "mermaid": "12.0.0",
+    "playwright-chromium": "1.63.0",
+    "vite": "8.3.0"
+  }
+}

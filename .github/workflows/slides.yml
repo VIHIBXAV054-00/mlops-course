@@ -9,7 +9,8 @@
 # (scripts/templates/slides.yml) on every weekly release, so edits made here are
 # overwritten.
 #
-# Verify action and @slidev/cli versions before each term.
+# Verify the action versions before each term; Slidev's version comes from the
+# instructor repo's package.json.
 name: Build & deploy slides
 
 on:
@@ -32,27 +33,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v4
+        # No version here: it is read from "packageManager" in package.json.
       - uses: actions/setup-node@v7
         with:
           node-version: 22          # current Slidev requires Node >= 22
-      - name: Install Slidev + default theme
-        # Installed explicitly so the build is non-interactive: in CI Slidev cannot
-        # prompt to auto-install a missing theme ("theme not found").
-        #
-        # VERSIONS ARE PINNED, AND MUST MATCH devDependencies IN THE INSTRUCTOR REPO'S
-        # ROOT package.json. This repo has no pnpm workspace -- the release ships only
-        # lectures/ -- so the pins cannot be inherited and are duplicated here on
-        # purpose. If they drift, the public site renders on a different Slidev than the
-        # one every deck was written and previewed against, which is exactly the class
-        # of bug students report and the instructor cannot reproduce. Bump both files
-        # together, once a term.
-        #
-        # mermaid is listed explicitly rather than relied on as a transitive dependency
-        # of @slidev/cli: nearly every deck contains ```mermaid diagrams, so a Slidev
-        # release that stopped vendoring it would break the published site silently.
-        run: |
-          npm init -y >/dev/null 2>&1
-          npm install -D @slidev/cli@52.19.1 @slidev/theme-default@0.25.0 mermaid@12.0.0
+          cache: pnpm
+      - name: Install the pinned slide toolchain
+        # package.json and pnpm-lock.yaml are copied from the instructor repo on
+        # every release, so the site builds with the same Slidev, Vite and CSS
+        # minifier as the instructor's previews. --frozen-lockfile fails on a
+        # stale lock instead of picking new versions.
+        run: pnpm install --frozen-lockfile
+        env:
+          # Chromium is only needed for PDF export, which this job does not do.
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
       - name: Build every lecture deck
         run: |
           set -e

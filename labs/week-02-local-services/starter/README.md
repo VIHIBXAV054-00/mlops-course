@@ -9,196 +9,277 @@ description:
 
 # Week 2 Lab: Local Services Stack
 
-In Week 1 your run lived in the terminal history and your model lived on one disk.
-This week you stand up the **local services stack** that makes runs durable and reproducible:
+In Week 1 your run lived in the terminal history, and your model on one disk. This week you
+start the services that record every run in one place:
 
-- **Postgres** stores run metadata (params, metrics, tags)
-- **Silo** stores artifacts (the serialized model file)
-- **MLflow** is the tracking server that your pipeline talks to
-- **Docker Compose** brings all four up with one command
+- **Postgres** stores run metadata (params, metrics, tags).
+- **Silo** stores artifacts (the model file).
+- **MLflow** is the tracking server your pipeline talks to.
+- **Docker Compose** starts all of them with one command.
 
-After this lab, re-running the pipeline twice gives you two centrally-recorded runs —
-same seed, identical metrics, both queryable by anyone with the tracking URI.
+After this lab, running the pipeline twice gives two recorded runs with the same seed and
+the same metrics. Anyone with the tracking URI can find them.
 
-This lab follows official tutorials with minimal changes — keep them open as references:
+## Based on
 
 - **MLflow remote tracking server:** https://mlflow.org/docs/latest/ml/tracking/tutorials/remote-server/
 - **MLflow tracking server architecture:** https://mlflow.org/docs/latest/self-hosting/architecture/tracking-server/
 - **Silo container:** https://silo.pigsty.io/operations/deployments/baremetal-deploy-minio-as-a-container/
 - **Docker Compose:** https://docs.docker.com/compose/
 
-**Required deviation from the official tutorial:** The official MLflow tutorial (Step 3) runs
-`mlflow server` on the host. This lab containerizes it as a fourth compose service so the entire
-stack starts with a single `docker compose up -d --wait` — no separate terminal, no separate
-environment, no manual credential export.
+**Deviations from the tutorial:**
 
-**Second deviation:** the MLflow tutorial uses MinIO as the object store. MinIO stopped
-publishing free images and removed them from Docker Hub in September 2026, so this lab uses
-**Silo**, a community fork of MinIO. It keeps MinIO's environment variables, `mc` client
-and web console, so the tutorial's MinIO steps still apply.
+1. **The tracking server runs in a container**, as a fourth Compose service. The MLflow
+   tutorial (Step 3) runs `mlflow server` on the host. In a container, the whole stack
+   starts with one command, `docker compose up -d --wait`.
+2. **Silo instead of MinIO.** MinIO stopped publishing free images and removed them from
+   Docker Hub in September 2026. Silo is a community fork of MinIO. It keeps MinIO's
+   environment variables, `mc` client and web console, so the tutorial's MinIO steps still
+   apply.
 
 ## Prerequisites
 
-- Docker Desktop (macOS/Windows) or Docker Engine + Compose plugin (Linux) — version 24+
-- At least 16 GB RAM (all four containers fit easily, but leave headroom)
-- `uv` — https://docs.astral.sh/uv/getting-started/installation/
-- Ports **5500, 5510, 5511, 5532** free on your host (host-mapped 55xx block; see `.env.example`)
+- Docker Desktop (macOS, Windows) or Docker Engine with the Compose plugin (Linux), version 24+
+- At least 16 GB RAM
+- `uv`: https://docs.astral.sh/uv/getting-started/installation/
+- Ports **5500, 5510, 5511, 5532** free on your computer
 
 ---
 
-## Step 1 — Install Python dependencies
+## Step 1: dependencies
 
-From this directory (`labs/week-02-local-services/starter/`):
+In this folder (`labs/week-02-local-services/starter/`), run:
 
 ```bash
 uv sync --all-groups
 ```
 
-This creates `.venv/` and installs everything pinned by `uv.lock`. You can run tests immediately — no running stack required.
+It installs the versions pinned in `uv.lock`.
 
-## Step 2 — Create your local configuration
+## Step 2: configuration
 
 ```bash
 cp .env.example .env
 ```
 
-Review the values. The defaults work out of the box. **Never commit `.env`** — it is git-ignored.
+The defaults work. Never commit `.env`; it is git-ignored.
 
-## Step 3 — Run the tests (no stack required)
+## Step 3: tests before you start
 
 ```bash
-uv run pytest tests/ -v
+uv run pytest tests/
 ```
 
-Expected: **10 passed, 1 skipped**. The skipped test is Exercise 3's MLflow-integration test,
-which auto-skips until the tracking server is reachable.
+Expected: **10 passed, 1 skipped**.
 
 ---
 
 ## Exercises
 
-Complete these exercises in order — each builds on the previous.
+Do them in order. Exercises 4 and 5 ask for a **written answer**: write it in `answers.md`
+in this folder and **commit it with your code**.
 
-Exercises 4 and 5 ask for a **written answer**. Put those in a file called `answers.md` in this
-directory, and **commit it with your code**. It is part of your submission, and it is read
-alongside your solution.
+| Block | Exercises | Time |
+| --- | --- | --- |
+| Setup (Steps 1–3) | — | 10 min |
+| The object store | 1 | 15 min |
+| The tracking server | 2 | 15 min |
+| A tracked run | 3 | 15 min |
+| Where each piece is stored | 4 | 10 min |
+| Reproducibility | 5 | 10 min |
+| Finish: commit and submit | — | 5 min |
 
-### Exercise 1 — Stand up storage (Silo)
+### Exercise 1: stand up the object store (≈ 15 min)
 
-Open `compose.yaml` and find the `s3` and `s3-create-bucket` service blocks marked `TODO(student)`.
+The object store keeps the files a run produces, such as the model. You define the Silo
+service in Compose, and a one-shot job that creates the bucket MLflow writes to. On a new
+team, bringing up the team's local stack from its `compose.yaml` is often the first task.
 
-Fill in:
-- `s3`: the image (`pgsty/silo:RELEASE.2026-09-16T00-00-00Z`), command, environment variables, volume mount, and healthcheck
-- `s3-create-bucket`: the image (`pgsty/mc:RELEASE.2026-09-16T00-00-00Z`), and the entrypoint that creates the bucket
+**Do:**
 
+1. In `compose.yaml`, fill in the empty keys of the `s3` service: the image
+   `pgsty/silo:RELEASE.2026-09-16T00-00-00Z`, the environment variables, the command and
+   the healthcheck test. The `TODO(student)` comment above it has a hint for each.
+2. In the same file, fill in the `s3-create-bucket` job: the image
+   `pgsty/mc:RELEASE.2026-09-16T00-00-00Z`, and the entrypoint that creates the bucket.
+3. Start only the storage services:
+   ```bash
+   docker compose up -d s3 s3-create-bucket
+   ```
 
-Then start only the storage services:
+**Check:**
 
-```bash
-docker compose up -d s3 s3-create-bucket
-docker compose ps  # both should show "healthy" / "exited 0"
-```
+- Run `docker compose ps -a`.
+  Expected output: `s3` is `healthy`, and `s3-create-bucket` has `Exited (0)`.
+- Open http://localhost:5511 and log in with `S3_ACCESS_KEY` and `S3_SECRET_KEY` from your
+  `.env`. Expected: the bucket `mlflow-artifacts` exists.
 
-Open **http://localhost:5511** and log in with `S3_ACCESS_KEY` / `S3_SECRET_KEY` from your `.env`.
+**Stuck?**
 
-Confirm: the bucket named `mlflow-artifacts` exists.
+- Lecture: "Object store" and "Object store in our stack: Silo"
+- Notes: "The three storage planes of a tracked run" and "Docker Compose as one-command,
+  reproducible local infrastructure"
+- Silo docs: the container guide (link above) and the `mc` commands:
+  https://silo.pigsty.io/reference/minio-mc/
+- If the bucket is missing, read the job's log: `docker compose logs s3-create-bucket`.
 
-### Exercise 2 — Wire the metadata and tracking server
+### Exercise 2: wire the tracking server (≈ 15 min)
 
-Open `compose.yaml` and find the `mlflow` service block. Fill in the `TODO(student)` placeholders:
+MLflow's tracking server sits between your pipeline and the two stores. It writes metadata
+to Postgres and model files to Silo, so your code needs only one address. You tell the
+server how to reach both stores. Inside the Compose network, a service's name is its
+hostname: the server reaches Postgres at `postgres`, not at `localhost`.
 
-- `MLFLOW_S3_ENDPOINT_URL` — the Silo endpoint inside the compose network
-- `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` — Silo root credentials
-- `--backend-store-uri` — the Postgres connection string using the compose DNS name `postgres`
-- `--artifacts-destination` — the Silo bucket (`s3://mlflow-artifacts`)
-- `--allowed-hosts` — required by MLflow 3.5.0+ security middleware. Note: the host check does **not** strip the port, so include the `host:port` form (e.g. the `localhost:*,127.0.0.1:*` wildcards) or the browser will get an "Invalid Host header" error at `localhost:5500`
+**Do:**
 
-Bring up the full stack:
+1. In `compose.yaml`, fill in the empty values of the `mlflow` service. The `TODO(student)`
+   comment above it has a hint for each:
+   - `MLFLOW_S3_ENDPOINT_URL`: Silo's address inside the Compose network
+   - `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`: the Silo keys
+   - `--backend-store-uri`: the Postgres address, with the service name `postgres` as the
+     host
+   - `--artifacts-destination`: the bucket from Exercise 1, as an `s3://` URI
+   - `--allowed-hosts`: the names the server is reached by. The check compares the port
+     too, so a list without ports gives an "Invalid Host header" error at `localhost:5500`.
+2. Start the full stack:
+   ```bash
+   docker compose up -d --wait
+   ```
+   `--wait` returns when every healthcheck passes. The first start pulls the images, so it
+   takes longer.
 
-```bash
-docker compose up -d --wait
-```
+**Check:**
 
-The `--wait` flag blocks until all service healthchecks pass. This takes about 20-30 seconds on first run (image pulls).
+- Run `docker compose ps`.
+  Expected output: `postgres`, `s3` and `mlflow` are `healthy`.
+- Open http://localhost:5500. Expected: the MLflow UI, with no runs yet.
 
-Open **http://localhost:5500** — you should see the MLflow UI with no experiments yet.
+**Stuck?**
 
-**Key concept:** Notice that `--backend-store-uri` points to `postgres` (a hostname), not `localhost`. Inside the compose network, service names are DNS names. The MLflow server and Postgres talk to each other inside the network; the host port `5432` is mapped for your inspection.
+- Lecture: "MLflow tracking server architecture" and "Docker Compose: the compose network"
+- Notes: "The tracking server sits in front"
+- MLflow docs: the remote tracking server tutorial (link above), and allowed hosts:
+  https://mlflow.org/docs/latest/self-hosting/security/network/
+- If `docker compose up --wait` never returns, read `docker compose logs mlflow` and check
+  the `--backend-store-uri`.
 
-### Exercise 3 — Log a tracked run from the pipeline
+### Exercise 3: log a tracked run (≈ 15 min)
 
-Open `src/week_02_local_services/cli.py`. Find the `TODO(student)` blocks and replace the placeholder code with real MLflow calls:
+The stack runs, but the pipeline does not use it yet. You add MLflow calls to the pipeline,
+so every run is recorded with its parameters, its metrics and the model file.
 
-1. Set the tracking URI and experiment from `settings`
-2. Wrap the training block in `mlflow.start_run()`
-3. Log `random_seed`, `test_size`, and `max_iter` as params
-4. Log each metric from `evaluate_model` with `mlflow.log_metric`
-5. Log the fitted pipeline with `mlflow.sklearn.log_model(model, name="model")`
+**Do:**
 
-Run the pipeline:
+1. In `src/week_02_local_services/cli.py`, connect to the tracking server and select the
+   experiment from `settings`. The first `TODO(student)` comment has the details.
+2. In the same function, put the training and evaluation inside an MLflow run. In the run,
+   log the params `random_seed`, `test_size` and `max_iter`, each metric, and the fitted
+   pipeline as a model named `model`. The second `TODO(student)` comment has the details.
+3. Run the pipeline:
+   ```bash
+   uv run python src/main.py
+   ```
 
-```bash
-uv run python src/main.py
-```
+**Check:**
 
-Open the MLflow UI at **http://localhost:5500**, click into the `diabetes-week2` experiment, and confirm:
-- The run appears with params (`random_seed=42`, `test_size=0.25`, `max_iter=1000`)
-- Metrics are recorded (`accuracy`, `precision`, `recall`, `f1`)
-- An artifact named `model` is listed under the run
+- Open http://localhost:5500 and the `diabetes-week2` experiment.
+  Expected: one run with the params `random_seed=42`, `test_size=0.25` and
+  `max_iter=1000`, the metrics `accuracy`, `precision`, `recall` and `f1`, and an artifact
+  named `model`.
+- Delete the Exercise 3 skip marker in `tests/test_smoke.py`.
+- Run `uv run pytest tests/`.
+  Expected output: `11 passed`
 
-### Exercise 4 — Verify the storage split
+**Stuck?**
 
-Confirm **where each piece lives**.
+- Lecture: "Logging a run: what happens step by step"
+- Notes: "The tracking server sits in front"
+- MLflow docs: the tracking quickstart, https://mlflow.org/docs/latest/ml/tracking/quickstart/
+- If the run does not appear, check `MLFLOW_TRACKING_URI` in `.env`: it must be
+  `http://127.0.0.1:5500`.
 
-**Silo (artifacts):**
+### Exercise 4: find where each piece is stored (≈ 10 min) *(written answer)*
 
-Open **http://localhost:5511**, navigate to the `mlflow-artifacts` bucket, and browse to the model artifact directory. You should find `model.pkl` (or `model/` directory with `model.pkl` and `MLmodel` inside).
+A tracked run is split over two stores: the model file in Silo, and the params and metrics
+in Postgres. You find each piece yourself, so you know where to look when one is missing.
 
-**Postgres (metadata):**
+**Do:**
 
-```bash
-docker compose exec postgres psql -U mlflow -d mlflowdb -c "\dt"
-```
+1. Open http://localhost:5511, open the `mlflow-artifacts` bucket, and find the model
+   files of your run.
+2. List the tables in Postgres:
+   ```bash
+   docker compose exec postgres psql -U mlflow -d mlflowdb -c "\dt"
+   ```
+   Expected output: tables such as `runs`, `params`, `metrics`, `tags` and `experiments`.
+3. Query the runs:
+   ```bash
+   docker compose exec postgres psql -U mlflow -d mlflowdb \
+     -c "SELECT run_uuid, status, start_time FROM runs LIMIT 5;"
+   ```
+   Expected output: your run, with the status `FINISHED`.
 
-You should see tables like `runs`, `params`, `metrics`, `tags`, `experiments`.
+**Check:**
 
-Query a run:
+- You found the folder with `MLmodel` and `model.pkl` in Silo, and your run in the `runs`
+  table.
 
-```bash
-docker compose exec postgres psql -U mlflow -d mlflowdb \
-  -c "SELECT run_uuid, status, start_time FROM runs LIMIT 5;"
-```
+**Stuck?**
 
-**Written answer** (add to `answers.md`): Which storage plane holds which data? Why are model files not stored in Postgres?
+- Lecture: "Metadata vs. artifacts"
+- Notes: "The three storage planes of a tracked run"
+- MLflow docs: the tracking server architecture (link above)
+- MLflow 3 stores a logged model in the experiment's `models/` folder, not in the run's
+  folder.
 
-### Exercise 5 — Reproducibility check (ties back to Week 1)
+**Written answer** (in `answers.md`):
 
-Run the pipeline a second time without changing anything:
+1. Which store holds which data? Why are model files not stored in Postgres?
 
-```bash
-uv run python src/main.py
-```
+### Exercise 5: check reproducibility (≈ 10 min) *(written answer)*
 
-Open the MLflow UI. You now have two runs. Compare them — the metrics should be **identical** (same seed, same data, same code).
+In Week 1 the same seed gave the same metrics, but the results lived only in your terminal.
+Now every run is recorded, so you can compare runs side by side.
 
-Now change the seed:
+**Do:**
 
-```bash
-# In .env: PIPELINE_RANDOM_SEED=7
-uv run python src/main.py
-```
+1. Run the pipeline again without changing anything:
+   ```bash
+   uv run python src/main.py
+   ```
+2. In the MLflow UI, select the two runs and click **Compare**.
+   Expected: the same metrics.
+3. Set `PIPELINE_RANDOM_SEED=7` in `.env` and run the pipeline again.
+   Expected: a third run with different metrics. Then set the seed back to 42.
 
-You have three runs now. The third has different metrics. Both the "seed-42" runs and the "seed-7" run are permanently recorded with their configuration.
+**Check:**
 
-**Written answer** (add to `answers.md`): Now that runs are centrally recorded, what can you answer that you could not answer after Week 1's terminal-scrollback experiment? (Think about: reproducibility, shareability, comparability.)
+- The experiment has three runs: two with seed 42 and the same metrics, and one with
+  seed 7.
 
-### Finish — commit your work
+**Stuck?**
 
-```bash
-git status          # answers.md must appear; .env and .venv/ must NOT
-git add labs/week-02-local-services/starter
-git commit -m "week02: local services stack and written answers"
-```
+- Lecture: "Developer run vs. reproducible run"
+- Notes: "Reproducibility, now recorded centrally"
+- MLflow docs: https://mlflow.org/docs/latest/ml/tracking/
+
+**Written answer** (in `answers.md`):
+
+1. Now that runs are recorded centrally, what can you answer that you could not answer
+   after Week 1? Think about reproducing a run, sharing it, and comparing runs.
+
+## Finish: commit and submit your work (≈ 5 min)
+
+1. Run `uv run pytest tests/`.
+   Expected output: `11 passed` with the stack up.
+2. Commit your work:
+   ```bash
+   git status          # answers.md must appear; .env and .venv/ must not
+   git add .
+   git commit -m "week02: local services stack and written answers"
+   ```
+3. Push the commit, open it on GitHub (`https://github.com/<you>/<repo>/commit/<hash>`),
+   and upload that URL to Moodle.
 
 ---
 

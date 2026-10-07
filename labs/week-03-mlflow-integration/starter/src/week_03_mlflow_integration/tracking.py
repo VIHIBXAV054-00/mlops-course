@@ -4,7 +4,7 @@ New in Week 3. Week 2 proved the tracking server works by logging ONE run with
 three loose `log_param` calls. This module is the engineering upgrade:
 
   - batched `log_params` / `log_metrics` (one REST round-trip, not N)
-  - tags, which are how you FIND runs later
+  - tags, which are how you find runs later
   - a signature + input example, which make the logged model self-describing
   - plots logged as artifacts
   - a sweep: one parent run with one child run per grid cell
@@ -35,7 +35,7 @@ SWEEP_TAG = "week3-baseline"
 
 # One sweep cell = (model family, the single hyperparameter under test).
 #
-# Two cells use scikit-learn's DEFAULTS (C=1.0, n_estimators=100), so the sweep
+# Two cells use scikit-learn's defaults (C=1.0, n_estimators=100), so the sweep
 # reproduces the Week 1/2 baselines exactly (LR F1 0.5785 / acc 0.7344,
 # RF F1 0.6066) rather than merely sitting next to them.
 SWEEP_GRID: tuple[tuple[str, dict], ...] = (
@@ -71,7 +71,7 @@ def git_commit() -> str:
     """Return the current git commit, or "unknown" outside a git checkout.
 
     This is the single most valuable tag you can log: it is the link from a
-    recorded metric back to the code — but only to COMMITTED code. See
+    recorded metric back to the code — but only to committed code. See
     git_dirty() below, and Exercise 6.
     """
     try:
@@ -119,48 +119,27 @@ def log_training_run(
     sweep_tag: str | None = None,
     nested: bool = False,
 ) -> RunResult:
-    """Train one model and record EVERYTHING about it in a single MLflow run.
+    """Train one model and record everything about it in a single MLflow run.
 
-    TODO(student) — Exercises 1 and 2. Fill in the five blanks below, in order.
-    Week 2 logged three loose params and a model. This is the engineering
-    version of the same idea: batched calls, tags, plots, and a signature.
+    TODO(student) — Exercises 1 and 2: fill in the five blanks below, in order.
     """
     x_train, x_test, y_train, y_test = build_dataset(settings)
     run_name = f"{family}-" + "-".join(f"{k}={v}" for k, v in hyperparams.items())
 
     with mlflow.start_run(run_name=run_name, nested=nested) as run:
         # ── Params: the configuration that would let someone re-run this ─────
-        # TODO(student) — Exercise 1a:
-        # Log all the params in ONE batched call with mlflow.log_params({...}).
-        # One call is one REST round-trip; six log_param calls are six.
-        # Include: model_family, random_seed, test_size, max_iter,
-        #          data_path (use settings.data_path.name), n_rows,
-        #          and **hyperparams so the swept value is recorded too.
-        # Log max_iter even for the forest, which ignores it — it keeps the
-        # UI's compare table rectangular.
-        mlflow.log_params(
-            {
-                "model_family": family,
-                "random_seed": settings.random_seed,
-                "test_size": settings.test_size,
-                "max_iter": settings.max_iter,
-                "data_path": settings.data_path.name,
-                "n_rows": len(x_train) + len(x_test),
-                **hyperparams,
-            }
-        )
+        # TODO(student) — Exercise 1a: log all the params in one call
+        # (log_params). One call is one request to the server; six log_param
+        # calls are six. Log model_family, random_seed, test_size, max_iter,
+        # data_path (settings.data_path.name), n_rows, and the entries of
+        # `hyperparams`, so the swept value is recorded too. Log max_iter for the
+        # forest as well, which ignores it: it keeps the UI's compare table even.
 
         # ── Tags: free-form labels, the thing you search on later ────────────
-        # TODO(student) — Exercise 1b:
-        # mlflow.set_tags({...}) with:
-        #   "model_family": family
-        #   "git_commit":   git_commit()      <- the link back to the code
-        #   "sweep":        sweep_tag          <- ONLY when sweep_tag is not None
-        # Params are for reproducing a run; tags are for FINDING it later.
-        tags = {"model_family": family, "git_commit": git_commit()}
-        if sweep_tag is not None:
-            tags["sweep"] = sweep_tag
-        mlflow.set_tags(tags)
+        # TODO(student) — Exercise 1b: set the tags in one call (set_tags):
+        # model_family (the family), git_commit (from git_commit(), the link
+        # back to the code), and sweep (sweep_tag), only when sweep_tag is not
+        # None. Params are for reproducing a run; tags are for finding it later.
         #
         # TODO(student) — Exercise 6, part 3: you will come back to this call.
 
@@ -169,41 +148,23 @@ def log_training_run(
         metrics = evaluate_model(model, x_test, y_test)
 
         # ── Metrics: the measured outcome ─────────────────────────────────────
-        # TODO(student) — Exercise 1c:
-        # Log every metric in one call: mlflow.log_metrics(metrics)
-        mlflow.log_metrics(metrics)
+        # TODO(student) — Exercise 1c: log every metric in `metrics` in one call.
 
         # ── Plots as artifacts ────────────────────────────────────────────────
-        # TODO(student) — Exercise 2:
-        # Build both figures (see plots.py) and log each one with
-        #   mlflow.log_figure(figure, "plots/roc_curve.png")
-        #   mlflow.log_figure(figure, "plots/confusion_matrix.png")
-        # log_figure writes straight to the artifact store — no local temp file.
-        # Call plt.close(figure) after each one, or matplotlib warns once you
-        # have opened more than 20 figures (the sweep opens 12).
-        roc_figure = roc_curve_figure(model, x_test, y_test, label=family)
-        mlflow.log_figure(roc_figure, "plots/roc_curve.png")
-        plt.close(roc_figure)
-        confusion_figure = confusion_matrix_figure(model, x_test, y_test)
-        mlflow.log_figure(confusion_figure, "plots/confusion_matrix.png")
-        plt.close(confusion_figure)
+        # TODO(student) — Exercise 2: build both figures with the functions in
+        # plots.py, and log them as "plots/roc_curve.png" and
+        # "plots/confusion_matrix.png" (log_figure writes straight to the
+        # artifact store, with no local file). Close each figure after logging it
+        # (plt.close), or matplotlib warns once more than 20 figures are open.
+        # Reference: https://mlflow.org/docs/latest/api_reference/python_api/mlflow.html#mlflow.log_figure
 
         # ── The model itself ──────────────────────────────────────────────────
-        # TODO(student) — Exercise 1d:
-        # mlflow.sklearn.log_model(
-        #     model,
-        #     name="model",
-        #     signature=infer_signature(x_train, model.predict(x_train)),
-        #     input_example=x_train.head(3),
-        # )
-        # The signature is what populates the UI's Schema tab, and what a
-        # serving runtime reads to validate incoming requests (Week 9).
-        mlflow.sklearn.log_model(
-            model,
-            name="model",
-            signature=infer_signature(x_train, model.predict(x_train)),
-            input_example=x_train.head(3),
-        )
+        # TODO(student) — Exercise 1d: log the fitted model under the name
+        # "model", with a signature inferred from the training features and the
+        # model's predictions on them (infer_signature), and the first three
+        # training rows as an input example. The signature fills the UI's Schema
+        # tab, and a serving runtime reads it to check requests (Week 9).
+        # Reference: https://mlflow.org/docs/latest/ml/model/signatures/
 
         return RunResult(run_id=run.info.run_id, run_name=run_name, metrics=metrics)
 
@@ -217,7 +178,7 @@ def run_sweep(settings: Settings) -> list[RunResult]:
     with one less dependency).
 
     TODO(student) — Exercise 3:
-    Log one CHILD run per cell of SWEEP_GRID inside the parent run opened below,
+    Log one child run per cell of SWEEP_GRID inside the parent run opened below,
     reusing log_training_run(), and collect the RunResults in `results`.
     Every child must carry the SWEEP_TAG. Read log_training_run's keyword
     arguments: one of them decides whether a run becomes a child of the run
@@ -225,11 +186,7 @@ def run_sweep(settings: Settings) -> list[RunResult]:
     seven unrelated top-level runs instead of one tree.
     Reference: https://mlflow.org/docs/latest/ml/getting-started/hyperparameter-tuning/
 
-    Then: `make sweep`, open the UI, expand the "sweep" run, select its six
-    children -> Compare -> Parallel Coordinates. Delete the Exercise 3 skip
-    markers in tests/test_tracking.py.
-
-    Every cell reuses the SAME train/test split (log_training_run calls
+    Every cell reuses the same train/test split (log_training_run calls
     build_dataset with the same seed). If each cell re-randomised the split,
     the comparison would be meaningless.
     """
@@ -306,7 +263,7 @@ def search_sweep_runs(
     string, metric comparisons are bare numbers, and the operator is `=` not `==`.
 
     TODO(student) — Exercise 4:
-    Replace the empty frame below with ONE mlflow.search_runs() call over this
+    Replace the empty frame below with one mlflow.search_runs() call over this
     experiment that returns a pandas DataFrame where:
       - the rows are the children of the sweep `parent_id` names, and nothing
         else (not the parent, not the children of an older sweep). Hint: MLflow
@@ -314,11 +271,9 @@ def search_sweep_runs(
         system tags; print the columns of an unfiltered
         mlflow.search_runs(experiment_names=[...]) frame to find it;
       - every row has metrics.f1 > min_f1;
-      - the SERVER does the ranking by `metric`, best first. Do not sort in pandas.
+      - the server does the ranking by `metric`, best first. Do not sort in pandas.
     Syntax reference: https://mlflow.org/docs/latest/ml/search/search-runs/
-    Test it with `make best`, then `make best METRIC=roc_auc`, then call it with
-    min_f1=0.99 and confirm the frame is empty. Delete the Exercise 4 skip
-    markers in tests/test_tracking.py.
+    With min_f1=0.99 the frame is empty.
     """
     mlflow.set_tracking_uri(settings.mlflow_tracking_uri)
     parent_id = latest_sweep_id(settings)

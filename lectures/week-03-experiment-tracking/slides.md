@@ -1019,7 +1019,7 @@ the chain that looked solid and were not.
 
 Walk today's traceability chain all the way back and it ends at `data/diabetes.csv`.
 
-Nothing in the run records which bytes were in that file. Edit one row and every metric we logged today becomes obsolete.
+Nothing in the run records which data was in that file. Edit one row and every metric we logged today becomes obsolete.
 
 <!--
 Let that sit for a beat. It is the same shape as the Epic argument: a record exists, and it does not reach far enough to answer the question anyone would actually ask.
@@ -1034,7 +1034,7 @@ Week 4 closes the last link:
 - **DVC**: dataset snapshots tracked by content hash, with a tiny `.dvc` pointer file committed to Git
 - **Silo as the S3-compatible DVC remote** — the same object store from Week 2, now holding data as well as artifacts
 - `dvc.yaml` pipeline stages, so prepare → train → evaluate becomes a declared, reproducible graph
-- **linking a data version to an MLflow run**, so the chain reaches from `@staging` all the way to the bytes
+- **linking a data version to an MLflow run**, so the chain reaches from `@staging` all the way to the data
 
 <br>
 

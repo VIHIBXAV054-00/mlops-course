@@ -1,9 +1,7 @@
 """Smoke tests for the Week 2 pipeline.
 
-These tests do NOT require a running Docker stack.
-They verify the pipeline logic in isolation: data loading, model training,
-and metric shapes. The MLflow-integration test requires a live server and
-guards itself with a reachability check.
+They check data loading, training and the metrics without the Docker stack.
+`test_mlflow_run_logged` needs the stack, and skips itself when it is down.
 """
 import pytest
 
@@ -59,17 +57,12 @@ def test_seed_42_metrics() -> None:
 
 
 def test_mlflow_run_logged() -> None:
-    """Confirm that main() logs a run to the tracking server.
-
-    Guarded: if the tracking server is not reachable, the test is skipped
-    automatically. This avoids CI failures when the stack is not running.
-    """
+    """The latest run in the experiment has the params, the metrics and the baseline F1."""
     import urllib.request
     import urllib.error
 
     settings = load_settings()
 
-    # Reachability check — skip if the server is not up
     try:
         urllib.request.urlopen(settings.mlflow_tracking_uri + "/health", timeout=2)
     except (urllib.error.URLError, OSError):
@@ -81,7 +74,6 @@ def test_mlflow_run_logged() -> None:
 
     client = mlflow.tracking.MlflowClient(settings.mlflow_tracking_uri)
 
-    # Get or create the experiment
     exp = client.get_experiment_by_name(settings.mlflow_experiment_name)
     if exp is None:
         pytest.skip(

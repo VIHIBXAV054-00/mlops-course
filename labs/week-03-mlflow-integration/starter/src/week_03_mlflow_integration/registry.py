@@ -1,13 +1,13 @@
 """The model registry: versions, aliases, governance tags, and traceability.
 
 New in Week 3. Tracking answers "which run scored best?". It cannot answer
-"what are we serving?" — for that you need a NAME, a stable address, an approval
+"what are we serving?" — for that you need a name, a stable address, an approval
 record, and a rollback target. That is the registry.
 
 Four nouns:
   registered model  a name, e.g. "diabetes-classifier"
   version           an immutable, numbered snapshot of one run's model
-  alias             a MUTABLE pointer to exactly one version: models:/<name>@staging
+  alias             a mutable pointer to exactly one version: models:/<name>@staging
   tag               a recorded fact attached to a version (who promoted it, on what)
 
 Note what is absent: model *stages*. MLflow deprecated the fixed
@@ -44,10 +44,6 @@ def register_best_model(settings: Settings, run_id: str) -> ModelVersion | None:
     which is expected and not an error: "Run with id ... has no artifacts at
     artifact path 'model', registering model based on models:/m-... instead".
     MLflow 3 stores logged-model files outside the run's artifact root.
-
-    Then register the same run twice (`make register RUN_ID=...` twice) and
-    watch the version number go up. Delete the Exercise 5 skip marker in
-    tests/test_registry.py.
     """
     mlflow.set_tracking_uri(settings.mlflow_tracking_uri)
     return mlflow.register_model(
@@ -78,25 +74,25 @@ def promote_to_staging(
 
     "Promote to staging" is two things, and only the second is an API call:
 
-      1. A GATE — evidence that this version deserves to be promoted. Here that
+      1. A gate: evidence that this version deserves to be promoted. Here that
          evidence is recorded as version tags. Designing real gates (metric
          regression thresholds, slice metrics, fairness checks, go/no-go rules)
          is Week 6's topic; this week is the mechanism.
-      2. A POINTER MOVE — `set_registered_model_alias`. Nothing is copied. The
+      2. A pointer move: `set_registered_model_alias`. Nothing is copied. The
          version does not change. Only the name now resolves elsewhere.
 
     TODO(student) — Exercise 6, part 1. Using the `client` below:
 
-    A. Read the evidence from the version's SOURCE RUN, not from a variable you
+    A. Read the evidence from the version's source run, not from a variable you
        happen to hold, so the tags cannot drift from what was measured.
-    B. Tag the VERSION with these keys (the tests check the names):
+    B. Tag the version with these keys (the tests check the names):
          validation_f1, validation_roc_auc   the run's metrics, formatted "%.4f"
          promoted_by                         settings.model_owner
          promoted_at                         now, UTC, ISO 8601, to the second
          promotion_reason                    `reason`, only when one is given
-       and tag the REGISTERED MODEL with:
+       and tag the registered model with:
          owner  settings.model_owner      task  "diabetes-binary-classification"
-    C. Move BOTH aliases, settings.model_alias ("staging") and "champion", to
+    C. Move both aliases, settings.model_alias ("staging") and "champion", to
        `version`. Neither name is built into MLflow; you chose them.
     D. Return the version that settings.model_alias now resolves to.
 
@@ -105,7 +101,7 @@ def promote_to_staging(
     get_model_version_by_alias. Signatures:
     https://mlflow.org/docs/latest/api_reference/python_api/mlflow.client.html
 
-    Do NOT reach for transition_model_version_stage(). It still exists in this
+    Do not use transition_model_version_stage(). It still exists in this
     MLflow version but is deprecated. See the lecture slide on stages vs. aliases.
     """
     client = MlflowClient(settings.mlflow_tracking_uri)
@@ -154,7 +150,7 @@ def trace_alias(settings: Settings) -> dict:
     (run_name is the run's `mlflow.runName` tag. Exercise 6, part 3 adds one
     more key here.)
 
-    One thing to notice when it works: params come back as STRINGS, not the
+    One thing to notice when it works: params come back as strings, not the
     ints and floats you logged. "42", not 42.
     """
     client = MlflowClient(settings.mlflow_tracking_uri)
@@ -188,21 +184,20 @@ def roll_back(
     the registry half.
 
     TODO(student) — Exercise 7:
-    1. Find the version settings.model_alias points at NOW.
+    1. Find the version settings.model_alias points at now.
     2. Refuse, with ValueError and before anything moves, if `to_version`
        - is the version the alias already points at, or
        - has no `promoted_at` tag. A version that never passed promotion is
          not a known-good target, and "rolling back" to it would be an
          unreviewed promotion in disguise.
        (A `to_version` that does not exist already raises in get_model_version.)
-    3. Tag the version you are rolling back FROM with
+    3. Tag the version you are rolling back from with
          rolled_back_at   now, UTC, ISO 8601
          rolled_back_to   to_version
          rollback_reason  reason
-    4. Move BOTH aliases, settings.model_alias and "champion", to `to_version`.
+    4. Move both aliases, settings.model_alias and "champion", to `to_version`.
     5. Return (the version you rolled back from, the ModelVersion the alias
        now resolves to).
-    Delete the Exercise 7 skip markers in tests/test_registry.py.
     """
     _ = (settings, to_version, reason)  # silence unused-argument warnings until you implement
     return None  # placeholder — the CLI reports this as "not implemented yet"
@@ -211,7 +206,7 @@ def roll_back(
 def load_aliased_model(settings: Settings):
     """Load the model the alias currently points at.
 
-    Two things worth noticing. First, the URI names a ROLE, not a version — the
+    Two things worth noticing. First, the URI names a role, not a version — the
     caller never changes when the champion changes. Second, this download goes
     through the tracking server's artifact proxy, so the client needs no Silo
     credentials at all. Check your `.env`: there are no AWS_* variables in it.

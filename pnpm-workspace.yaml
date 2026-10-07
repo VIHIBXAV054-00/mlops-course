@@ -1,0 +1,16 @@
+# Root of the pnpm workspace that builds every lecture deck.
+#
+# THERE ARE DELIBERATELY NO `packages:` ENTRIES. The decks are not separate
+# packages: one pinned Slidev toolchain lives in the root package.json, and Node
+# resolution walks up from lectures/week-XX-topic/ to this root to find it. A deck
+# therefore needs no package.json of its own -- and must not have one, because
+# build_student_bundle.sh rsyncs each deck folder into the public course repo,
+# where a stray package.json would make that repo's `npx slidev` try to install
+# into a directory that has no node_modules.
+#
+# Versions are pinned exactly (no ^), for the same reason uv.lock is used with
+# --frozen for the Python labs: week 14 must not silently render on a different
+# Slidev than week 2. Bump them once per term, deliberately, and re-run
+# scripts/build_slides.sh to confirm every deck still builds.
+allowBuilds:
+  playwright-chromium: true

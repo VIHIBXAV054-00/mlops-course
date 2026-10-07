@@ -43,7 +43,7 @@ MD5 is not safe against someone who forges data on purpose, but it is fine for n
 
 - A **path** (`data/train.csv`) names a location. The content can change while the name stays the same.
 - A **timestamp** (`train_2026_03_04.csv`) names a moment. Two people can save different data on the same day.
-- A **content hash** (`md5: 786c54f2…`) is computed from the bytes. Different bytes always give a different name.
+- A **content hash** (`md5: 786c54f2…`) is computed from the file content. Different content always gives a different name.
 
 Storing objects under a name computed from their content is called **content-addressed storage**.
 
@@ -56,7 +56,7 @@ Git keeps every version of every file in every clone. For code this is what you 
 - you cannot remove the data from history later;
 - GitHub blocks files larger than 100 MiB.
 
-So we split the job: **Git keeps the identity, an object store keeps the bytes.**
+So we split the job: **Git keeps the pointer, an object store keeps the data.**
 
 ### Data version control tools
 
@@ -167,7 +167,7 @@ In Week 3 the run logged `data_path` and `n_rows`. Both stay the same when someo
 This week every training run records the data version as **tags**:
 
 - `dvc_md5`: the hash, read from the `.dvc` file (not computed again);
-- `dvc_url`: where DVC stored those bytes, such as `s3://dvc-storage/…`;
+- `dvc_url`: where DVC stored that data, such as `s3://dvc-storage/…`;
 - next to Week 3's `git_commit`, so the run names its code **and** its data.
 
 It is a tag because tags exist so that someone can **find** a run (Week 3). Tag every training run when the run is made. Tags are searchable, so you can ask which runs trained on a given version of the data:
@@ -186,10 +186,10 @@ The two hashes answer different questions:
 
 | | DVC md5 | MLflow digest |
 | --- | --- | --- |
-| Hashes | the file's raw bytes | the values of the first 10,000 rows, the row count and the column names |
+| Hashes | the file's exact content | the values of the first 10,000 rows, the row count and the column names |
 | Our file (version 3) | `a8fd7b4f0d6d1bc4e378a8f76c5fff0c` | `9a465ecc` |
 | Same values, Windows line endings | changes: `d2384a69…` | stays `9a465ecc` |
-| Answers | "are these the same bytes?" | "is this roughly the same table?" |
+| Answers | "is this exactly the same file?" | "is this roughly the same table?" |
 
 Editing one BMI value changes both (the digest becomes `3748223f`). For an audit, use the md5; the digest is a quick check that a table changed.
 
@@ -206,7 +206,7 @@ The lab versions one CSV. Other data needs other steps; the practice (a fixed ve
 
 ### Byte-exact hashing and line endings
 
-DVC 3 hashes the raw bytes of a file. A CSV with Windows line endings (CRLF) has different bytes from the same CSV with LF. So it gets a different md5, and `dvc status` says "modified" although nobody changed the data. Fix the line endings of data files in `.gitattributes` (`*.csv text eol=lf`), and write data files with `\n` in your code.
+DVC 3 hashes the exact content of a file. A CSV with Windows line endings (CRLF) differs from the same CSV with LF. So it gets a different md5, and `dvc status` says "modified" although nobody changed the data. Fix the line endings of data files in `.gitattributes` (`*.csv text eol=lf`), and write data files with `\n` in your code.
 
 ### Automate commands that must run together
 
@@ -239,10 +239,10 @@ Lab: Exercise 7
 ## Key terms
 
 - **Content-addressed storage**: objects are stored under a name computed from their content.
-- **Content hash (md5)**: a short fingerprint computed from a file's bytes.
+- **Content hash (md5)**: a short fingerprint computed from a file's content.
 - **Pointer file (`.dvc`)**: the small file in Git that names the data by its hash.
 - **DVC cache**: the local copy of tracked data, in `.dvc/cache`. Never committed.
-- **DVC remote**: shared storage for the bytes; here a Silo bucket.
+- **DVC remote**: shared storage for the data; here a Silo bucket.
 - **Stage**: one step of a DVC pipeline, with `cmd`, `deps`, `params` and `outs`.
 - **`dvc.lock`**: the record of what a pipeline run actually used.
 - **Dataset digest (MLflow)**: MLflow's short hash of a table's values. Not a byte hash.
@@ -285,7 +285,7 @@ The lab uses the Week 3 Compose stack, plus a second Silo bucket, `dvc-storage`.
 1. A colleague edits three values in `data/measurements.csv`. `git status` shows nothing to commit. Why? What does `dvc status` say?
 2. You run `git checkout HEAD~1 -- data/measurements.csv.dvc` on a laptop that never pulled that version. What does `dvc checkout` do, and what is the fix?
 3. `dvc repro` says "Stage 'train' didn't change, skipping", but you edited `model.py`. Give two possible reasons.
-4. An auditor asks which exact bytes trained the model in production. Do you give the MLflow digest or the DVC md5? Why?
+4. An auditor asks which exact data trained the model in production. Do you give the MLflow digest or the DVC md5? Why?
 5. Your project's dataset is 20 KB and never changes. Would you use DVC? What would you record instead?
 6. A regulator orders you to delete every model trained on one customer's data. Which record from this week lets you find those models?
 7. A teammate ran `git push` but forgot `dvc push`. What happens when you run `dvc pull`, and which command would have prevented it?

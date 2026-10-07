@@ -18,37 +18,26 @@ having a `data/quality/` directory — today, Week 5 alone.
 
 | Property | Value |
 | :--- | :--- |
-| Rows | 61 (60 taken from `batch_01_baseline.csv`, plus 1 duplicate) |
-| Columns | 11 — the batch's usual 10, plus an unexpected `notes` column |
-| md5 | `873300d072058ff129c9f4aa72eee58b` |
-| Bytes | 4,113 |
-| Generator | `make_broken_batch.py` — no randomness; re-running reproduces the file byte-for-byte |
+| Rows | 60, taken from `batch_01_baseline.csv` |
+| Columns | 11: the batch's usual 10, plus an unexpected `notes` column |
+| md5 | `04cd5962da21814fa6c16de98c9a5ef7` |
+| Generator | `make_broken_batch.py`; no randomness, so re-running reproduces the file exactly |
 
-Sixty rows is deliberate: a student must be able to open the file and find every
-fault by eye, then check their reading against Pandera's report.
+Sixty rows are few enough to open the file and find every fault by eye.
 
-## The injected faults
+## The faults
 
-One fault per error class, each at a fixed row (0-based, as pandas reports it),
-so every row of a `failure_cases` report maps back to exactly one edit.
+Row numbers are 0-based, as Pandera reports them.
 
-| Row | Column | Error class | What was written | Why this one |
+| Row | Column | Error type | What was written | Report lines |
 | :--- | :--- | :--- | :--- | :--- |
-| — | `notes` | schema — unexpected column | `"imported from lab system v2"` | A column nobody agreed to. Harmless in itself; it means the producer changed the file without telling the consumer. |
-| 3 | `glucose` | schema — wrong dtype | `unknown` | A sentinel *word* instead of an empty cell. Turns the whole column into text. |
-| 39 | `measurement_date` | schema — unparseable date | `2024-13-45` | Month 13, day 45. What hand-edited spreadsheets produce. |
-| 7 | `age` | semantic — out of range | `250` | A plausible-looking integer in a column with no upper bound. |
-| 11 | `insulin` | semantic — impossible sign | `-1` | A negative concentration, used as a private "not measured" sentinel. |
-| 15 | `outcome` | semantic — invalid label | `2` | A third class in a binary target. |
-| 23, 27, 31 | `bmi` | semantic — unit change | ×10 (`280.0`, `297.0`, `227.0`) | **The subtle one.** Still numeric, still positive, invisible to a row count. Only an upper bound catches it. |
-| 19 | `blood_pressure` | completeness — missing value | empty cell | A required value that is absent. |
-| 60 | — | uniqueness — duplicated row | exact copy of row 5 | Double-counts one patient in training *and* in the metrics. |
+| — | `notes` | schema: unexpected column | `"imported from lab system v2"` | 1 |
+| 3 | `glucose` | schema: wrong type | `unknown` | 4: the conversion, the type check, and two range checks on text |
+| 7 | `age` | values: out of range | `250` | 1 |
+| 23 | `bmi` | values: unit change | ×10 (`280.0`) | 1: only an upper bound catches it |
 
-The dataset's original quirks are **left in place**: rows 2 and 6, for instance,
-still carry the real `skin_thickness = 0` and `blood_pressure = 0` sentinels from
-the Pima data. That matters — the Week 5 ingestion contract is written to
-*tolerate* those, because a gate that rejects every real file is a gate that gets
-switched off. The faults above are the ones a contract must catch.
+The data's own zeros stay in place (for example `skin_thickness = 0` in row 2). The
+Week 5 ingestion contract accepts them; the faults above are the ones it must catch.
 
 ## Regenerate / verify
 
@@ -63,8 +52,6 @@ with the data.
 
 ## How the course uses this
 
-- **Week 5 (data validation):** Exercise 2 runs the ingestion contract against
-  this file with `lazy=True` and reads the resulting `failure_cases` report,
-  mapping every row of it back to the table above.
-
-No other week uses it, and no pipeline stage ever reads it.
+- **Week 5 (data validation):** Exercise 2 runs the ingestion contract on this file
+  and traces each of the 7 report lines to one of the 4 faults.
+- **Weeks 6–13** carry the file and the same tests on it. No pipeline stage reads it.

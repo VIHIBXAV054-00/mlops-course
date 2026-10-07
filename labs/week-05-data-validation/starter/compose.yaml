@@ -1,0 +1,127 @@
+# Week 5 Lab — Data validation (starter)
+#
+# The Week 4 stack, unchanged. Week 5 adds no service: validation runs in the
+# pipeline, and the reports are files in Git.
+#
+#   postgres             relational backend store — params, metrics, tags
+#   s3                   object store — MLflow's artifacts and DVC's data
+#   s3-create-bucket     one-shot job that creates both buckets
+#   mlflow               tracking server, between the client and the two stores
+#
+# Tutorial: https://mlflow.org/docs/latest/ml/tracking/tutorials/remote-server/
+# Deviation: the tracking server is containerized rather than run on the host,
+# so the whole stack starts with one command.
+#
+#   cp .env.example .env
+#   docker compose up -d --wait    # start, and wait for healthchecks
+#   docker compose down            # stop; data persists in the named volumes
+#   docker compose down -v         # stop and wipe the volumes
+#
+# Stop any other lab's stack first — every lab shares the 55xx host ports:
+#   cd ../../week-04-dvc-introduction/starter && docker compose down
+
+# A per-lab project name. Without it Compose uses the directory name
+# ("starter"), which every lab in this course shares — and so would their
+# containers and volumes.
+name: week05-data-validation-starter
+
+services:
+
+  # ── Postgres: relational backend store ─────────────────────────────────────
+  # Experiment names, run IDs, params, metrics, tags. Image pinned.
+  postgres:
+    image: postgres:16.3
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "${POSTGRES_HOST_PORT:-5532}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  # ── Silo: S3-compatible object store ───────────────────────────────────────
+  # Silo is a community fork of MinIO (MinIO's own images left Docker Hub in
+  # September 2026). It keeps MinIO's MINIO_* variables, `mc` client and console.
+  # MLflow artifacts in one bucket, DVC data in the other.
+  s3:
+    image: pgsty/silo:RELEASE.2026-09-16T00-00-00Z
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY}
+    command: server /data --console-address ":9001"
+    ports:
+      - "${S3_API_PORT:-5510}:9000"
+      - "${S3_CONSOLE_PORT:-5511}:9001"
+    volumes:
+      - s3-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "mc ready local || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  # ── s3-create-bucket: one-shot bucket initialisation ───────────────────────
+  # Runs once after Silo is healthy; --ignore-existing makes it idempotent.
+  s3-create-bucket:
+    image: pgsty/mc:RELEASE.2026-09-16T00-00-00Z
+    depends_on:
+      s3:
+        condition: service_healthy
+    entrypoint: >
+      bash -c "
+        mc alias set s3 http://s3:9000 ${S3_ACCESS_KEY} ${S3_SECRET_KEY} &&
+        mc mb --ignore-existing s3/${MLFLOW_BUCKET} &&
+        mc mb --ignore-existing s3/${DVC_BUCKET}
+      "
+
+  # ── MLflow tracking server ──────────────────────────────────────────────────
+  # Built from the pinned mlflow.Dockerfile. The client only ever needs
+  # MLFLOW_TRACKING_URI; the Silo credentials below stay server-side.
+  mlflow:
+    build:
+      context: .
+      dockerfile: mlflow.Dockerfile
+    environment:
+      # Silo S3 credentials — server-side only, not exposed to the client
+      MLFLOW_S3_ENDPOINT_URL: http://s3:9000
+      AWS_ACCESS_KEY_ID: ${S3_ACCESS_KEY}
+      AWS_SECRET_ACCESS_KEY: ${S3_SECRET_KEY}
+    command:
+      - --backend-store-uri
+      - postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      - --artifacts-destination
+      - s3://${MLFLOW_BUCKET}
+      - --host
+      - "0.0.0.0"
+      - --port
+      - "5000"
+      - --allowed-hosts
+      # The host check does not strip the port, so bare "localhost" would not
+      # match "localhost:5500". The "host:*" wildcards accept any port.
+      - "localhost,127.0.0.1,mlflow,localhost:*,127.0.0.1:*,mlflow:*"
+    ports:
+      - "${MLFLOW_PORT:-5500}:5000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      s3-create-bucket:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:5000/health\")' 2>/dev/null || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 15s
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
+  s3-data:

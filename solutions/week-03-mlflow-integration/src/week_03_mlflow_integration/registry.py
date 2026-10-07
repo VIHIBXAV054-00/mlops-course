@@ -1,13 +1,13 @@
 """The model registry: versions, aliases, governance tags, and traceability.
 
 New in Week 3. Tracking answers "which run scored best?". It cannot answer
-"what are we serving?" — for that you need a NAME, a stable address, an approval
+"what are we serving?" — for that you need a name, a stable address, an approval
 record, and a rollback target. That is the registry.
 
 Four nouns:
   registered model  a name, e.g. "diabetes-classifier"
   version           an immutable, numbered snapshot of one run's model
-  alias             a MUTABLE pointer to exactly one version: models:/<name>@staging
+  alias             a mutable pointer to exactly one version: models:/<name>@staging
   tag               a recorded fact attached to a version (who promoted it, on what)
 
 Note what is absent: model *stages*. MLflow deprecated the fixed
@@ -70,11 +70,11 @@ def promote_to_staging(
 
     "Promote to staging" is two things, and only the second is an API call:
 
-      1. A GATE — evidence that this version deserves to be promoted. Here that
+      1. A gate: evidence that this version deserves to be promoted. Here that
          evidence is recorded as version tags. Designing real gates (metric
          regression thresholds, slice metrics, fairness checks, go/no-go rules)
          is Week 6's topic; this week is the mechanism.
-      2. A POINTER MOVE — `set_registered_model_alias`. Nothing is copied. The
+      2. A pointer move: `set_registered_model_alias`. Nothing is copied. The
          version does not change. Only the name now resolves elsewhere.
 
     We set TWO aliases on the same version on purpose. A stage could never do
@@ -193,7 +193,7 @@ def roll_back(settings: Settings, to_version: str, reason: str) -> tuple[str, Mo
 def load_aliased_model(settings: Settings):
     """Load the model the alias currently points at.
 
-    Two things worth noticing. First, the URI names a ROLE, not a version — the
+    Two things worth noticing. First, the URI names a role, not a version — the
     caller never changes when the champion changes. Second, this download goes
     through the tracking server's artifact proxy, so the client needs no Silo
     credentials at all. Check your `.env`: there are no AWS_* variables in it.

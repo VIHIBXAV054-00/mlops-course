@@ -1,10 +1,7 @@
 """Smoke tests for the Week 2 pipeline.
 
-These tests do NOT require a running Docker stack.
-They verify the pipeline logic in isolation: data loading, model training,
-and metric shapes — the same guarantees Week 1 tests gave, plus the new
-MLflow settings. Any test that would require a live MLflow server is
-decorated with @pytest.mark.skip so the starter passes out of the box.
+They check data loading, training and the metrics without the Docker stack.
+`test_mlflow_run_logged` needs the stack, and skips itself when it is down.
 """
 import urllib.error
 import urllib.request
@@ -65,28 +62,39 @@ def test_seed_42_metrics() -> None:
     assert metrics["accuracy"] == pytest.approx(0.7344, abs=0.001)
 
 
+@pytest.mark.skip(reason="Exercise 3 — log the run in cli.py, then delete this skip marker.")
 def test_mlflow_run_logged() -> None:
-    """Confirm that main() logs a run when the tracking server is available."""
+    """The latest run in the experiment has the params, the metrics and the baseline F1."""
+    import urllib.request
+    import urllib.error
+
     settings = load_settings()
+
     try:
         urllib.request.urlopen(settings.mlflow_tracking_uri + "/health", timeout=2)
     except (urllib.error.URLError, OSError):
         pytest.skip("MLflow tracking server not reachable — start the stack first.")
 
+    import mlflow
+
+    mlflow.set_tracking_uri(settings.mlflow_tracking_uri)
+
     client = mlflow.tracking.MlflowClient(settings.mlflow_tracking_uri)
 
-    main()
+    exp = client.get_experiment_by_name(settings.mlflow_experiment_name)
+    if exp is None:
+        pytest.skip(
+            "Experiment not found — run 'uv run python src/main.py' first."
+        )
 
-    experiment = client.get_experiment_by_name(settings.mlflow_experiment_name)
-    assert experiment is not None
     runs = client.search_runs(
-        experiment_ids=[experiment.experiment_id],
+        experiment_ids=[exp.experiment_id],
         order_by=["start_time DESC"],
         max_results=1,
     )
-    assert runs
-    run = runs[0]
-    assert run.data.params["random_seed"] == str(settings.random_seed)
-    assert run.data.params["test_size"] == str(settings.test_size)
-    assert run.data.params["max_iter"] == str(settings.max_iter)
-    assert set(run.data.metrics) >= {"accuracy", "precision", "recall", "f1"}
+    assert len(runs) > 0, "No runs found — run 'uv run python src/main.py' first."
+
+    latest_run = runs[0]
+    assert "random_seed" in latest_run.data.params, "random_seed param not logged"
+    assert "f1" in latest_run.data.metrics, "f1 metric not logged"
+    assert latest_run.data.metrics["f1"] == pytest.approx(0.5785, abs=0.001)

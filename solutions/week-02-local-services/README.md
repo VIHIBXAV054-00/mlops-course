@@ -11,7 +11,7 @@ Instructors can use it to verify student submissions.
 | `compose.yaml` | 1 | `s3-create-bucket`: filled image and bucket-creation entrypoint |
 | `compose.yaml` | 2 | `mlflow` service: filled `MLFLOW_S3_ENDPOINT_URL`, `AWS_*` env, `--backend-store-uri`, `--artifacts-destination`, `--allowed-hosts` |
 | `src/week_02_local_services/cli.py` | 3 | Added `mlflow.set_tracking_uri`, `mlflow.set_experiment`, `mlflow.start_run()`, `log_param`, `log_metric`, `log_model` |
-| `tests/test_smoke.py` | 3 | `test_mlflow_run_logged` changed from `@pytest.mark.skip` to a reachability-guarded live test |
+| `tests/test_smoke.py` | 3 | the skip marker on `test_mlflow_run_logged` deleted; the test skips itself when the stack is down |
 
 ## Running the solution
 

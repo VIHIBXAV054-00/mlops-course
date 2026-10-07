@@ -1,11 +1,5 @@
-# Pinned MLflow tracking server image.
-# Installs MLflow plus the two backend dependencies:
-#   - psycopg2-binary: PostgreSQL driver for the backend store
-#   - boto3: AWS/S3 SDK for the artifact store (Silo is S3-compatible)
-#
-# Using a dedicated Dockerfile instead of `pip install` in the compose command
-# is the week's lesson about reproducible runtimes: the image is pinned,
-# immutable, and reproducible across machines and CI runs.
+# Pinned MLflow tracking server image: MLflow, a PostgreSQL driver for the
+# backend store, and boto3 for the S3-compatible artifact store.
 
 FROM python:3.12-slim
 

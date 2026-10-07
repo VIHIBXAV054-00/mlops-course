@@ -1,0 +1,50 @@
+# Week 4: the training pipeline, declared as a graph.
+#
+# Each stage names what it runs (cmd), what it reads (deps, including source
+# files), which params it uses, and what it writes (outs).
+# See the graph: make dag   Run it: make repro
+# Reference: https://doc.dvc.org/user-guide/project-structure/dvcyaml-files
+
+stages:
+
+  prepare:
+    cmd: uv run python src/main.py prepare
+    deps:
+      - data/measurements.csv
+      - src/week_04_dvc_introduction/pipeline.py
+      - src/week_04_dvc_introduction/data.py
+    params:
+      - random_seed
+      - prepare.test_size
+    outs:
+      - data/processed/train.csv
+      - data/processed/test.csv
+
+  train:
+    cmd: uv run python src/main.py train
+    deps:
+      - data/processed/train.csv
+      - src/week_04_dvc_introduction/pipeline.py
+      - src/week_04_dvc_introduction/model.py
+      - src/week_04_dvc_introduction/dvc_link.py
+    params:
+      - random_seed
+      - train.family
+      - train.C
+      - train.max_iter
+    outs:
+      - models/model.pkl
+      - models/mlflow_run_id.json:
+          cache: false
+
+  evaluate:
+    cmd: uv run python src/main.py evaluate
+    deps:
+      - models/model.pkl
+      - models/mlflow_run_id.json   # evaluate logs to this run, so it is a dep
+      - data/processed/test.csv
+      - src/week_04_dvc_introduction/pipeline.py
+      - src/week_04_dvc_introduction/model.py
+    metrics:
+      - metrics/metrics.json:
+          cache: false

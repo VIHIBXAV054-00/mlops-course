@@ -1,0 +1,13 @@
+# Pipeline hyperparameters. DVC records these values in dvc.lock.
+
+random_seed: 42
+
+prepare:
+  test_size: 0.25
+
+train:
+  family: logreg
+  C: 1.0
+  max_iter: 1000
+  # How the model's imputer fills missing values: median, mean or most_frequent.
+  impute_strategy: median

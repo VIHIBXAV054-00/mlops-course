@@ -411,7 +411,7 @@ sequenceDiagram
     P->>S: POST /api/2.0/mlflow/runs/log-batch (params + metrics)
     S->>DB: INSERT INTO params, metrics
 
-    P->>S: PUT /mlflow-artifacts/abc123/model (model file bytes)
+    P->>S: PUT /mlflow-artifacts/abc123/model (the model file)
     S->>OBJ: PUT s3://mlflow-artifacts/abc123/artifacts/model/
 
     P->>S: POST /api/2.0/mlflow/runs/update (status=FINISHED)

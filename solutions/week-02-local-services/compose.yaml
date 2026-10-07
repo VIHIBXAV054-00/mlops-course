@@ -1,32 +1,28 @@
-# Week 2 Lab — Local Services Stack (Solution)
+# Week 2 Lab — Local Services Stack (solution)
 #
-# Four services:
-#   postgres           — relational backend store (metadata: params, metrics, tags)
-#   s3                 — object store (artifacts: model files, plots)
-#   s3-create-bucket   — one-shot job that creates the artifacts bucket
-#   mlflow             — tracking server (proxies between client, Postgres, and Silo)
+#   postgres             relational backend store — params, metrics, tags
+#   s3                   object store — model files and plots
+#   s3-create-bucket     one-shot job that creates the artifacts bucket
+#   mlflow               tracking server, between the client and the two stores
 #
-# Canonical tutorial: https://mlflow.org/docs/latest/ml/tracking/tutorials/remote-server/
-# Required deviation: mlflow server is containerized (fourth compose service) rather than
-#   run on the host, so the whole stack starts with a single "docker compose up -d --wait".
+# Tutorial: https://mlflow.org/docs/latest/ml/tracking/tutorials/remote-server/
+# Deviation: the tracking server is containerized rather than run on the host,
+# so the whole stack starts with one command.
 #
-# Usage:
 #   cp .env.example .env
-#   docker compose up -d --wait    # bring all four services up and wait for healthchecks
-#   docker compose down            # stop (data persists in named volumes)
-#   docker compose down -v         # stop AND wipe volumes (fresh start)
+#   docker compose up -d --wait    # start, and wait for healthchecks
+#   docker compose down            # stop; data persists in the named volumes
+#   docker compose down -v         # stop and wipe the volumes
 
-# Explicit project name. Compose otherwise defaults the project name to the base
-# DIRECTORY name — which is "starter"/"solution" for EVERY lab in this course, so
-# without this every week would silently share one project, one set of containers,
-# and one set of volumes.
+# A per-lab project name. Without it Compose uses the directory name
+# ("solution"), which every lab in this course shares — and so would their
+# containers and volumes.
 name: week02-local-services
 
 services:
 
   # ── Postgres: relational backend store ─────────────────────────────────────
-  # Stores experiment names, run IDs, parameters, metrics, and tags.
-  # Image pinned to 16.3 for reproducibility.
+  # Experiment names, run IDs, params, metrics, tags. Image pinned.
   postgres:
     image: postgres:16.3
     environment:
@@ -47,9 +43,7 @@ services:
   # ── Silo: S3-compatible object store ───────────────────────────────────────
   # Silo is a community fork of MinIO (MinIO's own images left Docker Hub in
   # September 2026). It keeps MinIO's MINIO_* variables, `mc` client and console.
-  # Stores model artifacts (serialized pipelines, plots, etc.).
-  # Uses a TCP healthcheck (from the official MLflow tutorial) rather than
-  # the HTTP endpoint, for maximum compatibility.
+  # Serialized models and plots.
   s3:
     image: pgsty/silo:RELEASE.2026-09-16T00-00-00Z
     environment:
@@ -69,8 +63,7 @@ services:
     restart: unless-stopped
 
   # ── s3-create-bucket: one-shot bucket initialisation ───────────────────────
-  # Runs once after Silo is healthy. Creates the artifacts bucket if it does
-  # not already exist (idempotent via --ignore-existing).
+  # Runs once after Silo is healthy; --ignore-existing makes it idempotent.
   s3-create-bucket:
     image: pgsty/mc:RELEASE.2026-09-16T00-00-00Z
     depends_on:
@@ -83,11 +76,8 @@ services:
       "
 
   # ── MLflow tracking server ──────────────────────────────────────────────────
-  # Built from our pinned mlflow.Dockerfile.
-  # --backend-store-uri: Postgres connection using the compose DNS name "postgres"
-  # --artifacts-destination: Silo bucket via S3 protocol
-  # --allowed-hosts: required by MLflow 3.5.0+ security middleware (--host 0.0.0.0)
-  # The client only needs MLFLOW_TRACKING_URI; Silo credentials stay server-side.
+  # Built from the pinned mlflow.Dockerfile. The client only ever needs
+  # MLFLOW_TRACKING_URI; the Silo credentials below stay server-side.
   mlflow:
     build:
       context: .
@@ -107,10 +97,8 @@ services:
       - --port
       - "5000"
       - --allowed-hosts
-      # MLflow's host check is an exact/fnmatch match that does NOT strip the port,
-      # so bare "localhost" will not match the browser's "Host: localhost:5500".
-      # The "host:*" wildcards accept any port (host 5500, internal 5000, or a
-      # student-overridden MLFLOW_PORT) while still restricting to localhost/127.0.0.1.
+      # The host check does not strip the port, so bare "localhost" would not
+      # match "localhost:5500". The "host:*" wildcards accept any port.
       - "localhost,127.0.0.1,mlflow,localhost:*,127.0.0.1:*,mlflow:*"
     ports:
       - "${MLFLOW_PORT:-5500}:5000"

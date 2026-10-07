@@ -3,10 +3,10 @@ description:
   title: "Week 4 Lab: DVC Introduction"
   summary: |
     Put the training data under version control with DVC, using the Week 2/3
-    Silo as an S3 remote. Track a dataset by content hash, push the bytes,
+    Silo as an S3 remote. Track a dataset by content hash, push the data,
     travel between versions, declare the pipeline as a graph with dvc.yaml, and
     stamp the data version onto the MLflow run so the traceability chain finally
-    reaches the bytes.
+    reaches the data.
 ---
 
 # Week 4 Lab: DVC Introduction
@@ -15,7 +15,7 @@ Last week's traceability chain went from a deployed alias back to a run and its 
 commit, and then stopped at `data/diabetes.csv`: a **path**.
 
 Today you give the data an identity. You track a dataset by its content hash and store the
-bytes in Silo. You add new batches as new versions, move between them, and declare the pipeline in
+data in Silo. You add new batches as new versions, move between them, and declare the pipeline in
 `dvc.yaml`. Then
 you record the data version on the MLflow run, and stop a run that would record the wrong
 one.
@@ -197,7 +197,7 @@ your pointer is `786c54f2770fa1e7ea5438e6e44b6486`.
 
 **Written answer** (in `answers.md`):
 
-1. What did Git gain in this commit, and about how many bytes is it? What did Silo gain?
+1. What did Git gain in this commit, and about how large is it? What did Silo gain?
    Why is that difference the whole idea of DVC?
 2. A classmate runs `make build-data` with the same batch and gets a byte-identical `.dvc` file. Name two things
    `build_measurements` does to make that true, and one thing that would break it.
@@ -216,7 +216,7 @@ file after an accidental deletion, and when a new teammate clones the repository
 ```bash
 rm data/measurements.csv
 rm -rf .dvc/cache
-uv run dvc checkout data/measurements.csv   # fails: the bytes are not in the cache
+uv run dvc checkout data/measurements.csv   # fails: the data is not in the cache
 uv run dvc pull data/measurements.csv       # downloads them from Silo
 uv run python src/main.py verify-data       # compares the file with its pointer
 ```
@@ -364,7 +364,7 @@ on its `5. Data version` line.
 **Written answer** (in `answers.md`):
 
 1. MLflow's digest has 8 characters; DVC's md5 has 32. What does each one hash? Which would
-   you give an auditor who asks you to prove which bytes trained this model? What is the
+   you give an auditor who asks you to prove which data trained this model? What is the
    other one good for?
 2. Run `make runs-for-data` and write down the filter string it used. What question does it
    answer that Week 3 could not?
@@ -416,7 +416,7 @@ prints ``Cannot run `train` yet`` and tells you to run `dvc add`.
 
 **Written answer** (in `answers.md`):
 
-1. Which bytes did the run from step 3 train on, and which version does its tag name? An
+1. Which data did the run from step 3 train on, and which version does its tag name? An
    auditor finds this run a year later. What do they conclude, and why is that worse than a
    run with no data tag?
 2. Your check runs inside the `train` stage. Name one other place in a team's workflow
@@ -450,7 +450,7 @@ and upload that URL to Moodle.
 | `data/raw/batch_*.csv` | Git | the batches that have arrived; the dataset is built from them |
 | `data/diabetes.csv` | Git | the Week 1–3 snapshot, unchanged |
 | `data/measurements.csv` | **Silo** (`dvc-storage`) | the versioned dataset |
-| `data/measurements.csv.dvc` | Git | four lines naming the bytes above |
+| `data/measurements.csv.dvc` | Git | four lines naming the data above |
 | `dvc.yaml`, `params.yaml` | Git | what you declared |
 | `dvc.lock` | Git | what actually ran |
 | `metrics/metrics.json`, `models/mlflow_run_id.json` | Git | `cache: false`, so they show in a diff |

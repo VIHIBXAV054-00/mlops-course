@@ -1,48 +1,34 @@
-# Week 4 Lab — DVC Introduction (Solution)
+# Week 4 Lab — DVC Introduction (starter)
 #
-# This file is IDENTICAL to the Week 2 solution stack. Week 3 changes nothing
-# about the infrastructure except ONE line: the bucket-bootstrap job now
-# creates a SECOND bucket, ${DVC_BUCKET}, for DVC to store versioned data in.
-# Silo therefore serves two tenants — MLflow's artifacts and DVC's data —
-# which is the picture the Week 4 lecture draws. Everything else is Week 3's
-# stack byte for byte; all Week 4 exercises live in Python and in dvc.yaml.
+# The Week 3 stack plus one bucket: s3-create-bucket also creates DVC_BUCKET,
+# where DVC stores versioned data.
 #
-# HEADS UP — the explicit "name:" below matters. Compose defaults the project
-# name to the base DIRECTORY name, which is "solution" for every lab in this
-# course; without an explicit name, Week 2 and Week 3 would silently share one
-# project, one set of containers, and one set of volumes. Naming the project per
-# week gives this lab its own database — so it starts EMPTY and none of your
-# Week 2 runs appear here.
+#   postgres             relational backend store — params, metrics, tags
+#   s3                   object store — MLflow's artifacts and DVC's data
+#   s3-create-bucket     one-shot job that creates both buckets
+#   mlflow               tracking server, between the client and the two stores
 #
-# The host ports 5500/5510/5511/5532 are still the same across weeks, so stop the
-# Week 2 stack before starting this one:
-#   cd ../../week-03-mlflow-integration/solution && make down
+# Tutorial: https://mlflow.org/docs/latest/ml/tracking/tutorials/remote-server/
+# Deviation: the tracking server is containerized rather than run on the host,
+# so the whole stack starts with one command.
 #
-# Four services:
-#   postgres           — relational backend store (metadata: params, metrics, tags)
-#   s3                 — object store (artifacts: model files, plots)
-#   s3-create-bucket   — one-shot job that creates BOTH buckets (artifacts + data)
-#   mlflow             — tracking server (proxies between client, Postgres, and Silo)
-#
-# Canonical tutorial: https://mlflow.org/docs/latest/ml/tracking/tutorials/remote-server/
-# Required deviation: mlflow server is containerized (fourth compose service) rather than
-#   run on the host, so the whole stack starts with a single "docker compose up -d --wait".
-#
-# Usage:
 #   cp .env.example .env
-#   docker compose up -d --wait    # bring all four services up and wait for healthchecks
-#   docker compose down            # stop (data persists in named volumes)
-#   docker compose down -v         # stop AND wipe volumes (fresh start)
+#   docker compose up -d --wait    # start, and wait for healthchecks
+#   docker compose down            # stop; data persists in the named volumes
+#   docker compose down -v         # stop and wipe the volumes
+#
+# Stop any other lab's stack first — every lab shares the 55xx host ports:
+#   cd ../../week-03-mlflow-integration/starter && docker compose down
 
-# Explicit project name — see the HEADS UP above. Without this, Compose would
-# use the directory name ("solution") and collide with every other lab.
+# A per-lab project name. Without it Compose uses the directory name
+# ("starter"), which every lab in this course shares — and so would their
+# containers and volumes.
 name: week04-dvc-introduction-starter
 
 services:
 
   # ── Postgres: relational backend store ─────────────────────────────────────
-  # Stores experiment names, run IDs, parameters, metrics, and tags.
-  # Image pinned to 16.3 for reproducibility.
+  # Experiment names, run IDs, params, metrics, tags. Image pinned.
   postgres:
     image: postgres:16.3
     environment:
@@ -63,9 +49,7 @@ services:
   # ── Silo: S3-compatible object store ───────────────────────────────────────
   # Silo is a community fork of MinIO (MinIO's own images left Docker Hub in
   # September 2026). It keeps MinIO's MINIO_* variables, `mc` client and console.
-  # Stores model artifacts (serialized pipelines, plots, etc.).
-  # Uses a TCP healthcheck (from the official MLflow tutorial) rather than
-  # the HTTP endpoint, for maximum compatibility.
+  # MLflow artifacts in one bucket, DVC data in the other.
   s3:
     image: pgsty/silo:RELEASE.2026-09-16T00-00-00Z
     environment:
@@ -85,8 +69,7 @@ services:
     restart: unless-stopped
 
   # ── s3-create-bucket: one-shot bucket initialisation ───────────────────────
-  # Runs once after Silo is healthy. Creates the artifacts bucket if it does
-  # not already exist (idempotent via --ignore-existing).
+  # Runs once after Silo is healthy; --ignore-existing makes it idempotent.
   s3-create-bucket:
     image: pgsty/mc:RELEASE.2026-09-16T00-00-00Z
     depends_on:
@@ -100,11 +83,8 @@ services:
       "
 
   # ── MLflow tracking server ──────────────────────────────────────────────────
-  # Built from our pinned mlflow.Dockerfile.
-  # --backend-store-uri: Postgres connection using the compose DNS name "postgres"
-  # --artifacts-destination: Silo bucket via S3 protocol
-  # --allowed-hosts: required by MLflow 3.5.0+ security middleware (--host 0.0.0.0)
-  # The client only needs MLFLOW_TRACKING_URI; Silo credentials stay server-side.
+  # Built from the pinned mlflow.Dockerfile. The client only ever needs
+  # MLFLOW_TRACKING_URI; the Silo credentials below stay server-side.
   mlflow:
     build:
       context: .
@@ -124,10 +104,8 @@ services:
       - --port
       - "5000"
       - --allowed-hosts
-      # MLflow's host check is an exact/fnmatch match that does NOT strip the port,
-      # so bare "localhost" will not match the browser's "Host: localhost:5500".
-      # The "host:*" wildcards accept any port (host 5500, internal 5000, or a
-      # student-overridden MLFLOW_PORT) while still restricting to localhost/127.0.0.1.
+      # The host check does not strip the port, so bare "localhost" would not
+      # match "localhost:5500". The "host:*" wildcards accept any port.
       - "localhost,127.0.0.1,mlflow,localhost:*,127.0.0.1:*,mlflow:*"
     ports:
       - "${MLFLOW_PORT:-5500}:5000"
