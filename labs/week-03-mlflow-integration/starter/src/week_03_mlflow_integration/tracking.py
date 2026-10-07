@@ -203,7 +203,17 @@ def run_sweep(settings: Settings) -> list[RunResult]:
             }
         )
 
-        # TODO(student) — Exercise 3: one child run per grid cell.
+        # TODO(student) — Exercise 3: run one nested child run per grid cell.
+        for family, hyperparams in SWEEP_GRID:
+            results.append(
+                log_training_run(
+                    settings,
+                    family,
+                    hyperparams,
+                    sweep_tag=SWEEP_TAG,
+                    nested=True,
+                )
+            )
 
         # Record the winner on the parent, so the sweep summarises itself.
         if results:
@@ -265,12 +275,23 @@ def search_sweep_runs(
     Syntax reference: https://mlflow.org/docs/latest/ml/search/search-runs/
     With min_f1=0.99 the frame is empty.
     """
+    mlflow.set_tracking_uri(settings.mlflow_tracking_uri)
     parent_id = latest_sweep_id(settings)
     if parent_id is None:
         return pd.DataFrame()
-    _ = (metric, min_f1)  # silence unused-argument warnings until you implement
-    # TODO(student) — Exercise 4: the search_runs(...) call described above.
-    return pd.DataFrame()
+
+    try:
+        return mlflow.search_runs(
+            experiment_names=[settings.mlflow_experiment_name],
+            filter_string=f"tags.`mlflow.parentRunId` = '{parent_id}' and metrics.{metric} > {min_f1}",
+            order_by=[f"metrics.{metric} DESC", "attributes.start_time DESC"],
+            max_results=50,
+            output_format="pandas",
+        )
+    except MlflowException:
+        # The experiment does not exist yet — a friendlier signal than a
+        # raw REST traceback for a student who has not run the sweep.
+        return pd.DataFrame()
 
 
 def find_best_run(settings: Settings, *, metric: str = "f1") -> str:

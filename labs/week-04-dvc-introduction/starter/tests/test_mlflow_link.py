@@ -47,7 +47,6 @@ def logged_run(live_settings, measurements_pointer, all_batches, tmp_path_factor
     return sandbox, result
 
 
-@pytest.mark.skip(reason="Exercise 6 — implement log_data_version(), then delete this skip marker.")
 def test_run_carries_the_dvc_data_version(live_settings, logged_run) -> None:
     """The run records WHICH BYTES it trained on."""
     sandbox, result = logged_run
@@ -65,7 +64,6 @@ def test_run_carries_the_dvc_data_version(live_settings, logged_run) -> None:
     assert tags["data_file"] == "measurements.csv", "`data_file` should be the file name."
 
 
-@pytest.mark.skip(reason="Exercise 6 — implement log_dataset_input(), then delete this skip marker.")
 def test_run_has_a_dataset_input(live_settings, logged_run) -> None:
     """mlflow.log_input recorded the training data as a Dataset."""
     sandbox, result = logged_run
@@ -76,7 +74,6 @@ def test_run_has_a_dataset_input(live_settings, logged_run) -> None:
     assert "training" in contexts, "The dataset input's context should be 'training'."
 
 
-@pytest.mark.skip(reason="Exercise 6 — implement log_dataset_input(), then delete this skip marker.")
 def test_mlflow_digest_differs_from_dvc_md5(live_settings, logged_run) -> None:
     """MLflow's digest and DVC's md5 of the same file are different values."""
     sandbox, result = logged_run
@@ -87,7 +84,6 @@ def test_mlflow_digest_differs_from_dvc_md5(live_settings, logged_run) -> None:
     assert digest != md5[:8]
 
 
-@pytest.mark.skip(reason="Exercise 6 — implement log_data_version(), then delete this skip marker.")
 def test_search_runs_by_data_version_finds_the_run(live_settings, logged_run) -> None:
     """A search by the data's md5 finds the run."""
     sandbox, result = logged_run
@@ -98,7 +94,6 @@ def test_search_runs_by_data_version_finds_the_run(live_settings, logged_run) ->
     )
 
 
-@pytest.mark.skip(reason="Exercise 6 — implement both dvc_link functions, then delete this skip marker.")
 def test_trace_reaches_the_data(live_settings, logged_run) -> None:
     """The traceability chain includes the data version."""
     from week_04_dvc_introduction.registry import (
