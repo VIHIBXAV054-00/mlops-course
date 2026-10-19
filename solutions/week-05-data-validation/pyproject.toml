@@ -1,0 +1,39 @@
+[project]
+name = "week-05-data-validation"
+version = "0.1.0"
+description = "Week 5 guided lab — data contracts and quality gates with Pandera"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "scikit-learn>=1.8.0",
+    "pandas>=2.0.0,<3",       # upper bound: every week stays on one major
+    "python-dotenv>=1.0.0",
+    "mlflow==3.13.0",         # must match the server pin in mlflow.Dockerfile
+    "dvc[s3]>=3.67.1",
+    "joblib>=1.4.0",
+    "pyyaml>=6.0",
+    "pandera[pandas]>=0.32.1",
+]
+
+[dependency-groups]
+test = [
+    "pytest>=8.0.0",
+]
+
+[tool.pytest.ini_options]
+markers = [
+    "live: requires the Docker Compose stack to be running",
+    "dvc: requires a DVC-initialised repo",
+]
+# Warnings raised inside pandera and joblib, not by your code.
+filterwarnings = [
+    "ignore:The behavior of DataFrame concatenation with empty or all-NA entries:FutureWarning:pandera.backends.pandas.error_formatters",
+    "ignore:Setting the shape on a NumPy array has been deprecated:DeprecationWarning:joblib.numpy_pickle",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/week_05_data_validation"]

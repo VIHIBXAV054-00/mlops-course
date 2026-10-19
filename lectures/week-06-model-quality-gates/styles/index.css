@@ -1,0 +1,22 @@
+/* Deck-wide styles. Shared rules live in lectures/_shared/slides.css;
+   add deck-specific rules below the import. */
+@import '../../_shared/slides.css';
+
+/* A 2x2 confusion matrix with row and column labels:
+ * <div class="cm"><div></div><div class="h">says no</div><div class="h">says yes</div>
+ *   <div class="h">no diabetes</div><div class="c">108</div><div class="c bad">17</div> …</div>
+ * `.bad` marks the two error cells. */
+.cm { display: grid; grid-template-columns: auto 1fr 1fr; gap: 0.3rem; align-items: center; }
+.cm .h { font-size: 0.8rem; opacity: 0.8; text-align: center; line-height: 1.15; }
+.cm .c { border: 2px solid #16a34a; background: #f0fdf4; color: #052e16; border-radius: 0.5rem; padding: 0.6rem 0; text-align: center; font-size: 1.5rem; font-weight: 700; }
+.cm .c.bad { border-color: #e11d48; background: #fff1f2; color: #4c0519; }
+
+/* "Can a model satisfy all three at once?": one square per patient, 25 per group. */
+.fair-grid { display:grid; grid-template-columns:9rem auto auto 1fr; gap:0.4rem 1.5rem; align-items:center; margin-top:0.5rem; font-size:0.85rem; }
+.fair-grid .h { font-weight:600; }
+.fair-grid .res { font-size:0.8rem; }
+.pgrid { display:inline-grid; grid-template-columns:repeat(5, 0.7rem); grid-auto-rows:0.7rem; gap:2px; }
+.pgrid span, .legend span { border-radius:2px; display:inline-block; width:0.7rem; height:0.7rem; }
+.pT { background:#16a34a; } .pM { background:#dc2626; } .pF { background:#d97706; } .pN { background:#cbd5e1; }
+.legend { font-size:0.75rem; opacity:0.8; margin-top:0.4rem; }
+.legend span { margin:0 0.2rem 0 0.6rem; vertical-align:middle; }

@@ -1,0 +1,25 @@
+# Environment and secrets — never commit
+.env
+
+# The copy `make gate-fail` keeps while it plants a bad value in the data
+.gate-fail.bak
+
+# Python virtual environment and caches
+.venv/
+__pycache__/
+.pytest_cache/
+*.pyc
+*.pyo
+*.egg-info/
+
+# Docker Compose volumes directory (if using bind mounts)
+volumes/
+
+# Build artifacts
+build/
+dist/
+
+# DVC machine-local state
+.dvc/cache/
+.dvc/tmp/
+.dvc/config.local
