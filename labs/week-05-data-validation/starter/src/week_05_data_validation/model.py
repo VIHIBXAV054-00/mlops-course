@@ -62,10 +62,13 @@ def build_model(
         )
 
     steps = []
-    # TODO(student) Exercise 5: when `impute` is not None, add a step named
-    # "imputer" before the scaler, which fills missing values with the `impute`
-    # strategy. Raise a ValueError for a strategy that is not in IMPUTE_STRATEGIES.
-    # Reference: https://scikit-learn.org/stable/modules/generated/sklearn.impute.SimpleImputer.html
+    if impute is not None:
+        if impute not in IMPUTE_STRATEGIES:
+            raise ValueError(
+                f"Unknown imputation strategy {impute!r}; "
+                f"expected one of {IMPUTE_STRATEGIES}."
+            )
+        steps.append(("imputer", SimpleImputer(strategy=impute)))
     steps.append(("scaler", StandardScaler()))
     steps.append(("classifier", estimator))
     return Pipeline(steps=steps)

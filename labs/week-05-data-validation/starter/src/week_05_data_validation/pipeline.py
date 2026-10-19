@@ -62,12 +62,14 @@ def validate(settings: Settings) -> dict:
     """
     source = _require_measurements(settings)
     frame = read_raw(source)
-    # TODO(student) Exercise 4: check `frame` against RawMeasurements, and add
-    # the zero counts of `sentinel_counts` to the report as "sentinel_zeros".
-    # Write the report to settings.validation_report_path. Then, if the data
-    # failed, raise ValidationFailed with a message that names the number of
-    # failure cases. Return the report.
-    raise NotImplementedError("pipeline.validate is not written yet (Exercise 4).")
+    report = validate_frame(frame, RawMeasurements, source=source.name)
+    report["sentinel_zeros"] = sentinel_counts(frame)
+    write_report(report, settings.validation_report_path)
+    if not report["passed"]:
+        raise ValidationFailed(
+            f"Validation failed with {report['n_failure_cases']} failure case(s)."
+        )
+    return report
 
 
 def prepare(settings: Settings) -> dict:
@@ -78,6 +80,7 @@ def prepare(settings: Settings) -> dict:
     """
     # TODO(student) Exercise 4: stop here unless the last validation passed.
     # `_require_validated` does that check.
+    _require_validated(settings)
     source = _require_measurements(settings)
     frame = load_measurements(source)
     train_frame, test_frame = split_measurements(frame, settings)
@@ -102,13 +105,16 @@ def prepare_model_input(frame) -> tuple:
 
     The sentinel zeros become missing values, and ModelInput checks the result.
     """
-    # TODO(student) Exercise 5: first replace the sentinel zeros in
-    # frame[MODEL_INPUT_COLUMNS] with missing values. Check the result against
-    # ModelInput, and raise ValidationFailed if it fails. Return the features
-    # as float64, the type `predict_one` sends, and the ModelInput report.
-    features = frame[FEATURE_COLUMNS]
+    model_input = to_nullable(frame[MODEL_INPUT_COLUMNS])
+    report = validate_frame(model_input, ModelInput, source="processed split")
+    if not report["passed"]:
+        raise ValidationFailed(
+            f"Model input validation failed with {report['n_failure_cases']} "
+            "failure case(s)."
+        )
+    features = model_input[FEATURE_COLUMNS].astype("float64")
     labels = frame[TARGET_COLUMN]
-    return features, labels, {}
+    return features, labels, report
 
 
 def train(settings: Settings) -> dict:
