@@ -96,7 +96,6 @@ def test_a_metric_the_evaluate_stage_never_wrote_is_skipped_not_passed():
     assert report["summary"]["skipped"] >= 1
 
 
-@pytest.mark.skip(reason="Exercise 3 — fill in the TODOs in _regression_checks and _slice_checks in gates.py, then delete this skip marker.")
 def test_the_all_negative_classifier_is_caught_by_f1_and_not_by_roc_auc():
     """A model that predicts "no diabetes" for everyone has ROC-AUC 0.8407, so only F1 and the floors catch it."""
     degenerate = {"accuracy": 0.6510, "precision": 0.0, "recall": 0.0,
@@ -114,7 +113,6 @@ def test_the_all_negative_classifier_is_caught_by_f1_and_not_by_roc_auc():
 # ── regression against the champion ───────────────────────────────────────────
 
 
-@pytest.mark.skip(reason="Exercise 3 — fill in the TODOs in _regression_checks and _slice_checks in gates.py, then delete this skip marker.")
 def test_a_drop_past_the_tolerance_is_a_no_go():
     report = evaluate_gate(dict(GOOD_METRICS, f1=0.6087), HEALTHY, BASELINE, ACCEPTANCE)
     check = by_id(report)["regression.f1"]
@@ -122,7 +120,6 @@ def test_a_drop_past_the_tolerance_is_a_no_go():
     assert check["delta"] == pytest.approx(-0.0254)
 
 
-@pytest.mark.skip(reason="Exercise 3 — fill in the TODOs in _regression_checks and _slice_checks in gates.py, then delete this skip marker.")
 def test_a_drop_inside_the_tolerance_is_not_a_regression():
     report = evaluate_gate(dict(GOOD_METRICS, f1=0.6300), HEALTHY, BASELINE, ACCEPTANCE)
     assert by_id(report)["regression.f1"]["status"] == "pass"
@@ -139,7 +136,6 @@ def test_no_baseline_is_skipped_and_emphatically_not_passed():
     assert report["summary"]["skipped"] >= 1
 
 
-@pytest.mark.skip(reason="Exercise 3 — fill in the TODOs in _regression_checks and _slice_checks in gates.py, then delete this skip marker.")
 def test_the_primary_metric_choice_flips_the_verdict_on_the_same_model():
     """With `C: 0.01` F1 falls 0.0254 and ROC-AUC rises 0.0100: the primary metric decides the verdict."""
     observed = dict(GOOD_METRICS, f1=0.6087, roc_auc=0.8445, accuracy=0.7656)
@@ -158,7 +154,6 @@ def test_the_primary_metric_choice_flips_the_verdict_on_the_same_model():
 # ── slices ────────────────────────────────────────────────────────────────────
 
 
-@pytest.mark.skip(reason="Exercise 3 — fill in the TODOs in _regression_checks and _slice_checks in gates.py, then delete this skip marker.")
 def test_a_slice_below_min_support_is_skipped_with_the_numbers_in_the_reason():
     thin = slices({"tiny": {"n": 19, "n_positives": 7, "f1": 0.50}})
     report = evaluate_gate(GOOD_METRICS, thin, BASELINE, ACCEPTANCE)
@@ -167,7 +162,6 @@ def test_a_slice_below_min_support_is_skipped_with_the_numbers_in_the_reason():
     assert "19" in check["reason"] and "20" in check["reason"]
 
 
-@pytest.mark.skip(reason="Exercise 3 — fill in the TODOs in _regression_checks and _slice_checks in gates.py, then delete this skip marker.")
 def test_a_slice_with_enough_rows_but_too_few_positives_is_also_skipped():
     """The second support rule, and the one this dataset forces on us."""
     degenerate = slices({"under_normal": {"n": 30, "n_positives": 1, "f1": 0.0}})
@@ -178,7 +172,6 @@ def test_a_slice_with_enough_rows_but_too_few_positives_is_also_skipped():
     assert report["verdict"] == "GO"  # an unmeasurable slice is not a failure
 
 
-@pytest.mark.skip(reason="Exercise 3 — fill in the TODOs in _regression_checks and _slice_checks in gates.py, then delete this skip marker.")
 def test_dropping_min_positives_makes_that_same_slice_fail_for_a_meaningless_reason():
     """With `min_positives: 1` a slice with one positive is gated, and fails on an F1 computed from one patient."""
     degenerate = slices({"under_normal": {"n": 30, "n_positives": 1, "f1": 0.0}})
@@ -189,7 +182,6 @@ def test_dropping_min_positives_makes_that_same_slice_fail_for_a_meaningless_rea
     assert by_id(report)["slice.grp.under_normal"]["status"] == "fail"
 
 
-@pytest.mark.skip(reason="Exercise 3 — fill in the TODOs in _regression_checks and _slice_checks in gates.py, then delete this skip marker.")
 def test_a_gated_slice_below_the_floor_fails():
     weak = slices({"older": {"n": 40, "n_positives": 15, "f1": 0.30}})
     report = evaluate_gate(GOOD_METRICS, weak, BASELINE, ACCEPTANCE)
@@ -197,7 +189,6 @@ def test_a_gated_slice_below_the_floor_fails():
     assert "0.3000" in by_id(report)["slice.grp.older"]["reason"]
 
 
-@pytest.mark.skip(reason="Exercise 3 — fill in the TODOs in _regression_checks and _slice_checks in gates.py, then delete this skip marker.")
 def test_a_slice_far_below_the_aggregate_fails_even_above_the_floor():
     """The gap rule fails a slice that clears the F1 floor but is far below the aggregate F1."""
     lagging = slices({"older": {"n": 40, "n_positives": 15, "f1": 0.52}})
@@ -220,7 +211,6 @@ def test_no_slice_report_is_one_visible_skip_not_silence():
 # ── fairness ──────────────────────────────────────────────────────────────────
 
 
-@pytest.mark.skip(reason="Exercise 5 — fill in the TODO in _fairness_checks in gates.py, then delete this skip marker.")
 def test_a_gap_over_its_limit_is_a_no_go():
     unfair = slices(
         {"big": {"n": 100, "n_positives": 40, "f1": 0.62}},
@@ -243,7 +233,6 @@ def test_an_undefined_gap_is_skipped():
     assert by_id(report)["fairness.grp.tpr_gap"]["status"] == "skipped"
 
 
-@pytest.mark.skip(reason="Exercise 5 — fill in the TODO in _fairness_checks in gates.py, then delete this skip marker.")
 def test_each_gated_axis_has_its_own_limit():
     gap = {"groups": {}, "selection_rate_gap": 0.01, "tpr_gap": 0.22,
            "fpr_gap": 0.01, "equalized_odds_difference": 0.22, "min_group_for_gap": 5}
