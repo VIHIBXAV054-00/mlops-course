@@ -3,11 +3,16 @@
 They check data loading, training and the metrics without the Docker stack.
 `test_mlflow_run_logged` needs the stack, and skips itself when it is down.
 """
+import urllib.error
+import urllib.request
+
 import pytest
+import mlflow
 
 from week_02_local_services.config import load_settings
 from week_02_local_services.data import build_dataset, load_dataframe
 from week_02_local_services.model import evaluate_model, train_logistic_regression
+from week_02_local_services.cli import main
 
 
 def test_dataframe_loads() -> None:

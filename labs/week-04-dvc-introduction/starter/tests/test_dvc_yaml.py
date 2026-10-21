@@ -37,7 +37,6 @@ def _params(entries) -> set:
     return names
 
 
-@pytest.mark.skip(reason="Exercise 5 — add train and evaluate to dvc.yaml, then delete this skip marker.")
 def test_train_and_evaluate_stages_exist(stages) -> None:
     for name in ("train", "evaluate"):
         assert name in stages, f"dvc.yaml has no `{name}` stage."
@@ -46,7 +45,6 @@ def test_train_and_evaluate_stages_exist(stages) -> None:
         )
 
 
-@pytest.mark.skip(reason="Exercise 5 — add train and evaluate to dvc.yaml, then delete this skip marker.")
 def test_train_declares_what_it_reads_and_writes(stages) -> None:
     train = stages["train"]
     deps = _paths(train.get("deps"))
@@ -66,7 +64,6 @@ def test_train_declares_what_it_reads_and_writes(stages) -> None:
     )
 
 
-@pytest.mark.skip(reason="Exercise 5 — add train and evaluate to dvc.yaml, then delete this skip marker.")
 def test_evaluate_declares_every_file_it_reads(stages) -> None:
     evaluate = stages["evaluate"]
     deps = _paths(evaluate.get("deps"))

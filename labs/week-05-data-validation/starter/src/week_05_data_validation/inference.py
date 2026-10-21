@@ -33,10 +33,9 @@ def predict_one(payload: dict, model_path: Path) -> dict:
     prediction, and the model is not loaded.
     """
     result: dict = {"report": {}, "prediction": None, "probability": None}
-    # TODO(student) Exercise 6: check the request with `validate_payload`, and
-    # store its report in result["report"]. The report's "passed" field says
-    # whether the request meets the contract. If it does not, return the result
-    # now, before the model is loaded.
+    result["report"] = validate_payload(payload)
+    if not result["report"]["passed"]:
+        return result
 
     if not model_path.exists():
         raise FileNotFoundError(

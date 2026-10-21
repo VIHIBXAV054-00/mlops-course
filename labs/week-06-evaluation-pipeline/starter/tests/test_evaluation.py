@@ -80,7 +80,6 @@ def test_slicing_after_imputation_invents_group_membership():
     assert imputed_groups["obese"] == raw_groups["obese"] + 2
 
 
-@pytest.mark.skip(reason="Exercise 1 — implement group_scores in evaluation.py, then delete this skip marker.")
 def test_a_metric_over_no_positives_is_none_not_zero():
     """With no positives, `roc_auc` is None and `f1` is 0.0. Read both with `n_positives`."""
     metrics = group_metrics([0, 0, 0], [0, 1, 0], [0.1, 0.6, 0.2], ["g"] * 3)["g"]
@@ -91,14 +90,12 @@ def test_a_metric_over_no_positives_is_none_not_zero():
     assert metrics["fpr"] == pytest.approx(1 / 3, abs=1e-4)
 
 
-@pytest.mark.skip(reason="Exercise 1 — implement group_scores in evaluation.py, then delete this skip marker.")
 def test_fpr_is_none_when_a_group_has_no_negatives():
     metrics = group_metrics([1, 1], [1, 0], [0.9, 0.4], ["g"] * 2)["g"]
     assert metrics["fpr"] is None
     assert metrics["recall"] == 0.5
 
 
-@pytest.mark.skip(reason="Exercise 1 — implement group_scores in evaluation.py, then delete this skip marker.")
 def test_one_positive_produces_two_metrics_that_contradict_each_other():
     """One positive gives F1 0.0 and ROC-AUC 1.0 on the same rows; this is why `min_positives` exists."""
     y_true = [0] * 9 + [1]
@@ -111,7 +108,6 @@ def test_one_positive_produces_two_metrics_that_contradict_each_other():
     assert metrics["roc_auc"] == 1.0
 
 
-@pytest.mark.skip(reason="Exercise 1 — implement group_scores in evaluation.py, then delete this skip marker.")
 def test_every_group_is_scored_in_one_call():
     """One MetricFrame scores all groups; each record matches scoring that group alone."""
     groups = ["a"] * 6 + ["b"] * 6
