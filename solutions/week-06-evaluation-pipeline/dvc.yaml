@@ -1,0 +1,95 @@
+# Week 6: the training pipeline, with a gate at each end.
+#
+#   validate -> prepare -> train -> evaluate -> gate
+#
+# `prepare` depends on reports/validation.json, so a failing dataset stops the
+# pipeline. `gate` writes a verdict and exits non-zero on a NO-GO; `register`
+# and `promote` read that verdict and refuse without a GO.
+# `evaluate` and `gate` take different params blocks: `evaluation` and `acceptance`.
+# See the graph: make dag   Run it: make repro
+# Reference: https://doc.dvc.org/user-guide/project-structure/dvcyaml-files
+
+stages:
+
+  validate:
+    cmd: uv run python src/main.py validate
+    deps:
+      - data/measurements.csv
+      - src/week_06_evaluation_pipeline/schemas.py
+      - src/week_06_evaluation_pipeline/validation.py
+      - src/week_06_evaluation_pipeline/pipeline.py
+    outs:
+      - reports/validation.json:
+          cache: false
+
+  prepare:
+    cmd: uv run python src/main.py prepare
+    deps:
+      - data/measurements.csv
+      - reports/validation.json
+      - src/week_06_evaluation_pipeline/pipeline.py
+      - src/week_06_evaluation_pipeline/data.py
+    params:
+      - random_seed
+      - prepare.test_size
+    outs:
+      - data/processed/train.csv
+      - data/processed/test.csv
+
+  train:
+    cmd: uv run python src/main.py train
+    deps:
+      - data/processed/train.csv
+      - src/week_06_evaluation_pipeline/pipeline.py
+      - src/week_06_evaluation_pipeline/model.py
+      - src/week_06_evaluation_pipeline/schemas.py
+      - src/week_06_evaluation_pipeline/validation.py
+      - src/week_06_evaluation_pipeline/dvc_link.py
+    params:
+      - random_seed
+      - train.family
+      - train.C
+      - train.max_iter
+      - train.impute_strategy
+      - train.n_estimators
+    outs:
+      - models/model.pkl
+      - models/mlflow_run_id.json:
+          cache: false
+
+  evaluate:
+    cmd: uv run python src/main.py evaluate
+    deps:
+      - models/model.pkl
+      - models/mlflow_run_id.json
+      - data/processed/test.csv
+      - src/week_06_evaluation_pipeline/pipeline.py
+      - src/week_06_evaluation_pipeline/model.py
+      - src/week_06_evaluation_pipeline/schemas.py
+      - src/week_06_evaluation_pipeline/validation.py
+      - src/week_06_evaluation_pipeline/evaluation.py
+      - src/week_06_evaluation_pipeline/fairness.py
+    params:
+      - random_seed
+      - evaluation
+    metrics:
+      - metrics/metrics.json:
+          cache: false
+      - metrics/slices.json:
+          cache: false
+
+  gate:
+    cmd: uv run python src/main.py gate
+    deps:
+      - metrics/metrics.json
+      - models/mlflow_run_id.json
+      - metrics/slices.json
+      - metrics/baseline.json
+      - src/week_06_evaluation_pipeline/gates.py
+      - src/week_06_evaluation_pipeline/baseline.py
+      - src/week_06_evaluation_pipeline/pipeline.py
+    params:
+      - acceptance
+    outs:
+      - reports/gate.json:
+          cache: false

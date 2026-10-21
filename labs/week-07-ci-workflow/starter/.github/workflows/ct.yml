@@ -1,0 +1,32 @@
+# TODO(student) Exercise 5: write the model path. tests/test_workflows.py checks it.
+# - Triggers: workflow_dispatch with a required `reason` input, and a schedule with a
+#   cron. Not push.
+# - defaults.run.working-directory: this lab's folder, as in ci.yml.
+# - Call make targets only, never src/main.py. Stop at the gate: no register, promote or
+#   deploy.
+# - One job and its steps:
+#
+#   retrain
+#     check out the code, set up uv, install all groups, then these named steps:
+#     - "Why this run happened": prints the trigger and the reason
+#     - "Rebuild the dataset"
+#     - "retrain and gate": through the Makefile
+#     - "Publish the gate verdict to the job summary": writes `make gate-summary` to
+#       $GITHUB_STEP_SUMMARY, also when an earlier step failed
+#     - "Annotate a NO-GO": an ::error:: line, only when an earlier step failed
+#     - "Upload the evidence": metrics/, reports/ and models/model.pkl, also when an
+#       earlier step failed
+#
+# Reference: https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows
+name: Week 7 CT
+
+on:
+  workflow_dispatch:
+
+jobs:
+  todo:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          echo "ct.yml is not written yet (Exercise 5)."
+          exit 1

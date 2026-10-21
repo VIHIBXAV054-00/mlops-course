@@ -1,0 +1,74 @@
+# Pipeline hyperparameters and release policy. DVC records these values in dvc.lock.
+#
+# `evaluation` is what we measure; `acceptance` is whether it passes.
+# `evaluate` depends on `evaluation` and `gate` on `acceptance`, so a threshold
+# change re-runs only `gate`, and a slice change re-runs `evaluate` and `gate`.
+
+random_seed: 42
+
+prepare:
+  test_size: 0.25
+
+train:
+  family: logreg
+  C: 1.0
+  max_iter: 1000
+  # How the model's imputer fills missing values: median, mean or most_frequent.
+  impute_strategy: median
+  # Used only when `family: rf` (Exercise 6).
+  n_estimators: 100
+
+# Slice definitions. Bins are left-closed, right-open: [21, 30) means 21 to 29.
+# Slices are cut on the raw frame, before the imputer runs.
+evaluation:
+  slices:
+    age_band:
+      column: age
+      kind: bins
+      bins: [21, 30, 40, 50, .inf]
+      labels: ["21-29", "30-39", "40-49", "50+"]
+
+    bmi_band:
+      column: bmi
+      kind: bins
+      bins: [0, 25, 30, .inf]
+      labels: ["under_normal", "overweight", "obese"]
+      # A bmi of 0 is a missing measurement, so it gets its own group.
+      missing_label: "missing"
+
+    insulin_missing:
+      column: insulin
+      kind: missing_flag
+      labels: ["insulin_present", "insulin_missing"]
+
+# The acceptance criteria: what "ready to ship" means.
+acceptance:
+  # Stamped onto the MLflow run. Change it whenever a threshold changes.
+  criteria_version: "1.0.0"
+
+  # Absolute floors. The majority-class accuracy on the test set is 0.6510.
+  minimum:
+    accuracy: 0.70
+    f1: 0.55
+    roc_auc: 0.75
+
+  # Compared with the champion. max_drop is a noise band, not a budget.
+  regression:
+    primary_metric: f1
+    max_drop: 0.01
+    also_report: [accuracy, roc_auc]
+
+  # A slice with too few rows or positives is skipped, not judged.
+  slice_rules:
+    min_support: 20
+    min_positives: 10
+    min_f1: 0.50
+    max_f1_gap: 0.10      # versus the aggregate F1
+
+  # The gated axes and their limits; an axis not listed is only reported.
+  fairness:
+    insulin_missing:
+      max_selection_rate_gap: 0.10
+      max_tpr_gap: 0.20
+    age_band:
+      max_tpr_gap: 0.25     # small groups: one patient moves a TPR by about 0.05

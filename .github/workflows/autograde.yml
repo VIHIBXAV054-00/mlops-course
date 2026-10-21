@@ -1,18 +1,5 @@
-# Course autograding — runs each lab's tests on push / PR.
-#
-# This is COURSE GRADING INFRASTRUCTURE, not part of any lab exercise. Week 7
-# teaches you to author your own CI workflows for your project; this file just
-# checks the labs. It auto-discovers every lab, so new weeks are picked up with
-# no edits.
-#
-# ACTION PINS — verified 2026-08-06 against the GitHub API, and re-verify each
-# term. Two things to check:
-#
-#   1. is there a NEWER major?  (all six pins here were 1-4 majors behind when this was written)
-#   2. does the tag you are about to write actually EXIST?  `astral-sh/setup-uv`
-#      publishes releases past its newest major tag: v9.0.0 is released, and
-#      there is no `v9` tag, so `@v9` fails at "Set up job" with "unable to find
-#      version v9". Pin the exact release when a major tag is missing.
+# Course autograding: runs every lab's tests on each push and pull request.
+# It finds the labs by folder, so a new week needs no edit here.
 name: Autograde labs
 
 on:
@@ -29,13 +16,8 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v9.0.0
 
-      # A STALE LOCK MUST FAIL, NOT SILENTLY RE-RESOLVE. `uv sync` and `uv run`
-      # both rewrite a lock that has drifted from its pyproject.toml, so without
-      # this gate CI would install whatever resolves on the day and still report
-      # green.
-      #
-      # `uv lock --check` resolves and asserts nothing moved, without writing.
-      # `--locked` / `--frozen` below are the same guarantee at install time.
+      # A uv.lock that no longer matches pyproject.toml fails the build,
+      # instead of being re-resolved silently.
       - name: Check every lab's uv.lock is up to date
         run: |
           set -e

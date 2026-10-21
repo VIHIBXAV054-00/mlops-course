@@ -1,0 +1,249 @@
+schema: '2.0'
+stages:
+  validate:
+    cmd: uv run python src/main.py validate
+    deps:
+    - path: data/measurements.csv
+      hash: md5
+      md5: a8fd7b4f0d6d1bc4e378a8f76c5fff0c
+      size: 31750
+    - path: src/week_06_evaluation_pipeline/pipeline.py
+      hash: md5
+      md5: 187deff2712f7b6e0119513fa3eee949
+      size: 14612
+    - path: src/week_06_evaluation_pipeline/schemas.py
+      hash: md5
+      md5: 02731af6c6138f3d3a6fe3e4ab878667
+      size: 4483
+    - path: src/week_06_evaluation_pipeline/validation.py
+      hash: md5
+      md5: e6f9b8f1cf7b63da74afa51f18b1fb03
+      size: 5595
+    outs:
+    - path: reports/validation.json
+      hash: md5
+      md5: c18d486ab8ab86bbce95f85d2ec12525
+      size: 564
+  prepare:
+    cmd: uv run python src/main.py prepare
+    deps:
+    - path: data/measurements.csv
+      hash: md5
+      md5: a8fd7b4f0d6d1bc4e378a8f76c5fff0c
+      size: 31750
+    - path: reports/validation.json
+      hash: md5
+      md5: c18d486ab8ab86bbce95f85d2ec12525
+      size: 564
+    - path: src/week_06_evaluation_pipeline/data.py
+      hash: md5
+      md5: ff87e67888dc9df916cb89a308b48d93
+      size: 2249
+    - path: src/week_06_evaluation_pipeline/pipeline.py
+      hash: md5
+      md5: 187deff2712f7b6e0119513fa3eee949
+      size: 14612
+    params:
+      params.yaml:
+        prepare.test_size: 0.25
+        random_seed: 42
+    outs:
+    - path: data/processed/test.csv
+      hash: md5
+      md5: c0893fb60844c5f31b0f5b7c2e9df865
+      size: 8041
+    - path: data/processed/train.csv
+      hash: md5
+      md5: d9eba76cf921c13f5af2032d09a12f35
+      size: 23818
+  train:
+    cmd: uv run python src/main.py train
+    deps:
+    - path: data/processed/train.csv
+      hash: md5
+      md5: d9eba76cf921c13f5af2032d09a12f35
+      size: 23818
+    - path: src/week_06_evaluation_pipeline/dvc_link.py
+      hash: md5
+      md5: b6aa278328a2024ae1398178c96031e7
+      size: 2430
+    - path: src/week_06_evaluation_pipeline/model.py
+      hash: md5
+      md5: 48c407d92c00098145b1bf4a4849ea18
+      size: 3089
+    - path: src/week_06_evaluation_pipeline/pipeline.py
+      hash: md5
+      md5: 187deff2712f7b6e0119513fa3eee949
+      size: 14612
+    - path: src/week_06_evaluation_pipeline/schemas.py
+      hash: md5
+      md5: 02731af6c6138f3d3a6fe3e4ab878667
+      size: 4483
+    - path: src/week_06_evaluation_pipeline/validation.py
+      hash: md5
+      md5: e6f9b8f1cf7b63da74afa51f18b1fb03
+      size: 5595
+    params:
+      params.yaml:
+        random_seed: 42
+        train.C: 1.0
+        train.family: logreg
+        train.impute_strategy: median
+        train.max_iter: 1000
+        train.n_estimators: 100
+    outs:
+    - path: models/mlflow_run_id.json
+      hash: md5
+      md5: b4929801618548a92c0feb6dfc0bd5f7
+      size: 82
+    - path: models/model.pkl
+      hash: md5
+      md5: f6f7d2832bfbd795008dfc54b4be0347
+      size: 2273
+  evaluate:
+    cmd: uv run python src/main.py evaluate
+    deps:
+    - path: data/processed/test.csv
+      hash: md5
+      md5: c0893fb60844c5f31b0f5b7c2e9df865
+      size: 8041
+    - path: models/mlflow_run_id.json
+      hash: md5
+      md5: b4929801618548a92c0feb6dfc0bd5f7
+      size: 82
+    - path: models/model.pkl
+      hash: md5
+      md5: f6f7d2832bfbd795008dfc54b4be0347
+      size: 2273
+    - path: src/week_06_evaluation_pipeline/evaluation.py
+      hash: md5
+      md5: 5974fd832c0fd9352218f676e9413881
+      size: 8159
+    - path: src/week_06_evaluation_pipeline/fairness.py
+      hash: md5
+      md5: 70b661f14b99ac29c2b0e85316bbe9f9
+      size: 5261
+    - path: src/week_06_evaluation_pipeline/model.py
+      hash: md5
+      md5: 48c407d92c00098145b1bf4a4849ea18
+      size: 3089
+    - path: src/week_06_evaluation_pipeline/pipeline.py
+      hash: md5
+      md5: 187deff2712f7b6e0119513fa3eee949
+      size: 14612
+    - path: src/week_06_evaluation_pipeline/schemas.py
+      hash: md5
+      md5: 02731af6c6138f3d3a6fe3e4ab878667
+      size: 4483
+    - path: src/week_06_evaluation_pipeline/validation.py
+      hash: md5
+      md5: e6f9b8f1cf7b63da74afa51f18b1fb03
+      size: 5595
+    params:
+      params.yaml:
+        evaluation:
+          slices:
+            age_band:
+              column: age
+              kind: bins
+              bins:
+              - 21
+              - 30
+              - 40
+              - 50
+              - .inf
+              labels:
+              - 21-29
+              - 30-39
+              - 40-49
+              - 50+
+            bmi_band:
+              column: bmi
+              kind: bins
+              bins:
+              - 0
+              - 25
+              - 30
+              - .inf
+              labels:
+              - under_normal
+              - overweight
+              - obese
+              missing_label: missing
+            insulin_missing:
+              column: insulin
+              kind: missing_flag
+              labels:
+              - insulin_present
+              - insulin_missing
+        random_seed: 42
+    outs:
+    - path: metrics/metrics.json
+      hash: md5
+      md5: 6a5f49039d799a608192bdbccb853a27
+      size: 105
+    - path: metrics/slices.json
+      hash: md5
+      md5: 638d4ebe56c881bedc2491b27dbf9aa2
+      size: 4975
+  gate:
+    cmd: uv run python src/main.py gate
+    deps:
+    - path: metrics/baseline.json
+      hash: md5
+      md5: 20a2ddf457de05236fc2eb7371d6ddc7
+      size: 253
+    - path: metrics/metrics.json
+      hash: md5
+      md5: 6a5f49039d799a608192bdbccb853a27
+      size: 105
+    - path: metrics/slices.json
+      hash: md5
+      md5: 638d4ebe56c881bedc2491b27dbf9aa2
+      size: 4975
+    - path: models/mlflow_run_id.json
+      hash: md5
+      md5: b4929801618548a92c0feb6dfc0bd5f7
+      size: 82
+    - path: src/week_06_evaluation_pipeline/baseline.py
+      hash: md5
+      md5: ab462611567c55570212eadeb34e2403
+      size: 3539
+    - path: src/week_06_evaluation_pipeline/gates.py
+      hash: md5
+      md5: 9169757200a93f318cb5e599bec1b869
+      size: 13091
+    - path: src/week_06_evaluation_pipeline/pipeline.py
+      hash: md5
+      md5: 187deff2712f7b6e0119513fa3eee949
+      size: 14612
+    params:
+      params.yaml:
+        acceptance:
+          criteria_version: 1.0.0
+          minimum:
+            accuracy: 0.7
+            f1: 0.55
+            roc_auc: 0.75
+          regression:
+            primary_metric: f1
+            max_drop: 0.01
+            also_report:
+            - accuracy
+            - roc_auc
+          slice_rules:
+            min_support: 20
+            min_positives: 10
+            min_f1: 0.5
+            max_f1_gap: 0.1
+          fairness:
+            insulin_missing:
+              max_selection_rate_gap: 0.1
+              max_tpr_gap: 0.2
+            age_band:
+              max_tpr_gap: 0.25
+    outs:
+    - path: reports/gate.json
+      hash: md5
+      md5: da3611123490dfb22051cde40a260498
+      size: 4706

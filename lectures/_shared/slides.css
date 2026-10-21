@@ -137,3 +137,15 @@
 .fn-inline .footnotes li { display: inline; margin-right: 0.8rem; }
 .fn-inline .footnotes ol { list-style: none; padding-left: 0; }
 .fn-inline .footnotes p { display: inline; margin: 0; }
+
+/* Centre a slide's content vertically under its title, so a short slide is not empty in
+ * its lower half. Wrap everything after the title (and the corner icon) in
+ * <div class="middle"> ... </div>, with blank lines inside so Markdown still renders. */
+.slidev-layout:has(> .middle) { display: flex; flex-direction: column; }
+.slidev-layout > .middle { flex: 1; display: flex; flex-direction: column; justify-content: safe center; }
+/* The `fact` layout's wrapper is meant to centre (my-auto) but is stretched to the full
+ * height, so its content sat at the top. Centre it the same way. */
+.slidev-layout.fact > .my-auto { display: flex; flex-direction: column; justify-content: safe center; }
+/* The `center` layout's grid utilities do not apply in our build, so it rendered as a
+ * block at the top of the slide. Restore the centring Slidev intends. */
+.slidev-layout.center { display: grid; place-content: center; }

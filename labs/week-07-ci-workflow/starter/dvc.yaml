@@ -1,0 +1,95 @@
+# Week 7: the training pipeline, with a gate at each end.
+#
+#   validate -> prepare -> train -> evaluate -> gate
+#
+# `prepare` depends on reports/validation.json, so a failing dataset stops the
+# pipeline. `gate` writes a verdict and exits non-zero on a NO-GO; `register`
+# and `promote` read that verdict and refuse without a GO.
+# `evaluate` and `gate` take different params blocks: `evaluation` and `acceptance`.
+# See the graph: make dag   Run it: make repro
+# Reference: https://doc.dvc.org/user-guide/project-structure/dvcyaml-files
+
+stages:
+
+  validate:
+    cmd: uv run python src/main.py validate
+    deps:
+      - data/measurements.csv
+      - src/week_07_ci_workflow/schemas.py
+      - src/week_07_ci_workflow/validation.py
+      - src/week_07_ci_workflow/pipeline.py
+    outs:
+      - reports/validation.json:
+          cache: false
+
+  prepare:
+    cmd: uv run python src/main.py prepare
+    deps:
+      - data/measurements.csv
+      - reports/validation.json
+      - src/week_07_ci_workflow/pipeline.py
+      - src/week_07_ci_workflow/data.py
+    params:
+      - random_seed
+      - prepare.test_size
+    outs:
+      - data/processed/train.csv
+      - data/processed/test.csv
+
+  train:
+    cmd: uv run python src/main.py train
+    deps:
+      - data/processed/train.csv
+      - src/week_07_ci_workflow/pipeline.py
+      - src/week_07_ci_workflow/model.py
+      - src/week_07_ci_workflow/schemas.py
+      - src/week_07_ci_workflow/validation.py
+      - src/week_07_ci_workflow/dvc_link.py
+    params:
+      - random_seed
+      - train.family
+      - train.C
+      - train.max_iter
+      - train.impute_strategy
+      - train.n_estimators
+    outs:
+      - models/model.pkl
+      - models/mlflow_run_id.json:
+          cache: false
+
+  evaluate:
+    cmd: uv run python src/main.py evaluate
+    deps:
+      - models/model.pkl
+      - models/mlflow_run_id.json
+      - data/processed/test.csv
+      - src/week_07_ci_workflow/pipeline.py
+      - src/week_07_ci_workflow/model.py
+      - src/week_07_ci_workflow/schemas.py
+      - src/week_07_ci_workflow/validation.py
+      - src/week_07_ci_workflow/evaluation.py
+      - src/week_07_ci_workflow/fairness.py
+    params:
+      - random_seed
+      - evaluation
+    metrics:
+      - metrics/metrics.json:
+          cache: false
+      - metrics/slices.json:
+          cache: false
+
+  gate:
+    cmd: uv run python src/main.py gate
+    deps:
+      - metrics/metrics.json
+      - models/mlflow_run_id.json
+      - metrics/slices.json
+      - metrics/baseline.json
+      - src/week_07_ci_workflow/gates.py
+      - src/week_07_ci_workflow/baseline.py
+      - src/week_07_ci_workflow/pipeline.py
+    params:
+      - acceptance
+    outs:
+      - reports/gate.json:
+          cache: false

@@ -1,0 +1,31 @@
+{
+  "source": "measurements.csv",
+  "schema": "RawMeasurements",
+  "schema_version": "1.0.0",
+  "rows": 768,
+  "columns": [
+    "measurement_date",
+    "pregnancies",
+    "glucose",
+    "blood_pressure",
+    "skin_thickness",
+    "insulin",
+    "bmi",
+    "diabetes_pedigree",
+    "age",
+    "outcome"
+  ],
+  "passed": true,
+  "n_failure_cases": 0,
+  "truncated": false,
+  "failure_cases": [],
+  "by_check": {},
+  "by_column": {},
+  "sentinel_zeros": {
+    "glucose": 5,
+    "blood_pressure": 35,
+    "skin_thickness": 227,
+    "insulin": 374,
+    "bmi": 11
+  }
+}

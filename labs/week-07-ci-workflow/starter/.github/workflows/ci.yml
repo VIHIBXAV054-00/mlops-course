@@ -1,0 +1,36 @@
+# TODO(student) Exercise 4: write the code path. tests/test_workflows.py checks it.
+# - Triggers: push and pull_request, each with a `paths:` filter for this lab and the
+#   installed workflow file.
+# - defaults.run.working-directory: this lab's folder, from the repository root.
+# - Call make targets only, never src/main.py. Pin every action to a tag that exists.
+# - The jobs and their steps:
+#
+#   lint
+#     check out the code, set up uv, install the lint group, run the linter
+#
+#   test: a matrix over the layers unit, data and eval, with fail-fast off
+#     check out the code, set up uv, install all groups, run this copy's layer
+#
+#   pipeline: needs lint and test
+#     check out the code, set up uv, install all groups, then these named steps:
+#     - "Rebuild the dataset"
+#     - "validate -> prepare -> train -> evaluate -> gate": runs `make ci`
+#     - "Publish the gate verdict to the job summary": writes `make gate-summary` to
+#       $GITHUB_STEP_SUMMARY, also when an earlier step failed
+#     - "Annotate a NO-GO": an ::error:: line, only when an earlier step failed
+#     - "Upload the evidence": metrics/, reports/ and models/model.pkl, also when an
+#       earlier step failed
+#
+# Reference: https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax
+name: Week 7 CI
+
+on:
+  workflow_dispatch:
+
+jobs:
+  todo:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          echo "ci.yml is not written yet (Exercise 4)."
+          exit 1
