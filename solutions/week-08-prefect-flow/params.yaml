@@ -1,0 +1,170 @@
+# Pipeline hyperparameters AND release policy — the single source of truth.
+#
+# Why a FILE and not the .env you have used for four weeks: DVC can only hash a
+# file. A hyperparameter set through the environment is invisible to dvc.lock,
+# so the lock file would happily claim a run used values it did not. Moving them
+# here is what makes `dvc repro` able to say "train is stale because C changed"
+# — and what makes `dvc params diff` possible at all.
+#
+# NEW IN WEEK 6, and it is the week's design decision: the last two blocks are
+# separate on purpose.
+#
+#   evaluation:  WHAT we measure.   Changing it changes the EVIDENCE.
+#   acceptance:  WHETHER it passes. Changing it changes only the DECISION.
+#
+# DVC makes the difference visible, which is the whole reason to bother.
+# `evaluate` declares `params: [random_seed, evaluation]`; `gate` declares
+# `params: [acceptance]`. So:
+#
+#   change acceptance.minimum.f1  ->  `make repro` re-runs ONLY `gate`.
+#                                     Nothing is retrained. A policy change is
+#                                     not a measurement change.
+#   change evaluation.slices      ->  `evaluate` and `gate` both re-run, because
+#                                     the evidence itself is different.
+#   change train.C                ->  train, evaluate and gate re-run.
+#
+# Fold the two into one block and every threshold edit invalidates the model.
+# That is slow, and worse, it quietly teaches that changing your mind about what
+# "good enough" means requires new evidence. It does not.
+
+random_seed: 42
+
+prepare:
+  test_size: 0.25
+
+train:
+  family: logreg
+  C: 1.0
+  max_iter: 1000
+  # New in Week 5. How the model fills the nulls that the sentinel conversion
+  # created: median, mean or most_frequent.
+  impute_strategy: median
+  # New in Week 6. Used only when `family: rf`. Exercise 6 switches families to
+  # get a model that is genuinely BETTER (F1 0.6452 against logreg's 0.6341), so
+  # that the ratchet has something to ratchet.
+  n_estimators: 100
+
+# ── WHAT WE MEASURE ───────────────────────────────────────────────────────────
+#
+# Slice definitions. "Which groups do we care about?" is a question about the
+# problem, not about the code, so it lives in configuration where a clinician
+# could argue with it.
+#
+# Bin edges are LEFT-CLOSED, RIGHT-OPEN everywhere: [21, 30) means "21 to 29".
+# One convention for every slice, so nobody has to work out which end of a band
+# a patient falls on. The last edge is `.inf`.
+#
+# All three slices are computed on the RAW, pre-imputation frame. That is not a
+# detail. Cut `bmi_band` after Week 5's SimpleImputer has run and the two
+# patients whose BMI was never measured silently join whichever band the median
+# lands in: `obese` grows from 112 rows to 114 and its F1 moves 0.6792 -> 0.6729,
+# while the `missing` slice ceases to exist. Slicing after imputation invents
+# group membership.
+evaluation:
+  slices:
+    age_band:
+      column: age
+      kind: bins
+      bins: [21, 30, 40, 50, .inf]
+      labels: ["21-29", "30-39", "40-49", "50+"]
+
+    bmi_band:
+      column: bmi
+      kind: bins
+      bins: [0, 25, 30, .inf]
+      labels: ["under_normal", "overweight", "obese"]
+      # A recorded bmi of 0 is not a small BMI, it is an absent measurement.
+      # It gets its own group rather than falling into the lowest band.
+      missing_label: "missing"
+
+    insulin_missing:
+      column: insulin
+      kind: missing_flag
+      labels: ["insulin_present", "insulin_missing"]
+
+# ── WHETHER IT IS GOOD ENOUGH ─────────────────────────────────────────────────
+#
+# The acceptance criteria. This block is the deliverable of Exercise 3: a
+# written, versioned, reviewable statement of what "ready to ship" means, agreed
+# BEFORE the run rather than negotiated after seeing the number.
+#
+# (This lab has to invert that order to be teachable — the thresholds below were
+# chosen after measuring the shipped model. In a real project, agreeing them
+# afterwards is how a gate becomes a formality.)
+acceptance:
+  # Bump this whenever a threshold moves. It is stamped onto the MLflow run, so
+  # "it passed the gate" keeps a referent after somebody edits this file.
+  criteria_version: "1.0.0"
+
+  # ── Absolute floors. True regardless of what came before. ──
+  #
+  # accuracy 0.70 is chosen, not inherited. The majority-class rate on this test
+  # set is 0.6510, so a model that predicts "no diabetes" for all 192 patients
+  # scores 0.6510. A floor a constant classifier clears is not a floor.
+  minimum:
+    accuracy: 0.70
+    f1: 0.55
+    roc_auc: 0.75
+
+  # ── Is this worse than the model we already have? ──
+  #
+  # Two human decisions live here.
+  #
+  # WHICH metric is primary is not academic on this dataset: `C: 0.01` drops F1
+  # by 0.0254 while ROC-AUC RISES by 0.0100 and accuracy does not move at all.
+  # Gate on ROC-AUC and that change is an improvement; gate on F1 and it is a
+  # regression. Same model, same rows.
+  #
+  # max_drop is a NOISE BAND, not a budget for getting worse. 0.01 is roughly
+  # what re-running this pipeline on another machine can move the fourth
+  # decimal by — it is not a statement that losing 1% of F1 is acceptable.
+  regression:
+    primary_metric: f1
+    max_drop: 0.01
+    also_report: [accuracy, roc_auc]
+
+  # ── Is it good enough for each group, or only on average? ──
+  #
+  # TWO support rules, and both are forced by this dataset rather than invented:
+  #
+  #   min_support   the worst slice here is patients 50 and over (ROC-AUC 0.6071
+  #                 against 0.8345 overall) and it has 19 rows. The worst slice
+  #                 is routinely the one you have the least evidence about, and
+  #                 gating on 19 patients means one relabelled record flips a
+  #                 release. It is SKIPPED, loudly — read the skips.
+  #   min_positives the under/normal-BMI slice has 30 rows (enough support) and
+  #                 exactly ONE positive, which the model missed. Its F1 is
+  #                 0.0000 and its ROC-AUC on the same 30 patients is 1.0000.
+  #                 A classification metric over one positive is not a metric.
+  slice_rules:
+    min_support: 20
+    min_positives: 10
+    min_f1: 0.50
+    max_f1_gap: 0.10
+
+  # ── Are the errors distributed in a way we are willing to defend? ──
+  #
+  # One key per gated axis, each with its own limits; an axis not listed is
+  # report-only.
+  #
+  # `insulin_missing`: whether an insulin measurement was ever taken is a fact
+  # about access to care, not about the patient's body. Its selection-rate gap is
+  # 0.0070 while its TPR gap is 0.1562: two defensible criteria, opposite
+  # verdicts, same model. That is why both are gated.
+  #
+  # `age_band`: prevalence genuinely rises with age (22.3% under 30 against 54.8%
+  # at 40-49), so its selection-rate gap of 0.3030 is expected and only reported.
+  # A patient with diabetes should still be found as often at any age, so its TPR
+  # gap (0.2059) is gated, with a looser limit: the age groups are small, and one
+  # patient found or missed moves a group's TPR by about 0.05.
+  #
+  # The limitation no configuration can fix: the axes an audit of a medical
+  # model would most want — sex, ethnicity, income, clinic — are not in this
+  # dataset and cannot be added afterwards. Every subject is female, of Pima
+  # heritage, and at least 21. You cannot audit a group you did not record.
+  fairness:
+    insulin_missing:
+      max_selection_rate_gap: 0.10
+      max_tpr_gap: 0.20
+    age_band:
+      max_tpr_gap: 0.25

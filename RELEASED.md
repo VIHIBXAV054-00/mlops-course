@@ -1,6 +1,6 @@
 # What is published
 
-Generated 2026-10-29. Course materials are released week by week —
+Generated 2026-11-02. Course materials are released week by week —
 a week appears here on the morning of its lecture.
 
 Run `git pull upstream main` in your fork to fetch the latest.
@@ -16,7 +16,7 @@ Run `git pull upstream main` in your fork to fetch the latest.
 | 6 | model quality gates | published |
 | 7 | ci ct | published |
 | 8 | orchestration | published |
-| 9 | serving | arrives 2026-11-02 |
+| 9 | serving | published |
 | 10 | rollout strategies | arrives 2026-11-09 |
 | 11 | observability | arrives 2026-11-16 |
 | 12 | drift monitoring | arrives 2026-11-23 |

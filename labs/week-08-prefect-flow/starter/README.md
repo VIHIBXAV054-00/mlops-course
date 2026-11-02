@@ -169,13 +169,15 @@ A team also needs to decide what happens before a trained model is released. In 
 you serve a scheduled flow and inspect a run.
 
 Implement `scheduled_flow` in `flows.py`. It pulls the current data, then runs the training flow
-with `require_committed_params=True`. It does not register or promote the model. Remove the skip marker in
-"The scheduled flow" section of `tests/test_flows.py`, and the test checks all three.
+with `require_committed_params=True`. It does not register or promote the model.
 
 Run `make serve` to serve the flow on a cron schedule. The default is every 5 minutes; set
 `CRON='* * * * *'` to run it every minute. Leave it running until at least one scheduled run
 starts. Check the run in the UI, then stop the process with Ctrl-C. Record the flow-run name and
 its final state.
+
+**Check:** remove the skip marker in "The scheduled flow" section of `tests/test_flows.py`, and
+the test checks all three.
 
 1. Is passing the quality gate enough to release a model trained by a scheduled job? What other
    checks or approvals would you require before it reaches users?
@@ -229,7 +231,8 @@ GitHub Actions workflows.
 ## Submission
 
 Submit the commit from Finish. It contains your code and `answers.md`, with the scheduled run's
-name and state at the top. Do not include `.env` or `.venv/`.
+name and state at the top. Do not include `.env` or `.venv/`. Push the commit, open it on
+GitHub (`https://github.com/<you>/<repo>/commit/<hash>`), and upload that URL to Moodle.
 
 ## Deviations from the tutorials
 

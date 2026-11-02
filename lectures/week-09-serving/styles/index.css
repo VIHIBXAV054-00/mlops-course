@@ -1,0 +1,3 @@
+/* Deck-wide styles. Shared rules live in lectures/_shared/slides.css;
+   add deck-specific rules below the import. */
+@import '../../_shared/slides.css';

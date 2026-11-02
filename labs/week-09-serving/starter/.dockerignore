@@ -1,0 +1,24 @@
+# Files that `docker build` does not send to Docker. The image installs its own packages.
+
+.venv/
+
+# DVC's local cache and machine-local state. Data, not source.
+.dvc/cache/
+.dvc/tmp/
+.dvc/config.local
+
+# Tool caches.
+.pytest_cache/
+.ruff_cache/
+__pycache__/
+*.pyc
+
+# Secrets and your answers stay out of the image.
+.env
+answers.md
+
+# Build outputs.
+build/
+dist/
+*.egg-info/
+
