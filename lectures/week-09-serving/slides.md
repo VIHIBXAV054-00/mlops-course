@@ -1407,7 +1407,7 @@ Section 1 asked what must travel with the model; an image is the box that carrie
 </div>
 
 <!--
-From the lab's `serve.Dockerfile`, bottom layer first, shortened: it also copies `uv`, `params.yaml` and the data file, and writes `baked.json` from the build arguments. The base image gives Debian and Python 3.12. Docker rebuilds a changed layer and every layer above it, so what changes most often goes last. A new model version changes the build arguments and `model.pkl`; `uv sync` stays cached, and the rebuild took under a second (30 Oct 2026).
+From the lab's `serve.Dockerfile`, bottom layer first, shortened: it also copies `uv`, `params.yaml` and the data file, and writes `models/build_info.json` from the build arguments. The base image gives Debian and Python 3.12. Docker rebuilds a changed layer and every layer above it, so what changes most often goes last. A new model version changes the build arguments and `model.pkl`; `uv sync` stays cached, and the rebuild took under a second (30 Oct 2026).
 `--locked` refuses a stale lock, as in CI: the image cannot get package versions that training did not have.
 -->
 
@@ -1436,6 +1436,8 @@ From the lab's `serve.Dockerfile`, bottom layer first, shortened: it also copies
   <div class="arrow-l">download<span class="arrow">←</span></div>
   <div class="node amber no-shrink" style="width:9rem"><ph-database class="ic" /><b>Registry</b><br><small>at every start</small></div>
 </div>
+
+<div class="text-center text-sm" style="margin-top:1rem"><b>Bake</b>: copy the model into the image when you build it. <b>Fetch</b>: download it when the container starts.</div>
 
 </div>
 

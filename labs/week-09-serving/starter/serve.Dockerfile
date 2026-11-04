@@ -29,7 +29,7 @@ LABEL org.opencontainers.image.title="diabetes-prediction" \
 COPY models/model.pkl ./models/model.pkl
 RUN printf '{"model_version": "%s", "run_id": "%s", "gate_verdict": "%s", "source": "%s"}\n' \
       "${MODEL_VERSION}" "${RUN_ID}" "${GATE_VERDICT}" "${MODEL_SOURCE}" \
-      > ./models/baked.json
+      > ./models/build_info.json
 
 # The app reads these two files when it starts.
 COPY params.yaml ./params.yaml

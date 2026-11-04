@@ -198,8 +198,8 @@ bench: ensure-data
 ## With the stack up, the image records the champion's version; without it, "unknown".
 image: ensure-env
 	@set -e; \
-	  eval "$$(uv run python src/main.py bake-info)"; \
-	  echo "baking: version=$$MODEL_VERSION run=$$RUN_ID gate=$$GATE_VERDICT source=$$MODEL_SOURCE"; \
+	  eval "$$(uv run python src/main.py build-info)"; \
+	  echo "building: version=$$MODEL_VERSION run=$$RUN_ID gate=$$GATE_VERDICT source=$$MODEL_SOURCE"; \
 	  test "$$GATE_VERDICT" = "GO" || { echo; \
 	    echo "REFUSING to build: the recorded gate verdict is '$$GATE_VERDICT'."; \
 	    echo "Only a model with a GO verdict may be released, and an image is a release."; \

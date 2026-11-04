@@ -114,25 +114,45 @@ for each of the six changed requests.
 
 Your service can check a request before the model sees it and tell the caller what went wrong.
 FastAPI uses Pydantic to check the types; the `PredictionInput` data contract checks the values,
-including whether a glucose of 0 was sent as a measurement. The service also answers `/health`,
-so Kubernetes and the people on call can check whether it is ready and which model it runs. In
-this exercise, you write both endpoints and send the requests from Exercise 1 again.
+including whether a glucose of 0 was sent as a measurement. Callers and Kubernetes read the
+status code, not the message. 422 means the request is wrong, and sending it again will not
+help. 503 means this pod is not ready yet, so Kubernetes sends the traffic to another pod. The
+service also answers `/health`, so Kubernetes and the people on call can check whether it is
+ready and which model it runs. In this exercise, you write both endpoints and send the requests
+from Exercise 1 again.
 
-1. In `api.py`, read `PredictionRequest`, `PredictionResponse`, `HealthResponse` and the start of
-   `create_app`. The model is loaded once, when the app starts.
-2. Write `GET /health` and `POST /predict` inside `create_app`, as the TODO describes.
-3. Run `make serve-api` and open http://127.0.0.1:5541/docs. Send the requests from Exercise 1,
-   from the docs page or with curl. This service takes one JSON object per patient:
+1. In `api.py`, read `PredictionRequest`, `PredictionResponse`, `HealthResponse`, `_build_info`
+   and the start of `create_app`. The model is loaded once, when the app starts. `_build_info`
+   reads `models/build_info.json`, which the image build in Exercise 4 writes: the version, run ID
+   and gate verdict of the model in the image. `/health` reports this file and does not ask the
+   registry, because the champion alias can move after the build. The registry says which model
+   is the champion now, not which model this service runs. On your laptop the file does not
+   exist, so `/health` reports `"model_source": "working tree (not a built image)"`.
+2. Write `health` in `create_app`. A path operation decorator, such as `@app.get(...)`, makes the
+   function below it an endpoint. Replace the commented decorator line above `def health`, then
+   replace each `...` in the function. Run `make serve-api`, and in a second terminal run
+   `curl localhost:5541/health`. It answers:
+
+   ```json
+   {"status":"ok","model_version":null,"run_id":null,"gate_verdict":null,"schema_version":"1.0.0","model_source":"working tree (not a built image)"}
+   ```
+
+   Stop the server with Ctrl-C.
+3. Write `predict` in the same way. `predict_one` in `inference.py` runs the same steps for
+   `make predict`. Run `make serve-api` again and open http://127.0.0.1:5541/docs. Send the
+   requests from Exercise 1, from the docs page or with curl. This service takes one JSON object
+   per patient:
 
    ```bash
    curl -w '\n%{http_code}\n' -X POST localhost:5541/predict -H 'Content-Type: application/json' -d '{"pregnancies": 6, "glucose": 0, "blood_pressure": 72, "skin_thickness": 35, "insulin": 125, "bmi": 33.6, "diabetes_pedigree": 0.627, "age": 50}'
    ```
 
-**Check:** remove the skip markers in the "Your service (Exercise 2)" section of
-`tests/test_api.py`, and the tests pass. With a glucose of 148, `/predict` answers
-`"prediction": 1, "probability": 0.7293`. With a glucose of 0, it answers 422 with
-`"failures": {"greater_than(0)": 1}`. With `"insulin": null`, a value that was not measured, it
-scores the patient. `/health` answers `"model_source": "working tree (not baked)"`.
+**Check:** remove the skip markers in the "/health (Exercise 2, step 2)" and "/predict
+(Exercise 2, step 3)" sections of `tests/test_api.py`, and the tests pass. After step 2 you can
+run the `/health` tests on their own: `uv run --frozen pytest tests/test_api.py -k health`. With a
+glucose of 148, `/predict` answers `"prediction": 1, "probability": 0.7293`. With a glucose of 0,
+it answers 422 with `"failures": {"greater_than(0)": 1}`. With `"insulin": null`, a value that
+was not measured, it scores the patient.
 
 ### Exercise 3 — Batch versus online in the lab (`make bench`) — **written**
 
@@ -277,6 +297,8 @@ exercises are gone; the commands behind them are still in `src/main.py`.
 | `make serve-mlflow` fails, and the error names the alias `champion` | no version has the champion alias yet | `make register` and `make promote-champion` (Setup) |
 | `make serve-mlflow` fails with `No such artifact: 'MLmodel'` | the registered version's files are gone, for example after `make down-v` | with the stack up, `make repro`, `make register`, `make promote-champion` |
 | `/health` answers 503 | no `models/model.pkl` | `make repro` |
+| `/health` or `/predict` answers 404 `Not Found` | the decorator line above the function is still a comment | replace it with the decorator, and restart `make serve-api` |
+| `/health` or `/predict` answers 500 `Internal Server Error` | a `...` is left in the function | the server's terminal shows the line; replace the `...` |
 | `make image` refuses to build | the recorded gate verdict is not GO | `make repro`, and check `reports/gate.json` |
 | `docker build` fails with `OSError: Readme file does not exist` | a file that `pyproject.toml` names is not copied into the image | `COPY` it in `serve.Dockerfile` |
 | Pods show `ErrImagePull` or `ImagePullBackOff` | the image is not on the kind node | `make k8s-deploy`, which runs `kind load docker-image` |

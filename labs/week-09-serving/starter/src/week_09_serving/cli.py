@@ -449,7 +449,7 @@ def cmd_serve(settings: Settings, args) -> None:
     scheduled_flow.serve(name="weekly-retrain", cron=args.cron)
 
 
-def bake_values(verdict: str | None, run_id: str | None, champion) -> dict:
+def build_info_values(verdict: str | None, run_id: str | None, champion) -> dict:
     """Exercise 4 — the values `make image` writes into the image.
 
     The image claims a registry version only when the champion was trained by
@@ -469,8 +469,8 @@ def bake_values(verdict: str | None, run_id: str | None, champion) -> dict:
     }
 
 
-def cmd_bake_info(settings: Settings, args) -> None:
-    """Exercise 4 — print what `make image` bakes in, as `KEY=value` lines for the shell."""
+def cmd_build_info(settings: Settings, args) -> None:
+    """Exercise 4 — print what `make image` writes into the image, as `KEY=value` lines for the shell."""
     from . import registry
 
     verdict = pipeline.read_gate(settings).get("verdict")
@@ -481,7 +481,7 @@ def cmd_bake_info(settings: Settings, args) -> None:
         champion = None
 
     # Quoted, because the Makefile runs these lines with `eval`.
-    for key, value in bake_values(verdict, run_id, champion).items():
+    for key, value in build_info_values(verdict, run_id, champion).items():
         print(f"{key}={shlex.quote(str(value))}")
 
 
@@ -555,7 +555,7 @@ COMMANDS = {
     "trace": cmd_trace,
     "ci-explain": cmd_ci_explain,
     "bench": cmd_bench,
-    "bake-info": cmd_bake_info,
+    "build-info": cmd_build_info,
     "serve-api": cmd_serve_api,
     "flow": cmd_flow,
     "serve": cmd_serve,

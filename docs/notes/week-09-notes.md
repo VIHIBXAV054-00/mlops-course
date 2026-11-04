@@ -155,7 +155,7 @@ An **image** packages the files a program needs, such as OS libraries, Python, p
 2. Copy the environment files: `COPY pyproject.toml uv.lock`.
 3. Copy the code and install the environment: `COPY src`, `RUN uv sync --locked --no-dev`.
 4. Label it with the model version, run ID and gate verdict: `ARG`, `LABEL`.
-5. Add the model: `COPY models/model.pkl`, and a `RUN` step that writes `baked.json` from the build arguments.
+5. Add the model: `COPY models/model.pkl`, and a `RUN` step that writes `models/build_info.json` from the build arguments.
 6. Set the start command: `CMD uv run uvicorn …`.
 
 The image is **1.04 GB**.
@@ -175,7 +175,7 @@ Docker rebuilds a layer when it or a layer below it changes, so the Dockerfile p
 
 The lab bakes the model into the image. This lets the container start without the registry, which is useful on a 16 GB laptop that cannot run the five-service Compose stack and a Kubernetes cluster together. `make image` uses the stack to read the champion's version. Week 10 fetches the model instead, because KServe records which model each revision serves. There, one 1.04 GB image served three model versions without a rebuild.
 
-The image also records which model it holds. `GET /health` returns the baked model version, run ID and gate verdict, while `make trace` shows the version and run ID from the registry. The health endpoint reads the information recorded at build time; it does not ask the registry. An image built with the stack down says `"model_version": "unknown"`.
+The image also records which model it holds. `GET /health` returns the model version, run ID and gate verdict from `models/build_info.json`, while `make trace` shows the version and run ID from the registry. The health endpoint reads the information recorded at build time; it does not ask the registry. An image built with the stack down says `"model_version": "unknown"`.
 
 ### Check the gate in every path that ships
 
