@@ -1,32 +1,6 @@
-"""Command-line entry point — one subcommand per pipeline stage and exercise.
+"""Command-line entry point (`uv run python src/main.py <command>`); you do not need to read it.
 
-    uv run python src/main.py validate                 # Ex 1/4: DVC stage 0 - the gate
-    uv run python src/main.py check-file --path P      # Ex 2: validate any CSV
-    uv run python src/main.py model-input              # Ex 3: the training contract
-    uv run python src/main.py prepare                  # DVC stage 1
-    uv run python src/main.py train                    # DVC stage 2
-    uv run python src/main.py evaluate                 # Ex 1: DVC stage 3 + slices
-    uv run python src/main.py slices                   # Ex 1/2: read the slice table
-    uv run python src/main.py gate                     # Ex 3/4: DVC stage 4 - go/no-go
-    uv run python src/main.py fairness                 # Ex 5: the three gaps
-    uv run python src/main.py baseline                 # Ex 6: the recorded champion
-    uv run python src/main.py baseline-sync            # Ex 6: raise the bar
-    uv run python src/main.py predict [--payload ...]  # Week 5 mechanics
-    uv run python src/main.py build-data --version N   # Week 4 mechanics
-    uv run python src/main.py verify-data              # Week 4 mechanics
-    uv run python src/main.py runs-for-data            # Week 4 mechanics
-    uv run python src/main.py register                 # gate-aware since Week 6
-    uv run python src/main.py promote [--champion]     # gate-aware since Week 6
-    uv run python src/main.py trace                    # the full chain, 8 steps
-
-The `validate`/`prepare`/`train`/`evaluate`/`gate` subcommands are what
-`dvc.yaml` invokes, so the pipeline and a human run exactly the same code.
-
-Two of these deliberately exit NON-ZERO on a bad outcome — `validate` and
-`gate` — because DVC runs them as stages and a stage that swallowed its own
-failure would let `dvc repro` report success on a pipeline that refused. The
-informational ones (`slices`, `fairness`, `baseline`, `check-file`) exit 0 even
-when the news is bad: inspecting a problem is not itself a problem.
+`validate` and `gate` exit 1 on a bad result, so `dvc repro` stops at that stage.
 """
 
 from __future__ import annotations
@@ -80,7 +54,7 @@ def cmd_build_data(settings: Settings, args) -> None:
     """Build the versioned dataset from the git-committed raw batches."""
     rows = build_measurements(args.version, settings.raw_dir, settings.measurements_path)
     if not rows or not settings.measurements_path.exists():
-        print("Not implemented yet — see the TODO in datasets.py (Week 4, Exercise 2).")
+        print("build-data wrote no rows: check data/raw/.")
         print()
         return
     print(f"Built dataset version {args.version}: {rows} rows")
@@ -115,11 +89,7 @@ def cmd_verify_data(settings: Settings, args) -> None:
 
 
 def cmd_validate(settings: Settings, args) -> None:
-    """DVC stage 0 — run the ingestion contract and write the verdict.
-
-    Raises (and therefore exits 1) when the data fails, which is what makes this
-    a gate. The report is written either way.
-    """
+    """DVC stage 0: run the ingestion contract and write the verdict."""
     report = pipeline.validate(settings)
     print(format_report(report))
     print()
@@ -127,18 +97,13 @@ def cmd_validate(settings: Settings, args) -> None:
     zeros = report.get("sentinel_zeros") or {}
     if zeros:
         print(f"  sentinel zeros still present: {zeros}")
-        print("  The ingestion contract TOLERATES these (ge=0). The training")
-        print("  contract does not — see `model-input`.")
+        print("  The ingestion contract allows these (ge=0); the training contract")
+        print("  does not (see `model-input`).")
     print()
 
 
 def cmd_check_file(settings: Settings, args) -> None:
-    """Validate any CSV against the ingestion contract, without writing a report.
-
-    Week 5, Exercise 2 points this at the deliberately corrupted batch. It exits 0 even
-    when the file fails, because inspecting a broken file is not itself an error
-    — the point is to READ the report.
-    """
+    """Validate any CSV against the ingestion contract, without writing a report."""
     path = Path(args.path) if args.path else settings.quality_dir / "broken_batch.csv"
     if not path.is_absolute():
         candidate = settings.project_root / path
@@ -159,18 +124,10 @@ def cmd_check_file(settings: Settings, args) -> None:
         print("  by check :", json.dumps(report["by_check"]))
         print("  by column:", json.dumps(report["by_column"]))
         print()
-        print("  Two summaries because they answer different questions:")
-        print("  'what rule broke' tells you how to fix the data;")
-        print("  'which column'    tells you who to talk to.")
-        print()
 
 
 def cmd_model_input(settings: Settings, args) -> None:
-    """Show the training contract failing, then passing, on the same data.
-
-    This is the proof for Week 5, Exercise 3: the only difference between the two runs is
-    `to_nullable`, and it changes 652 violations into none.
-    """
+    """Show the training contract failing, then passing, on the same data."""
     source = settings.measurements_path
     if not source.exists():
         raise FileNotFoundError(
@@ -182,7 +139,7 @@ def cmd_model_input(settings: Settings, args) -> None:
     print(f"  (columns treated as sentinel-bearing: {list(SENTINEL_COLUMNS)})")
     print()
 
-    print("1. ModelInput on the RAW frame — zeros intact")
+    print("1. ModelInput on the raw frame, zeros intact")
     before = validate_frame(frame, ModelInput, source=f"{source.name} (raw)")
     print(format_report(before, limit=5))
     print()
@@ -195,10 +152,7 @@ def cmd_model_input(settings: Settings, args) -> None:
     print()
     if not before or not after:
         return
-    print(f"  {before['n_failure_cases']} violations -> "
-          f"{after['n_failure_cases']}. Nothing was invented and nothing was")
-    print("  filled in: `gt=0, nullable=True` means missing is honest, zero is")
-    print("  a lie. Filling the nulls is the MODEL's job — see model.py.")
+    print(f"  {before['n_failure_cases']} violations -> {after['n_failure_cases']}.")
     print()
 
 
@@ -231,13 +185,8 @@ def cmd_predict(settings: Settings, args) -> None:
     if result["report"]["passed"]:
         print(f"  prediction  : {result['prediction']}")
         print(f"  probability : {result['probability']}")
-        print()
-        print("  The same schema object guarded the training data. That is the")
-        print("  whole point — one contract, both boundaries.")
     else:
-        print("  REJECTED. The model was never called.")
-        print("  A model cannot tell you its input was nonsense; it answers")
-        print("  anyway, confidently, and the metrics never mention it.")
+        print("  Rejected. The model was never called.")
     print()
 
 
@@ -260,12 +209,7 @@ def cmd_train(settings: Settings, args) -> None:
 
             md5 = pointer_md5(settings.measurements_path)
             print(f"  DVC md5       : {md5}")
-            print()
-            print("  These describe the same file and they do not match.")
-            print("  MLflow's digest hashes PARSED VALUES of the first 10,000")
-            print("  rows plus the row count and column names, truncated to 8")
-            print("  characters. DVC's md5 hashes the FILE'S BYTES, all 32.")
-            print("  Only one of them proves 'these exact bytes'.")
+            print("  MLflow's digest hashes parsed values; DVC's md5 hashes the file's bytes.")
         except FileNotFoundError:
             print("  (no DVC pointer yet — run `dvc add data/measurements.csv`)")
     else:
@@ -292,13 +236,7 @@ def cmd_evaluate(settings: Settings, args) -> None:
 
 
 def cmd_slices(settings: Settings, args) -> None:
-    """Week 6, Exercise 1/2 — the slice table. Informational, always exits 0.
-
-    Reads what `evaluate` already wrote rather than recomputing it, so the table
-    a student reads is byte-for-byte the one the gate acted on. Recomputing here
-    would be one line shorter and would let the two drift apart, which is the
-    class of bug this whole course is about.
-    """
+    """The slice table that `evaluate` wrote, the same one the gate read."""
     report = pipeline.read_slices(settings)
     metrics = pipeline.read_metrics(settings)
     if not report and not metrics:
@@ -313,7 +251,7 @@ def cmd_slices(settings: Settings, args) -> None:
 
 
 def cmd_fairness(settings: Settings, args) -> None:
-    """Week 6, Exercise 5 — the three gaps, per axis. Informational, always exits 0."""
+    """The three fairness gaps, per axis."""
     report = pipeline.read_slices(settings)
     if not report:
         print("No evaluation on record. Run `make repro` first.")
@@ -322,24 +260,10 @@ def cmd_fairness(settings: Settings, args) -> None:
     gated = settings.acceptance.get("fairness") or {}
     print(format_fairness(report.get("fairness") or {}, gated_axes=gated))
     print()
-    print("  Three gaps, and they disagree on purpose. Demographic parity asks")
-    print("  whether we ACT equally often; equal opportunity asks whether we")
-    print("  FIND the true cases equally often. A model can pass one and fail")
-    print("  the other on the same rows, and no library will tell you which one")
-    print("  your problem needs — that is a judgement about consequences.")
-    print()
-    print("  And the axes you cannot check: this dataset has no sex, ethnicity,")
-    print("  income or clinic column. Every subject is female, of Pima heritage,")
-    print("  at least 21. You cannot audit a group you did not record.")
-    print()
 
 
 def cmd_gate(settings: Settings, args) -> None:
-    """Week 6, Exercise 3/4 — DVC stage 4. The go/no-go decision.
-
-    Exits NON-ZERO on a NO-GO, which is what stops `dvc repro` and what a CI job
-    would notice. The report is written either way.
-    """
+    """DVC stage 4: the go/no-go decision."""
     report = pipeline.gate(settings)
     print(format_gate(report))
     print()
@@ -348,24 +272,15 @@ def cmd_gate(settings: Settings, args) -> None:
 
 
 def cmd_baseline(settings: Settings, args) -> None:
-    """Week 6, Exercise 6 — what "worse than what we have" is measured against."""
+    """The recorded champion scores that the gate compares against."""
     print(format_baseline(read_baseline(settings.baseline_path)))
     print()
     print(f"  file: {_rel(settings, settings.baseline_path)}")
-    print("  The pipeline reads this FILE, never the registry. A stage whose")
-    print("  result depends on a database in another container is not")
-    print("  reproducible, and `dvc.lock` would be recording a lie.")
     print()
 
 
 def cmd_baseline_sync(settings: Settings, args) -> None:
-    """Week 6, Exercise 6 — raise the bar, deliberately, from the current champion.
-
-    The only place in this lab that reads the registry to decide something. It
-    is a human command precisely because promoting a champion is a human
-    decision: the new baseline lands in a file, in a commit, next to the data
-    pointer and the metrics that justify it.
-    """
+    """Write the current champion's scores into `metrics/baseline.json`."""
     if not mlflow_available(settings):
         print("MLflow not reachable — start the stack with `make up`.")
         print()
@@ -394,10 +309,6 @@ def cmd_baseline_sync(settings: Settings, args) -> None:
         else:
             print(f"  {key:<12} {before:.4f} -> {after:.4f}  ({after - before:+.4f})")
     print()
-    print("  The bar has moved. Re-run `make gate` and the SAME model can now")
-    print("  be a NO-GO against a champion it used to beat. That is a ratchet,")
-    print("  and it only turns one way — which is the point and also the risk.")
-    print()
 
 
 def cmd_runs_for_data(settings: Settings, args) -> None:
@@ -419,8 +330,7 @@ def cmd_runs_for_data(settings: Settings, args) -> None:
                            "metrics.f1", "tags.git_commit"] if c in frame.columns]
     print(frame[columns].to_string(index=False))
     print()
-    print(f"  {len(frame)} run(s). This is the question Week 3 could not ask:")
-    print("  not 'which run scored best' but 'which runs saw THIS data'.")
+    print(f"  {len(frame)} run(s) trained on this data version.")
     print()
 
 
@@ -445,9 +355,7 @@ def cmd_promote(settings: Settings, args) -> None:
         print("MLflow not reachable — start the stack with `make up`.")
         print()
         return
-    # The gate is checked FIRST, before looking for a version. Otherwise a
-    # NO-GO on a project with an empty registry reports "no versions
-    # registered", which is true, unhelpful, and hides the actual refusal.
+    # Check the gate first, so a NO-GO is reported even when the registry is empty.
     pipeline.require_go(settings)
     try:
         version = latest_version(settings)
@@ -458,21 +366,14 @@ def cmd_promote(settings: Settings, args) -> None:
     promoted = promote_to_staging(settings, version.version, champion=args.champion)
     print(f"Version {promoted.version} now carries aliases: {list(promoted.aliases)}")
     if args.champion:
-        print()
-        print("  `champion` moved too. That alias is the bar every future model")
-        print("  is measured against, so moving it is a deliberate act and not a")
-        print("  side effect of promoting to staging. Next: `make baseline-sync`")
-        print("  to write the new champion's scores into metrics/baseline.json,")
-        print("  which is what the gate actually reads.")
+        print("  `champion` moved too. Next: `make baseline-sync` to update metrics/baseline.json.")
     else:
-        print()
-        print("  `staging` moved; `champion` did not. Use `make promote-champion`")
-        print("  to raise the bar — see the note in registry.promote_to_staging.")
+        print("  `staging` moved; `champion` did not. `make promote-champion` moves both.")
     print()
 
 
 def cmd_trace(settings: Settings, args) -> None:
-    """The full chain — now reaching the bytes."""
+    """Print the chain from the alias back to the run, the data and the gate verdict."""
     if not mlflow_available(settings):
         print("MLflow not reachable — start the stack with `make up`.")
         print()
@@ -508,40 +409,25 @@ def cmd_trace(settings: Settings, args) -> None:
         print("Step 8 is empty — the run predates the gate linkage.")
         print("Run `make repro` so the gate stage stamps its verdict on it.")
     else:
-        print("Steps 6 and 8 are the two gates, and they answer opposite")
-        print("questions. Step 6: was the DATA allowed IN? Step 8: is the MODEL")
-        print("allowed OUT? Step 5 sits between them and says which bytes we")
-        print("are talking about — a hash alone certifies garbage exactly as")
-        print("confidently as it certifies gold.")
-        print()
-        print("Read the SKIPPED count on step 8 before you read the verdict. A")
-        print("GO with eight unchecked criteria is a different claim from a GO")
-        print("with none, and only one of them is reassuring.")
+        print("Read the skipped count on step 8 before the verdict.")
     print()
 
 
 def cmd_gate_summary(settings: Settings, args) -> None:
-    """The gate verdict as markdown — for `$GITHUB_STEP_SUMMARY`.
-
-    Reads the recorded verdict rather than re-running the gate, so the summary
-    describes the run that actually happened.
-    """
+    """The recorded gate verdict as markdown, for `$GITHUB_STEP_SUMMARY`."""
     report = pipeline.read_gate(settings)
     print(format_gate_markdown(report))
 
 
 def cmd_flow(settings: Settings, args) -> None:
-    """Week 8, Exercise 1 — run the training flow."""
+    """Run the training flow."""
     from .flows import training_flow
     from .tracking import prefect_available
 
     if not prefect_available(settings):
         raise RuntimeError(
             f"No Prefect server at {settings.prefect_api_url} — start the stack with "
-            "`make up`.\n"
-            "  (Unsetting PREFECT_API_URL also works: Prefect then starts a temporary\n"
-            "   server, runs, and throws the history away. Fine for a smoke test, and\n"
-            "   useless for this week, whose whole point is the run record.)"
+            "`make up`."
         )
 
     verdict = training_flow(
@@ -554,12 +440,7 @@ def cmd_flow(settings: Settings, args) -> None:
 
 
 def cmd_serve(settings: Settings, args) -> None:
-    """Week 8, Exercise 5 — a scheduled deployment.
-
-    `.serve()` starts a process that listens for scheduled runs. No work pool,
-    no worker, no infrastructure block. Work pools are the production answer
-    and they are a lecture slide, not this lab.
-    """
+    """Serve `scheduled_flow` on a cron schedule until you press Ctrl-C."""
     from .flows import scheduled_flow
 
     print(f"Serving `diabetes-training-with-pull` on cron `{args.cron}`.")
@@ -624,7 +505,7 @@ def cmd_serve_api(settings: Settings, args) -> None:
 
 
 def cmd_ci_explain(settings: Settings, args) -> None:
-    """Week 7, Exercise 1 — read the workflows, including the one grading you."""
+    """List the lab's workflows, the installed ones and the grader, and audit them."""
     root = Path(__file__).resolve().parents[2]
     repo = root
     while repo != repo.parent and not (repo / ".git").is_dir():
@@ -638,7 +519,7 @@ def cmd_ci_explain(settings: Settings, args) -> None:
     for path in lab:
         print(f"  {path.relative_to(root)}")
     if not lab:
-        print("  none yet — Week 7, Exercises 4 and 5.")
+        print("  none.")
     print()
     print("Workflows GitHub will actually run (repository root):")
     for path in installed:
@@ -646,8 +527,7 @@ def cmd_ci_explain(settings: Settings, args) -> None:
     if not installed:
         print("  none — run `make install-ci`.")
     print()
-    print("  GitHub only executes workflows in .github/workflows AT THE ROOT.")
-    print("  A workflow in a subdirectory is never run, and never warns you.")
+    print("  GitHub runs only the workflows in .github/workflows at the repository root.")
     print()
 
     rows = audit(lab + installed + grader)
@@ -708,7 +588,7 @@ def main() -> None:
     parser.add_argument(
         "--champion",
         action="store_true",
-        help="promote: move the `champion` alias too, raising the bar (Week 6, Exercise 6)",
+        help="promote: move the `champion` alias too",
     )
     parser.add_argument("--push", action="store_true", help="flow: dvc push after the run")
     parser.add_argument("--register", action="store_true", help="flow: register on a GO")
@@ -722,12 +602,7 @@ def main() -> None:
     try:
         COMMANDS[args.command](settings, args)
     except (FileNotFoundError, KeyError, RuntimeError, ValueError) as error:
-        # RuntimeError covers pipeline.ValidationFailed, which is the ordinary
-        # way this lab's gate reports itself. A failed contract is not a crash.
-        # A missing prerequisite is an ordinary state in this lab, not a crash.
-        # Print it readably and exit NON-ZERO, because dvc.yaml invokes these
-        # same subcommands as pipeline stages — a stage that swallowed its own
-        # failure would let `dvc repro` report success on a broken pipeline.
+        # A failed gate or a missing input is not a crash: print it and exit 1 so dvc repro stops.
         print()
         print(f"Cannot run `{args.command}` yet:")
         print(f"  {error}")

@@ -1,15 +1,5 @@
-"""Shared fixtures.
-
-The design goal, carried over from Week 4, is that ONE test file is green everywhere: on a
-student's finished machine, on a fresh clone, and in the course autograder —
-which runs `uv sync --all-groups && uv run pytest -q` with no Docker, no Silo,
-no DVC remote and no `dvc pull`.
-
-That is why the infrastructure guards below are FIXTURES rather than
-`@pytest.mark.skip` decorators. A fixture skips only when its prerequisite is
-genuinely absent, so the same test runs for real the moment the prerequisite
-appears. Static skips would stay skipped forever.
-"""
+"""Shared fixtures. Each guard skips only while its file or service is absent,
+so the suite also runs in CI."""
 
 from __future__ import annotations
 
@@ -50,17 +40,12 @@ def raw_batches(project_root) -> Path:
     return raw_dir
 
 
-# ── Week 5: git-committed teaching material, so no guard needed for the data ──
+# ── Committed data ──────────────────────────────────────────────────────────
 
 
 @pytest.fixture(scope="session")
 def broken_batch(project_root) -> Path:
-    """The deliberately corrupted batch. Committed, so it is always available.
-
-    That is a deliberate property of the week: the whole validation half of this
-    lab runs with no Docker, no Silo and no `dvc pull`, because every input it
-    needs is in Git.
-    """
+    """The corrupted batch in data/quality/, committed to Git."""
     path = project_root / "data" / "quality" / "broken_batch.csv"
     if not path.is_file():
         pytest.skip(
@@ -70,15 +55,13 @@ def broken_batch(project_root) -> Path:
     return path
 
 
-# ── Guards for state the student creates during the lab ──────────────────────
-# All four are absent in the starter and in CI, and present after the DVC setup
-# carried over from Week 4 and after `make repro`.
+# ── Files that the pipeline writes or Git restores ──────────────────────────
 
 
 @pytest.fixture(scope="session")
 def validation_report(settings) -> Path:
     if not settings.validation_report_path.is_file():
-        pytest.skip("No validation report yet — run `make validate` (Week 5, Exercise 1).")
+        pytest.skip("No validation report yet: run `make validate`.")
     return settings.validation_report_path
 
 
@@ -107,12 +90,8 @@ def dvc_lock(project_root) -> Path:
 
 @pytest.fixture(scope="session")
 def live_settings(settings):
-    """Skip unless the tracking server answers.
-
-    Redirects to a `-tests` experiment and registered model so running the suite
-    never pollutes the artifacts you are graded on or inflates version numbers.
-    `Settings` is frozen, hence `dataclasses.replace`.
-    """
+    """Skip unless MLflow answers; use `-tests` names so test runs leave your real
+    experiment and registered model alone."""
     if not mlflow_available(settings):
         pytest.skip("MLflow tracking server not reachable — start the stack first.")
     return dataclasses.replace(
@@ -122,27 +101,12 @@ def live_settings(settings):
     )
 
 
-# ── Week 8: Prefect ──────────────────────────────────────────────────────────
+# ── Prefect ─────────────────────────────────────────────────────────────────
 
 
 @pytest.fixture(scope="session")
 def prefect_harness():
-    """A temporary Prefect database for the whole session.
-
-    SESSION-scoped, and the scope is a measured decision rather than a habit
-    (prefect 3.8.2, this machine):
-
-        harness setup      ~4.3s   once
-        a flow run inside  ~1.1s   each
-        task.fn(...)        0.000s  — no harness needed at all
-
-    Per-test would pay the 4.3s every time. And note the failure mode if you
-    skip the harness entirely: Prefect quietly starts a TEMPORARY server per
-    process (~8s), so a careless suite gets slower rather than failing, which
-    is the worst possible shape for a time budget.
-
-    Most tests here use `task.fn()` and never touch this.
-    """
+    """A temporary Prefect database, shared by the whole session because each setup is slow."""
     from prefect.testing.utilities import prefect_test_harness
 
     with prefect_test_harness():

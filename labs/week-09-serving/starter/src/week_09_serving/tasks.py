@@ -1,19 +1,6 @@
-"""Prefect tasks: the pipeline's steps, with a retry policy that is mostly absent.
+"""Prefect tasks for the training flow. Only the tasks that call the network have `retries=`.
 
-Read the `retries=` arguments in this file as a **map of where this pipeline
-touches the network**, because that is exactly what they are. Three tasks have
-them. Everything else has none, deliberately, and Week 8, Exercise 3 is about why.
-
-The rule, stated once:
-
-    A retry is only useful when the SAME call, run again, might succeed. That
-    means the failure has to be transient, and the operation has to be safe to
-    repeat. Retrying anything else burns time and hides a real bug behind a
-    delay.
-
-`train` is deterministic and local. If it raised once it will raise three
-times, and the only thing `retries=3` buys you is that the traceback you needed
-arrives ninety seconds later.
+A retry helps only when the failure is temporary and the operation is safe to repeat.
 """
 
 from __future__ import annotations
@@ -32,17 +19,7 @@ from .config import Settings
 from .datasets import build_measurements
 
 def _log():
-    """The run logger inside a flow, an ordinary logger outside one.
-
-    `get_run_logger()` raises `MissingContextError` when there is no active
-    run — which would make `task.fn(...)` unusable outside Prefect, and that is
-    the cheap unit-test path this lab's test suite is built on (0.000s per
-    call, against ~1.1s for a real flow run).
-
-    The general rule this encodes: **a function that can only execute inside
-    its framework is a function you cannot unit-test.** Keep the framework at
-    the edges.
-    """
+    """The Prefect run logger inside a flow, a standard logger outside one, so `task.fn()` works."""
     try:
         return get_run_logger()
     except Exception:  # noqa: BLE001 -- MissingContextError and friends
@@ -50,19 +27,7 @@ def _log():
 
 
 def _dvc_env() -> dict:
-    """The environment `dvc` needs to reach Silo.
-
-    DVC talks to the object store directly and reads the standard `AWS_*`
-    names, while this project keeps one credential block under `S3_*` in
-    `.env`. The Makefile maps one onto the other for interactive use; a task
-    that shells out has to do the same, or `dvc pull` fails to authenticate and
-    reports it as an ordinary failure -- which a retry then patiently repeats
-    three times.
-
-    Worth knowing as a general shape: **a subprocess does not inherit your
-    intentions, only your environment.** Anything the shell wrapper was doing
-    for you has to be done again here.
-    """
+    """Copy the `S3_*` credentials from `.env` to the `AWS_*` names that `dvc` reads."""
     env = dict(os.environ)
     if "S3_ACCESS_KEY" in env:
         env.setdefault("AWS_ACCESS_KEY_ID", env["S3_ACCESS_KEY"])
@@ -82,9 +47,7 @@ def _run_dvc(settings: Settings, *args: str) -> str:
         env=_dvc_env(),
     )
     if result.returncode != 0:
-        # NOT `--quiet`: a retry policy is only as useful as the message it
-        # eventually gives up with, and "dvc pull failed:" with nothing after
-        # the colon costs more time than the retries save.
+        # Keep the last lines of output, so the final error says why dvc failed.
         detail = ((result.stderr or "") + (result.stdout or "")).strip()
         tail = "\n  ".join(detail.splitlines()[-4:]) or "no output"
         raise RuntimeError(f"dvc {' '.join(args)} failed (exit {result.returncode}):\n  {tail}")
@@ -97,9 +60,7 @@ NETWORK_RETRIES = {
     "retries": 3,
     # Doubling, so a service that is restarting gets a chance to finish.
     "retry_delay_seconds": exponential_backoff(backoff_factor=2),
-    # Jitter matters more than it looks. Without it, every task that failed at
-    # the same moment retries at the same moment, and a service that fell over
-    # because of load gets hit by the identical burst that felled it.
+    # Jitter spreads the retries, so tasks that failed together do not retry together.
     "retry_jitter_factor": 0.5,
 }
 
@@ -109,11 +70,7 @@ NETWORK_RETRIES = {
 
 @task
 def build_dataset(settings: Settings, version: int = 2) -> str:
-    """Rebuild the DVC-tracked dataset from the git-committed raw batches.
-
-    No retries: this reads files that are either there or not. A missing batch
-    is a broken checkout, and running it again does not fix a checkout.
-    """
+    """Rebuild the DVC-tracked dataset from the raw batches in Git. No retries: files are local."""
     rows = build_measurements(
         version=version,
         raw_dir=settings.project_root / "data" / "raw",
@@ -141,20 +98,9 @@ def params_committed(settings: Settings) -> bool:
 
 @task
 def run_pipeline(settings: Settings) -> dict:
-    """`dvc repro` -- the whole content-hashed core, as ONE task.
+    """Run `dvc repro` as one task; DVC decides which stages are stale.
 
-    Not five tasks shelling out to `dvc repro -s <stage>`. DVC already owns the
-    graph inside here: which stages are stale, in what order, and what to skip.
-    Splitting it up would put two schedulers in charge of one graph, and the
-    one with less information would be making the decisions.
-
-    The division of labour for the whole week, in one line:
-
-        DVC decides what is out of date. Prefect decides what happens, when,
-        how many times, and what to do when it fails.
-
-    No retries. If `prepare` raised, it will raise again; if the gate refused,
-    it will refuse again. A refusal is an answer, not a glitch.
+    No retries: a failed stage or a NO-GO fails the same way again.
     """
     logger = _log()
     result = subprocess.run(
@@ -198,15 +144,7 @@ def read_params_used(settings: Settings, stage: str = "train") -> dict:
 
 @task(**NETWORK_RETRIES)
 def pull_data(settings: Settings) -> bool:
-    """`dvc pull` from Silo.
-
-    RETRIES, because this is a socket. A restarting object store, a DNS blip
-    and a connection reset are all things that succeed on the second attempt.
-
-    IDEMPOTENT: pulling the same content hash twice produces the same bytes.
-    That is what makes the retry safe, and it is not an accident -- Week 4's
-    content addressing is what bought it.
-    """
+    """`dvc pull` from Silo. Safe to retry: the same content hash always gives the same bytes."""
     _run_dvc(settings, "pull")
     return True
 
@@ -220,29 +158,9 @@ def push_data(settings: Settings) -> bool:
 
 @task(retries=2, retry_delay_seconds=exponential_backoff(backoff_factor=2))
 def register_model(settings: Settings) -> str | None:
-    """Register the run's model in MLflow -- **and this one is NOT idempotent.**
+    """Register the run's model in MLflow. Not idempotent: each call creates a new version.
 
-    The second question of Week 8, Exercise 3, and the reason it is worth asking: every
-    other retry in this file is free because the operation is content-addressed
-    or read-only. This one creates a NEW MODEL VERSION on every call.
-
-    So consider the failure that retries are for: the request reaches MLflow,
-    MLflow commits the version, and the RESPONSE is lost. From here that is
-    indistinguishable from "it never arrived" -- and the retry registers a
-    second, identical version. Nothing errors. You simply have version 4 and
-    version 5 pointing at the same run, and a registry that has quietly started
-    lying about how many models you have.
-
-    The mitigation here is the cheap one: ask first. Before registering, look
-    for an existing version for this run id and return it if present. That
-    narrows the window rather than closing it -- a true fix needs an
-    idempotency key, which the MLflow registry does not offer.
-
-    The general rule worth taking away:
-
-        **Idempotency is a PRECONDITION for a retry, not a consequence of one.**
-        Adding `retries=` to a task that creates things converts a visible
-        failure into an invisible duplicate.
+    So it first returns an existing version for this run id; a lost response can still duplicate.
     """
     logger = _log()
     run_id = pipeline.read_run_id(settings)
@@ -279,13 +197,7 @@ def notify(
     params: dict | None = None,
     committed: bool | None = None,
 ) -> Path:
-    """Write a one-line record of how the run ended.
-
-    A file, not an email. Where a notification is DELIVERED is a Week 11
-    question; that it exists at all is this week's. What matters here is that
-    it runs on the failure path too -- a flow that only reports its successes
-    is the Toy Story 2 backup with extra steps.
-    """
+    """Write a one-line record of how the run ended to `reports/last_run.txt`."""
     path = settings.project_root / "reports" / "last_run.txt"
     path.parent.mkdir(parents=True, exist_ok=True)
 

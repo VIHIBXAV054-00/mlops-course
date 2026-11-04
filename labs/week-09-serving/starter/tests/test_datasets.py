@@ -1,10 +1,4 @@
-"""The versioned dataset builder (Week 4, Exercises 2 and 4).
-
-Everything here builds its own data into `tmp_path` from the git-committed raw
-batches, so nothing depends on whether the workspace happens to have a
-DVC-materialised `data/measurements.csv`. That is what makes this file green in
-the autograder.
-"""
+"""The dataset builder. Each test builds into tmp_path from the committed raw batches."""
 
 import hashlib
 
@@ -45,11 +39,7 @@ def test_build_v2_row_count_and_column_order(settings, raw_batches, tmp_path) ->
 
 
 def test_build_is_byte_deterministic(raw_batches, tmp_path) -> None:
-    """Two builds of the same version produce identical bytes.
-
-    Without this, two students would get two different md5s for the same
-    logical dataset and every `.dvc` pointer would disagree.
-    """
+    """Two builds of the same version give identical bytes, so every clone gets the same md5."""
     first = tmp_path / "a.csv"
     second = tmp_path / "b.csv"
     build_measurements(2, raw_batches, first)
@@ -58,11 +48,7 @@ def test_build_is_byte_deterministic(raw_batches, tmp_path) -> None:
 
 
 def test_build_uses_lf_line_endings(raw_batches, tmp_path) -> None:
-    """The CRLF hazard, as an assertion.
-
-    DVC 3 hashes raw bytes and no longer normalises line endings, so a CRLF
-    checkout would produce a different md5 for identical data.
-    """
+    """DVC hashes raw bytes, so CRLF line endings would change the md5 of the same data."""
     out = tmp_path / "measurements.csv"
     build_measurements(2, raw_batches, out)
     assert b"\r\n" not in out.read_bytes()
@@ -76,16 +62,7 @@ def test_build_rejects_unknown_version(raw_batches, tmp_path) -> None:
 def test_v2_md5_matches_committed_pointer(
     raw_batches, measurements_pointer, tmp_path
 ) -> None:
-    """The committed .dvc pointer really does describe version 2.
-
-    This is the lineage-honesty test. The bytes the pointer names live in a DVC
-    cache or an object store, neither of which travels in Git — so without this,
-    the solution's claim that its pointer corresponds to the committed raw
-    batches would be unverifiable and would rot silently.
-
-    It needs no Silo, no remote, no `dvc` subprocess, and not even a workspace
-    copy of measurements.csv.
-    """
+    """The committed .dvc pointer matches a fresh build of version 2."""
     rebuilt = tmp_path / "measurements.csv"
     build_measurements(2, raw_batches, rebuilt)
     rebuilt_md5 = hashlib.md5(rebuilt.read_bytes()).hexdigest()

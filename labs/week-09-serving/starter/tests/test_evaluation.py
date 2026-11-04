@@ -1,9 +1,4 @@
-"""Slice definitions and slice metrics.
-
-Every test here builds its own frame in memory, so the whole file runs with no
-Docker, no Silo, no DVC and no `dvc pull` — the same property Week 5's contract
-tests have, and for the same reason: the course autograder has none of those.
-"""
+"""Slice definitions and slice metrics. Every test builds its own frame in memory."""
 
 from __future__ import annotations
 
@@ -42,12 +37,7 @@ INSULIN_SPEC = {
 
 
 def test_bins_are_left_closed_right_open():
-    """[21, 30) means 21 to 29. One convention, everywhere.
-
-    The boundary cases are the whole test: 29 must be in the first band and 30
-    in the second. Get this wrong and every slice number in the lab shifts by a
-    patient or two — silently, because nothing raises.
-    """
+    """[21, 30) means 21 to 29: 29 is in the first band and 30 in the second."""
     frame = pd.DataFrame({"age": [21, 29, 30, 39, 40, 49, 50, 81]})
     labels = list(slice_labels(frame, AGE_SPEC))
     assert labels == [
@@ -56,12 +46,7 @@ def test_bins_are_left_closed_right_open():
 
 
 def test_value_below_the_first_edge_is_reported_not_dropped():
-    """A row outside every band gets a visible label, never silent exclusion.
-
-    It should never happen — the ingestion contract already bounds `age` — but a
-    slice table that quietly drops rows is exactly the failure this module
-    exists to prevent, so the failure mode has to be loud.
-    """
+    """A row outside every band gets a visible label instead of being dropped."""
     frame = pd.DataFrame({"age": [18, 25]})
     assert list(slice_labels(frame, AGE_SPEC)) == [OUT_OF_RANGE, "21-29"]
 
@@ -82,12 +67,8 @@ def test_missing_flag_splits_on_whether_the_value_was_recorded():
 
 
 def test_slicing_after_imputation_invents_group_membership():
-    """The trap, asserted rather than described.
-
-    Impute first and the patients whose BMI was never measured join whichever
-    band the median lands in. Their slice stops existing, and the band they
-    joined now reports a number partly about people it does not describe.
-    """
+    """Imputing before slicing moves the patients with no BMI into the band the median
+    falls in."""
     raw = pd.DataFrame({"bmi": [0.0, 0.0, 22.0, 27.0, 35.0, 40.0]})
     median = raw.loc[raw["bmi"] > 0, "bmi"].median()  # 31.0 -> the obese band
     imputed = raw.replace(0.0, median)
@@ -103,13 +84,8 @@ def test_slicing_after_imputation_invents_group_membership():
 
 
 def test_a_metric_over_no_positives_is_none_not_zero():
-    """roc_auc and fpr say "undefined"; f1 follows sklearn and says 0.0.
-
-    Both behaviours are deliberate and the difference is documented in
-    `group_metrics`. The reason the test asserts them together is that they are
-    only safe to read side by side with `n_positives`, which is why every row
-    carries it.
-    """
+    """roc_auc and fpr are None without positives; f1 follows sklearn and is 0.0, so read
+    it together with n_positives."""
     metrics = group_metrics([0, 0, 0], [0, 1, 0], [0.1, 0.6, 0.2], ["g"] * 3)["g"]
     assert metrics["n"] == 3
     assert metrics["n_positives"] == 0
@@ -125,12 +101,8 @@ def test_fpr_is_none_when_a_group_has_no_negatives():
 
 
 def test_one_positive_produces_two_metrics_that_contradict_each_other():
-    """f1 0.0 and roc_auc 1.0 on the same rows. Both correct, neither meaningful.
-
-    This is not a contrived example — it is the `bmi_band == under_normal` slice
-    of this lab's own test set, and it is the reason `min_positives` exists as a
-    rule separate from `min_support`.
-    """
+    """f1 0.0 and roc_auc 1.0 on the same rows: why min_positives is a rule separate
+    from min_support."""
     y_true = [0] * 9 + [1]
     y_pred = [0] * 10
     y_prob = [0.1] * 9 + [0.9]  # the single positive is ranked highest
@@ -204,13 +176,13 @@ def test_groups_appear_in_declaration_order_not_alphabetical():
 
 
 def test_an_empty_slice_spec_produces_an_empty_report():
-    """The starter state, and it must not crash the evaluate stage."""
+    """An empty slice spec gives an empty report and does not crash the evaluate stage."""
     assert slice_report(build_frame(), [], [], None, {}) == {}
 
 
 def test_format_slices_says_so_when_nothing_has_been_computed():
     rendered = format_slices({})
-    assert "TODO" in rendered and "Exercise 1" in rendered
+    assert "params.yaml" in rendered
 
 
 def test_mismatched_bins_and_labels_are_rejected():

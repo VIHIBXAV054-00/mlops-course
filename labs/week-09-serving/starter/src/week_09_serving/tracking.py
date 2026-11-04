@@ -1,10 +1,4 @@
-"""MLflow tracking helpers.
-
-Trimmed from Week 3: the parameter sweep and its run-search machinery belong to
-Week 3 and are gone. What remains is the connection, the git-commit tag, a
-reachability probe, and one new query — finding runs by DATA VERSION, which is
-the question Week 4 makes askable.
-"""
+"""MLflow and Prefect helpers: connect, tag the git commit, check a server is up, find runs."""
 
 from __future__ import annotations
 
@@ -26,11 +20,7 @@ def connect(settings: Settings) -> None:
 
 
 def mlflow_available(settings: Settings, timeout: float = 2.0) -> bool:
-    """Is the tracking server reachable?
-
-    Lifted out of the test fixtures in Week 3 so that production code can use it
-    too: the `train` DVC stage needs to run in CI, where no server exists.
-    """
+    """Is the tracking server reachable? Lets the `train` stage run in CI, where there is none."""
     try:
         urllib.request.urlopen(
             settings.mlflow_tracking_uri + "/health", timeout=timeout
@@ -56,12 +46,7 @@ def git_commit() -> str:
 
 
 def search_runs_by_data_version(settings: Settings, md5: str) -> pd.DataFrame:
-    """Every run in this experiment that trained on a given data version.
-
-    This is the query Week 3 could not express. The filter runs server-side
-    against Postgres, and it is only possible because the `train` stage tagged
-    the run with the data's content hash.
-    """
+    """Every run in this experiment tagged with this data version (`tags.dvc_md5`)."""
     mlflow.set_tracking_uri(settings.mlflow_tracking_uri)
     try:
         return mlflow.search_runs(
@@ -75,13 +60,7 @@ def search_runs_by_data_version(settings: Settings, md5: str) -> pd.DataFrame:
 
 
 def prefect_available(settings, timeout: float = 3.0) -> bool:
-    """Is the Prefect API answering?
-
-    Same shape as `mlflow_available`, and for the same reason: production code
-    needs to be able to say "the thing you configured is not there" in a
-    sentence a student can act on, rather than surfacing a client library's
-    connection error.
-    """
+    """Is the Prefect API answering? Lets the CLI say clearly that the server is down."""
     import urllib.error
     import urllib.request
 

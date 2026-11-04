@@ -1,36 +1,6 @@
-"""Slice-based evaluation. New in Week 6.
+"""Slice-based evaluation: score each group of the test set, cut on raw (not imputed) values.
 
-One number for the whole test set is an average, and an average is a claim about
-nobody in particular. This module cuts the same test set into groups and scores
-each one, which is the only way to find out that a model is fine on average and
-wrong for a group you care about.
-
-There is no library here and there does not need to be one: **a slice metric is
-a groupby**. What is not obvious — and what this module is really about — is the
-three ways it goes wrong:
-
-1. **Slice on RAW values, never on imputed ones.** Week 5's `SimpleImputer` fills
-   the sentinel zeros with the training median. Cut a `bmi` band after that and
-   the patients whose BMI was never measured silently join whichever band the
-   median lands in. Their slice stops existing, and the band they joined now
-   reports a metric partly about people it does not describe. Measured on this
-   lab's own test set: `obese` grows 112 -> 114 rows and its F1 moves
-   0.6792 -> 0.6729, while the two-patient `missing` slice disappears. So every
-   function here takes the RAW frame, and "missing" is a slice of its own.
-
-2. **A metric on a slice with no positives is not a metric.** `f1_score` returns
-   0.0 for a slice with one positive that the model missed; `roc_auc_score`
-   returns 1.0 on the very same rows. Both are arithmetically correct and
-   neither means anything. That is why every row carries `n` and
-   `n_positives` — a metric column on its own is a lie, and the gate refuses to
-   act on a slice without enough of both.
-
-3. **Silence.** A slice that could not be scored has to say so. `None` here, and
-   a `skipped` check with a reason in the gate — never a quiet 0.0 that reads
-   as a failing model rather than an absent measurement.
-
-Reference for every metric used: scikit-learn's model-evaluation guide,
-https://scikit-learn.org/stable/modules/model_evaluation.html
+Reference: https://scikit-learn.org/stable/modules/model_evaluation.html
 """
 
 from __future__ import annotations
@@ -53,14 +23,10 @@ from sklearn.metrics import (
 from .fairness import fairness_report
 from .schemas import SENTINEL_COLUMNS
 
-# Bin edges are LEFT-CLOSED and RIGHT-OPEN everywhere: [21, 30) is "21 to 29".
-# One convention for every slice, so a reader never has to work out which end of
-# a band a patient falls on. The final edge is `.inf` in params.yaml.
+# Bins are left-closed, right-open: [21, 30) is 21 to 29.
 BIN_CLOSED_LEFT = True
 
-# What a value outside every declared bin is labelled. It should never appear —
-# the ingestion contract already bounds these columns — but a slice table that
-# silently drops rows is exactly the failure this module exists to prevent.
+# The label for a value outside every bin, so that no row is dropped.
 OUT_OF_RANGE = "out_of_range"
 
 
@@ -75,23 +41,9 @@ def _as_float(frame: pd.DataFrame, column: str) -> pd.Series:
 
 
 def slice_labels(frame: pd.DataFrame, spec: dict) -> pd.Series:
-    """Turn one slice specification from `params.yaml` into a column of labels.
+    """One slice spec from params.yaml -> one label per row of the raw frame.
 
-    `frame` must be the RAW frame — pre-imputation, sentinel zeros intact. See
-    the module docstring for why that is not a detail.
-
-    Two kinds, and both are declared in `params.yaml` rather than hard-coded
-    here, because "which groups do we care about?" is a question about the
-    problem, not about the code:
-
-    - `kind: bins`  — cut a numeric column at the given edges. If the column is
-      one of the sentinel-bearing ones, a recorded 0 is *not* a small value; it
-      is an absent measurement, and it gets `missing_label` instead of falling
-      into the lowest band.
-    - `kind: missing_flag` — a two-group split on whether the value was recorded
-      at all. `insulin` is 48.7% sentinel in this dataset, and whether your
-      insulin test was ordered is a fact about access to care rather than about
-      your body. That makes it the most interesting axis this dataset has.
+    In a sentinel column a 0 gets `missing_label` instead of the lowest band.
     """
     kind = spec.get("kind", "bins")
     column = spec["column"]
@@ -231,12 +183,7 @@ def slice_report(
 
 
 def _group_order(spec: dict, labels: pd.Series) -> list:
-    """Group labels in declaration order, then anything unexpected, sorted.
-
-    Declaration order beats alphabetical: `21-29, 30-39, 40-49, 50+` reads as a
-    trend, `21-29, 30-39, 40-49, 50+` sorted as text happens to as well, but
-    `under_normal, overweight, obese` emphatically does not.
-    """
+    """Group labels in declaration order, then anything unexpected, sorted."""
     declared = list(spec.get("labels", []))
     if spec.get("missing_label"):
         declared.append(spec["missing_label"])
@@ -249,11 +196,7 @@ def _group_order(spec: dict, labels: pd.Series) -> list:
 def format_slices(report: dict, aggregate: dict | None = None) -> str:
     """The slice table, for the CLI. One row per group, `n` always visible."""
     if not report or not report.get("slices"):
-        return (
-            "No slice report — `evaluation.slice_report` returns nothing yet.\n"
-            "  See the TODO in src/week_09_serving/evaluation.py "
-            "(Week 6, Exercise 1)."
-        )
+        return "No slice report. Declare slices in params.yaml and run `make repro`."
 
     lines = [
         f"{report['n_rows']} rows, {report['n_positives']} positive "

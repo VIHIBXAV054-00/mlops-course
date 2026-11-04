@@ -7,47 +7,29 @@ from pathlib import Path
 import yaml
 from dotenv import load_dotenv
 
-# Strategies `sklearn.impute.SimpleImputer` accepts that make sense for this
-# data. It lives here rather than in model.py because it is the set of legal
-# values for a params.yaml entry, and model.py imports config (so the reverse
-# import would be circular).
-#
-# `median` is the default because these distributions are skewed and a median is
-# not dragged around by outliers — but the choice is a modelling argument you
-# should be able to defend, not a setting to copy.
+# The `SimpleImputer` strategies allowed for `train.impute_strategy` in params.yaml.
 IMPUTE_STRATEGIES = ("median", "mean", "most_frequent")
 
 
 @dataclass(frozen=True)
 class Settings:
-    """Pipeline configuration.
+    """Configuration: hyperparameters from `params.yaml` (hashed by DVC), wiring from `.env`.
 
-    Two sources, and the split is the point of this week:
-
-    - `params.yaml` holds the pipeline HYPERPARAMETERS. DVC can only hash a
-      file, so these must live in one for `dvc.lock` to be able to record what
-      a run actually used. Environment overrides are deliberately ignored.
-    - `.env` holds ENVIRONMENT wiring — URIs, ports, bucket names, credentials.
-      None of it changes the model, so none of it belongs in the lock file.
+    Environment variables never override a hyperparameter.
     """
 
     # ── Paths ────────────────────────────────────────────────────────────────
-    # The Week 1-3 canonical snapshot: git-committed, always present.
+    # Committed to Git, so always present.
     data_path: Path = Path("data/diabetes.csv")
-    # The DVC-tracked dataset. See the note in _validate().
+    # DVC-tracked: missing until `make dvc-pull` or `make data-v2`.
     measurements_path: Path = Path("data/measurements.csv")
     raw_dir: Path = Path("data/raw")
     processed_dir: Path = Path("data/processed")
     models_dir: Path = Path("models")
     metrics_path: Path = Path("metrics/metrics.json")
     run_id_path: Path = Path("models/mlflow_run_id.json")
-    # New in Week 5. The validation verdict, and the corrupted batch the report
-    # exercise reads. `quality_dir` holds git-committed teaching material, so
-    # unlike measurements_path it is always present.
     validation_report_path: Path = Path("reports/validation.json")
     quality_dir: Path = Path("data/quality")
-    # New in Week 6. Three more `cache: false` artifacts that live in Git:
-    # the per-slice scores, the recorded champion, and the go/no-go verdict.
     slices_path: Path = Path("metrics/slices.json")
     baseline_path: Path = Path("metrics/baseline.json")
     gate_report_path: Path = Path("reports/gate.json")
@@ -58,53 +40,28 @@ class Settings:
     model_family: str = "logreg"
     model_c: float = 1.0
     max_iter: int = 1000
-    # New in Week 5: how the model fills the nulls that to_nullable created.
-    # A hyperparameter, so it lives in params.yaml where DVC can hash it.
+    # How the imputer fills the nulls that `to_nullable` creates.
     impute_strategy: str = "median"
-    # New in Week 6, and the number of fields here is the point.
-    #
-    # `n_estimators` applies only when `train.family` is `rf`; Week 6, Exercise 6 uses
-    # it to produce a model that is genuinely BETTER, so the ratchet has
-    # something to ratchet.
+    # Used only when `train.family` is `rf`.
     n_estimators: int = 100
 
-    # ── Evaluation and acceptance, from params.yaml (new in Week 6) ──────────
-    #
-    # TWO blocks, not one, and the separation is deliberate:
-    #
-    #   `evaluation`  WHAT we measure — the slice definitions. Changing this
-    #                 changes the evidence, so `evaluate` (and therefore `gate`)
-    #                 must re-run.
-    #   `acceptance`  WHETHER it is good enough — the thresholds. Changing this
-    #                 changes only the DECISION, so `dvc repro` re-runs `gate`
-    #                 alone and nothing is retrained.
-    #
-    # Put them in one block and every threshold edit invalidates the model —
-    # slow, and it quietly teaches that changing your mind about what "good"
-    # means requires new evidence. It does not. Try it: tighten
-    # `acceptance.minimum.f1` and run `make repro`.
-    #
-    # Both are carried as plain dicts rather than typed fields, because they are
-    # policy documents that will grow, and because `gates.evaluate_gate` is a
-    # pure function over exactly these dicts.
+    # ── Evaluation and acceptance, from params.yaml ─────────────────────────
+    # `evaluation`: what is measured (a change re-runs `evaluate` and `gate`).
+    # `acceptance`: the thresholds (a change re-runs only `gate`).
     slice_specs: dict = field(default_factory=dict)
     acceptance: dict = field(default_factory=dict)
 
-    # ── MLflow (Weeks 2-3) ───────────────────────────────────────────────────
+    # ── MLflow and Prefect ───────────────────────────────────────────────────
     mlflow_tracking_uri: str = "http://127.0.0.1:5500"
-    # New in Week 8. NOTE THE /api SUFFIX — without it every client call
-    # 404s against the UI, which is the most common self-hosting mistake.
+    # Needs the /api suffix; without it every client call gets a 404.
     prefect_api_url: str = "http://127.0.0.1:5520/api"
     mlflow_experiment_name: str = "diabetes-week9"
     registered_model_name: str = "diabetes-classifier"
     model_alias: str = "staging"
-    # New in Week 6 as a named setting rather than a literal. `champion` is the
-    # role the baseline is read from, and Week 6 is the first week where a
-    # second alias does real work instead of demonstrating that two can coexist.
     champion_alias: str = "champion"
     model_owner: str = "unknown"
 
-    # ── DVC remote (new in Week 4) ───────────────────────────────────────────
+    # ── DVC remote ───────────────────────────────────────────────────────────
     dvc_remote_name: str = "storage"
     dvc_bucket: str = "dvc-storage"
     dvc_remote_path: str = "dvcstore"
@@ -145,7 +102,6 @@ def load_settings(project_root: Path | None = None) -> Settings:
         slices_path=base_path / "metrics/slices.json",
         baseline_path=base_path / "metrics/baseline.json",
         gate_report_path=base_path / "reports/gate.json",
-        # From params.yaml ONLY — see the class docstring.
         random_seed=int(params.get("random_seed", 42)),
         test_size=float(prepare.get("test_size", 0.25)),
         model_family=str(train.get("family", "logreg")),
@@ -211,23 +167,11 @@ def _validate(settings: Settings) -> None:
     if not settings.dvc_bucket or "/" in settings.dvc_bucket:
         raise ValueError("DVC_BUCKET must be a bucket name without '/'.")
 
-    # measurements_path is DELIBERATELY NOT VALIDATED.
-    #
-    # It is DVC-tracked, so it is legitimately absent in a fresh clone (before
-    # `dvc pull`) and in the course autograder, which never runs `dvc pull`.
-    # Validating it here would fail every test in CI. Code and tests that need
-    # the file check for it themselves and skip or fail with a clear message —
-    # see tests/conftest.py::measurements_file and cli.py.
+    # measurements_path is not checked: it is DVC-tracked, so it is missing in a fresh
+    # clone and in CI.
 
 
-# The two Week 6 policy blocks get their own validators, because a typo in a
-# slice definition or a threshold should fail at load time with a sentence you
-# can act on — not three stages later, as a KeyError inside the gate.
-#
-# This matters more here than for the other settings. A malformed threshold that
-# silently defaults to something permissive is a gate that reports GO for a
-# reason nobody intended, and the whole point of the week is that a gate you
-# cannot trust is worse than no gate at all.
+# A typo in a slice or threshold fails here, at load time, not later as a KeyError in the gate.
 
 SLICE_KINDS = ("bins", "missing_flag")
 

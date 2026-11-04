@@ -20,11 +20,9 @@ from .schemas import FEATURE_COLUMNS, SCHEMA_VERSION  # noqa: F401
 
 
 class PredictionRequest(BaseModel):
-    """One patient. Pydantic checks that every field is present and is a number or null.
+    """One patient, with the fields of `PredictionInput`. The five sentinel fields may be null.
 
-    The fields are the same as in `PredictionInput` (schemas.py), and the same five
-    may be null: a value that was not measured. A test checks that the two agree.
-    The value rules stay in `PredictionInput`.
+    Pydantic checks the types here; `PredictionInput` checks the values.
     """
 
     # An unknown field is a 422, as `strict = True` makes it in the contract.

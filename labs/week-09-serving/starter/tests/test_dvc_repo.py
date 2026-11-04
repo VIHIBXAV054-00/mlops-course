@@ -1,9 +1,4 @@
-"""The state DVC creates (Week 4, Exercises 1, 2, 5).
-
-Pure file inspection — no `dvc` subprocess, no network — so these are fast and
-work offline. Every test is guarded by a fixture that skips when the student has
-not reached the relevant exercise yet.
-"""
+"""The files DVC creates, checked by reading them: no dvc command, no network."""
 
 import configparser
 
@@ -21,14 +16,7 @@ def test_dvc_dir_and_dvcignore_exist(dvc_repo) -> None:
 
 
 def test_dvc_local_state_is_git_ignored(dvc_repo) -> None:
-    """The cache, tmp and config.local must never reach Git.
-
-    Asserted as behaviour (`git check-ignore`) rather than by reading
-    .dvc/.gitignore literally, because DVC omits an entry it can see is already
-    covered by an ancestor .gitignore — and this repository's root .gitignore
-    covers `**/.dvc/config.local`. Either way the file is ignored, which is the
-    property that actually matters.
-    """
+    """The DVC cache, tmp and config.local must not reach Git."""
     import subprocess
 
     for relative in (".dvc/cache", ".dvc/tmp", ".dvc/config.local"):
@@ -37,7 +25,7 @@ def test_dvc_local_state_is_git_ignored(dvc_repo) -> None:
             cwd=dvc_repo,
             capture_output=True,
         )
-        assert result.returncode == 0, f"{relative} is NOT git-ignored"
+        assert result.returncode == 0, f"{relative} is not git-ignored"
 
 
 def test_dvc_config_declares_default_storage_remote(dvc_repo, settings) -> None:
@@ -54,12 +42,7 @@ def test_dvc_config_declares_default_storage_remote(dvc_repo, settings) -> None:
 
 
 def test_dvc_config_contains_no_credentials(dvc_repo) -> None:
-    """The committed config must never carry keys.
-
-    Credentials belong in the environment or in .dvc/config.local, which DVC
-    git-ignores. This is the assertion form of that rule; the student bundle's
-    leak scan enforces the same thing at publish time.
-    """
+    """The committed config holds no keys: they belong in .dvc/config.local or the environment."""
     text = (dvc_repo / ".dvc" / "config").read_text()
     assert "access_key_id" not in text
     assert "secret_access_key" not in text
@@ -77,15 +60,7 @@ def test_pointer_file_schema(measurements_pointer) -> None:
 
 
 def test_data_gitignore_hides_the_tracked_file(dvc_repo, measurements_pointer) -> None:
-    """The tracked data file must be git-ignored, and `dvc add` is what did it.
-
-    Asserting the BEHAVIOUR rather than the literal contents of
-    `data/.gitignore`, for the same reason as the test above: DVC omits an entry
-    it can see an ancestor .gitignore already covers, so the rule may legitimately
-    live somewhere else. What must be true either way is that Git will not stage
-    the data — and that `dvc add` wrote its ignore file in the DATA directory
-    rather than at the repo root, which is the detail worth remembering.
-    """
+    """`dvc add` writes data/.gitignore, and Git ignores data/measurements.csv."""
     import subprocess
 
     assert (dvc_repo / "data" / ".gitignore").is_file(), (
@@ -111,12 +86,7 @@ def test_pointer_md5_matches_the_workspace_file(dvc_repo, measurements_pointer) 
 
 
 def test_dvc_lock_dep_matches_pointer_md5(dvc_lock, measurements_pointer) -> None:
-    """The join point of the whole week, guarded.
-
-    dvc.lock records what `prepare` actually consumed. That md5 must be the same
-    one the .dvc pointer publishes — otherwise the pipeline and the data version
-    are telling different stories.
-    """
+    """The md5 that prepare used, recorded in dvc.lock, equals the md5 in the .dvc pointer."""
     lock = yaml.safe_load(dvc_lock.read_text())
     assert lock["schema"] == "2.0"
 
@@ -126,7 +96,7 @@ def test_dvc_lock_dep_matches_pointer_md5(dvc_lock, measurements_pointer) -> Non
 
 
 def test_dvc_lock_records_param_values(dvc_lock, params) -> None:
-    """The lock stores param VALUES, which is how `repro` knows train is stale."""
+    """dvc.lock stores parameter values, which is how `dvc repro` knows a stage is stale."""
     lock = yaml.safe_load(dvc_lock.read_text())
     recorded = lock["stages"]["prepare"]["params"]["params.yaml"]
     assert recorded["random_seed"] == params["random_seed"]

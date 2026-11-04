@@ -1,14 +1,4 @@
-"""Reading workflow files as data.
-
-Week 7's subject is a YAML file that a machine you do not own executes on your
-behalf. That file is worth treating like any other input: parse it, assert
-things about it, and refuse to trust a claim you have not checked.
-
-Everything here is offline and pure. `KNOWN_ACTIONS` is a **recorded
-snapshot**, not a live query — a lint that phones GitHub would fail in the
-autograder, and a course that quietly depended on the network would be
-teaching the opposite of Weeks 4 to 6.
-"""
+"""Read GitHub Actions workflow files as data and audit their action pins, offline."""
 
 from __future__ import annotations
 
@@ -17,25 +7,8 @@ from pathlib import Path
 
 import yaml
 
-# Recorded from the GitHub API on 2026-08-06. Re-verify before each term; the
-# whole point of Week 7, Exercise 1 is that this table goes stale and nobody notices.
-#
-# TWO NUMBERS PER ACTION, and the difference between them cost this lab a red
-# build before it cost you one.
-#
-#   major_tag     the highest `vN` tag that actually EXISTS in the repository.
-#                 This is the only thing `uses: owner/action@vN` can resolve.
-#   release_major the major of the newest published RELEASE.
-#
-# They are usually equal, because most action authors move a `vN` tag forward
-# with each release. `astral-sh/setup-uv` does not: its newest release is
-# v9.0.0 and there is no `v8` or `v9` tag at all, so `@v9` fails with
-# "Unable to resolve action ... unable to find version v9" — measured, on a
-# real runner, while writing this lab.
-#
-# The lesson generalises past this one action: **"latest release" is not the
-# same question as "what can I pin to".** An API that answers the first will
-# happily hand you something that does not exist as a ref.
+# Recorded from the GitHub API on 2026-08-06. major_tag: the highest vN tag that exists;
+# release_major: the newest release. setup-uv has release v9 but no v9 tag.
 KNOWN_ACTIONS: dict[str, dict[str, int]] = {
     "actions/checkout": {"major_tag": 7, "release_major": 7},
     "actions/setup-node": {"major_tag": 7, "release_major": 7},
@@ -55,14 +28,7 @@ _USES = re.compile(r"^(?P<action>[\w.-]+/[\w.-]+)(?:/[\w./-]+)?@(?P<ref>.+)$")
 
 
 def load_workflow(path: Path) -> dict:
-    """Parse a workflow file.
-
-    One trap worth knowing about, and it is the reason this returns the raw
-    mapping rather than a tidied object: YAML 1.1 parses an unquoted `on` as
-    the BOOLEAN True, so a workflow's trigger block arrives under the key
-    `True` rather than `"on"`. PyYAML's safe_load does exactly this. Callers
-    should use `triggers()` instead of indexing `["on"]` and hoping.
-    """
+    """Parse a workflow file. YAML reads an unquoted `on:` as True, so use triggers() for it."""
     return yaml.safe_load(path.read_text())
 
 
@@ -121,11 +87,7 @@ def run_commands(workflow: dict) -> list[str]:
 
 
 def make_targets(workflow: dict) -> set[str]:
-    """Which `make <target>`s this workflow invokes.
-
-    This is what makes the anti-drift property checkable: if `ci.yml` and
-    `ct.yml` call the same target, there is one definition of the build.
-    """
+    """Which `make <target>`s this workflow invokes."""
     targets: set[str] = set()
     for command in run_commands(workflow):
         for match in re.finditer(r"\bmake\s+(?:--?\S+\s+)*([a-z][\w-]*)", command):
@@ -136,18 +98,7 @@ def make_targets(workflow: dict) -> set[str]:
 def pin_status(action: str, ref: str) -> tuple[str, str]:
     """Classify one pin. Returns (status, detail).
 
-    Outcomes, and only the first three are acceptable in a repository you
-    intend to keep:
-
-      sha        a 40-hex commit. Immutable, and the only pin that truly pins —
-                 a tag can be moved by whoever owns the action.
-      exact      a full `vX.Y.Z`. The right answer when no major tag exists.
-      current    a major tag matching the newest major tag we recorded.
-      stale      an older major tag than the one we recorded.
-      unresolvable  a major tag that DOES NOT EXIST upstream. The build fails
-                 before a single step runs, which is at least loud.
-      floating   a branch name. Whatever that branch says today runs in your
-                 repository, with your token, tomorrow.
+    Status is sha, exact, current, stale, unresolvable, floating or unknown.
     """
     if re.fullmatch(r"[0-9a-f]{40}", ref):
         return "sha", "immutable"
@@ -206,7 +157,7 @@ def audit(paths: list[Path]) -> list[dict]:
 
 
 def format_audit(rows: list[dict]) -> str:
-    """The Week 7, Exercise 1 table."""
+    """The pin audit as a table, for the CLI."""
     if not rows:
         return "No workflow files found."
 
@@ -228,7 +179,7 @@ def format_audit(rows: list[dict]) -> str:
 
     lines.append("")
     for status, message in (
-        ("unresolvable", "pin(s) name a tag that DOES NOT EXIST — the build fails at setup"),
+        ("unresolvable", "pin(s) name a tag that does not exist — the build fails at setup"),
         ("stale", "pin(s) behind the newest published major tag"),
         ("floating", "pin(s) tracking a branch rather than a version"),
     ):
@@ -237,11 +188,4 @@ def format_audit(rows: list[dict]) -> str:
             lines.append(f"  {len(hits)} {message}.")
     if not (count("unresolvable") or count("stale") or count("floating")):
         lines.append("  Every pin is current, exact or immutable.")
-    lines.append("")
-    lines.append(
-        "  A major tag is a compromise: it moves under you within a major, which\n"
-        "  is how you get security fixes without editing anything, and it means\n"
-        "  the code you run tomorrow is not the code you reviewed today. A commit\n"
-        "  SHA is the honest pin. This course uses major tags and says so."
-    )
     return "\n".join(lines)

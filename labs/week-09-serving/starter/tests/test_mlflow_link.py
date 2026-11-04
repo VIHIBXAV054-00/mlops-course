@@ -1,8 +1,5 @@
-"""The DVC to MLflow link (Week 4, Exercise 6).
-
-Needs the stack AND a DVC pointer. Both guards are fixtures, so this file is
-green with either one absent.
-"""
+"""The link from a DVC data version to an MLflow run. Skips without the MLflow server or
+the DVC pointer."""
 
 import dataclasses
 
@@ -25,15 +22,7 @@ def logged_run(live_settings, measurements_pointer, raw_batches, tmp_path_factor
     measurements = tmp_path / "data" / "measurements.csv"
     build_measurements(2, raw_batches, measurements)
 
-    # The pointer has to travel WITH the data copy. `log_data_version` reads
-    # `<measurements_path>.dvc`, so pointing `measurements_path` into the sandbox
-    # without bringing the pointer along raises FileNotFoundError from
-    # dvc_meta.read_pointer — and it does so only when MLflow is reachable, which
-    # is why this went unnoticed while the stack was down.
-    #
-    # Copying it is honest rather than a fudge: `build_measurements(2, ...)` is
-    # byte-deterministic, so the sandbox file IS the bytes the project's pointer
-    # names. The assertion below is what keeps that true.
+    # log_data_version reads <measurements_path>.dvc, so copy the pointer next to the data.
     import shutil
 
     from week_09_serving.datasets import file_md5
@@ -52,38 +41,24 @@ def logged_run(live_settings, measurements_pointer, raw_batches, tmp_path_factor
         run_id_path=tmp_path / "models" / "mlflow_run_id.json",
         validation_report_path=tmp_path / "reports" / "validation.json",
         measurements_path=measurements,
-        # New in Week 6. The three gate artifacts have to live in the sandbox
-        # too, or `pipeline.gate` would read and overwrite the project's real
-        # reports/gate.json — and `register` would then be gated on whatever
-        # state the student's workspace happens to be in.
+        # The gate files live in the sandbox too, so the test never touches your real reports.
         slices_path=tmp_path / "metrics" / "slices.json",
         baseline_path=tmp_path / "metrics" / "baseline.json",
         gate_report_path=tmp_path / "reports" / "gate.json",
     )
-    # The WHOLE chain, in order, including `evaluate` — which is not optional
-    # here. `promote_to_staging` reads `f1` and `roc_auc` off the source run to
-    # build its evidence tags, and those metrics are written by `evaluate`. A
-    # fixture that stops after `train` produces a run with params and tags but no
-    # scores, and the failure surfaces four tests later as `KeyError: 'f1'`.
+    # evaluate must run: promotion reads f1 and roc_auc from the run.
     assert pipeline.validate(sandbox)["passed"]
     pipeline.prepare(sandbox)
     result = pipeline.train(sandbox)
     assert result["run_id"], "training produced no MLflow run"
     pipeline.evaluate(sandbox)
-    # And `gate`, for the same reason `evaluate` is here: `register_best_model`
-    # now calls `pipeline.require_go`, so a fixture that stops before the gate
-    # produces a run nothing can be registered from. Same lesson as Week 4's —
-    # every stage a later test reads from has to actually have run.
-    #
-    # No baseline is seeded in the sandbox, deliberately: the regression check
-    # reports SKIPPED and the verdict is still a GO earned by the floors, which
-    # is exactly the first-model-in-a-new-project path.
+    # gate must run: registration needs a GO. With no baseline, the regression check is skipped.
     assert pipeline.gate(sandbox)["verdict"] == "GO"
     return sandbox, result
 
 
 def test_run_carries_the_dvc_data_version(live_settings, logged_run) -> None:
-    """The run records WHICH BYTES it trained on."""
+    """The run records the md5 of the data it trained on."""
     sandbox, result = logged_run
     client = MlflowClient(live_settings.mlflow_tracking_uri)
     tags = client.get_run(result["run_id"]).data.tags
@@ -103,13 +78,8 @@ def test_run_has_a_dataset_input(live_settings, logged_run) -> None:
 
 
 def test_mlflow_digest_differs_from_dvc_md5(live_settings, logged_run) -> None:
-    """The punchline of the week, as an assertion.
-
-    MLflow's digest is an 8-character truncated md5 of the first 10,000 rows'
-    PARSED VALUES plus the row count and column names. DVC's md5 is a
-    32-character hash of the file's BYTES. Same file, different claims — and
-    only the DVC one proves "these exact bytes".
-    """
+    """MLflow's digest hashes parsed values (8 characters); DVC's md5 hashes the file's
+    bytes (32)."""
     sandbox, result = logged_run
     digest = result["mlflow_digest"]
     md5 = pointer_md5(sandbox.measurements_path)
@@ -119,7 +89,7 @@ def test_mlflow_digest_differs_from_dvc_md5(live_settings, logged_run) -> None:
 
 
 def test_search_runs_by_data_version_finds_the_run(live_settings, logged_run) -> None:
-    """The query Week 3 could not express: which runs saw THIS data?"""
+    """Find every run that trained on a given data version."""
     sandbox, result = logged_run
     md5 = pointer_md5(sandbox.measurements_path)
     frame = search_runs_by_data_version(live_settings, md5)
@@ -128,7 +98,7 @@ def test_search_runs_by_data_version_finds_the_run(live_settings, logged_run) ->
 
 
 def test_trace_reaches_the_data(live_settings, logged_run) -> None:
-    """The Week 3 chain, now with its final link."""
+    """The chain from alias to version, run and data version."""
     from week_09_serving.registry import (
         promote_to_staging,
         register_best_model,
@@ -136,9 +106,7 @@ def test_trace_reaches_the_data(live_settings, logged_run) -> None:
     )
 
     sandbox, result = logged_run
-    # `sandbox`, not `live_settings` — it carries the same `-tests` experiment
-    # and model names, plus the sandbox gate report that register/promote now
-    # insist on.
+    # sandbox carries the -tests names and the gate report that register and promote need.
     version = register_best_model(sandbox, result["run_id"])
     promote_to_staging(sandbox, version.version)
 
@@ -147,20 +115,14 @@ def test_trace_reaches_the_data(live_settings, logged_run) -> None:
     assert chain["dvc_md5"] == pointer_md5(sandbox.measurements_path)
     assert chain["dvc_url"]
 
-    # New in Week 5 — the chain reaches the VERDICT, not just the bytes. The
-    # schema version is the load-bearing half: without it, "passed validation"
-    # silently re-points at whatever the contract says today.
+    # The chain also records the validation verdict and the schema version it used.
     assert chain["data_validation"] == "pass"
     assert chain["schema_version"] == SCHEMA_VERSION
     assert chain["n_failure_cases"] == "0"
 
 
 def test_run_carries_the_validation_verdict(live_settings, logged_run) -> None:
-    """The Week 5 tags, and the ingestion report as a run artifact.
-
-    Tags answer "was it checked?". Only the artifact answers "what did the check
-    see?" — which is the difference between a claim and evidence.
-    """
+    """The run carries the validation tags and the ingestion report as an artifact."""
     sandbox, result = logged_run
     client = MlflowClient(live_settings.mlflow_tracking_uri)
     tags = client.get_run(result["run_id"]).data.tags
@@ -175,13 +137,8 @@ def test_run_carries_the_validation_verdict(live_settings, logged_run) -> None:
 
 
 def test_run_carries_the_gate_verdict(live_settings, logged_run) -> None:
-    """New in Week 6 — the eighth link, and the artifacts behind it.
-
-    Two things are asserted and only one of them is the verdict. The other is
-    `gate_checks_skipped`, because "GO with four criteria unchecked" and "GO"
-    are different claims, and the only way to tell them apart six months later
-    is if the run recorded both.
-    """
+    """The run records the gate verdict, the number of skipped checks and the gate
+    artifacts."""
     sandbox, result = logged_run
     client = MlflowClient(live_settings.mlflow_tracking_uri)
     tags = client.get_run(result["run_id"]).data.tags

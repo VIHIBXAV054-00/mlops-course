@@ -1,30 +1,6 @@
-"""The five pipeline stages that `dvc.yaml` declares.
+"""The five pipeline stages that `dvc.yaml` declares: validate, prepare, train, evaluate, gate.
 
-    validate ──▶ prepare ──▶ train ──▶ evaluate ──▶ gate
-
-Week 4 had the middle three. `validate` is Week 5's, and it is first on purpose:
-it is a DATA quality gate, and a gate that runs after the work is a report.
-
-`gate` is new in Week 6 and it is last, which changes how it has to work. Week
-5's gate had teeth because `prepare` declared its verdict file as a dependency:
-fail, and nothing downstream ran. There is nothing downstream of `evaluate`, and
-a failing MODEL gate must not delete the model — you need the artifact to work
-out why it failed. So this one writes a verdict, exits non-zero, and `register`
-and `promote` refuse without a GO. A gate is only as strong as the thing that
-consults it.
-
-    Week 5 = was the data allowed IN?
-    Week 6 = is the model allowed OUT?
-
-Each function is one DVC stage, and each is runnable by hand through
-`src/main.py` — a stage you cannot run manually is a stage you cannot debug.
-
-The stages communicate through FILES, not through Python calls. That is what
-lets DVC hash the boundary between them and skip work that cannot have changed.
-It is also how the gate gets its teeth: `validate` writes
-`reports/validation.json`, `prepare` declares that file as a dependency, and so
-`dvc repro` will not run `prepare` until `validate` has succeeded. The gate is a
-node in the graph, not an `assert` buried in a function.
+The stages pass results through files, so DVC can hash each boundary and skip unchanged stages.
 """
 
 from __future__ import annotations
@@ -63,42 +39,24 @@ def _require_measurements(settings: Settings) -> Path:
 
 
 class ValidationFailed(RuntimeError):
-    """The data did not satisfy its contract. Not a bug — a gate doing its job."""
+    """The data did not satisfy its contract."""
 
 
 class GateFailed(RuntimeError):
-    """The model did not satisfy its acceptance criteria. New in Week 6.
-
-    Also not a bug. A NO-GO is the system working: somebody wrote down what
-    "good enough" meant, and this model is not it.
-    """
+    """The model did not satisfy its acceptance criteria."""
 
 
 def _hyperparams(settings: Settings) -> dict:
-    """The estimator keyword arguments for the configured family.
-
-    Kept in one place because `train` and the tests both need it, and because a
-    silently-ignored hyperparameter is the kind of thing that makes a sweep
-    meaningless. `n_estimators` applies to the forest only; passing it to
-    LogisticRegression would raise, which is better than being ignored.
-    """
+    """The estimator keyword arguments for the configured model family."""
     if settings.model_family == "rf":
         return {"n_estimators": settings.n_estimators}
     return {"C": settings.model_c}
 
 
 def validate(settings: Settings) -> dict:
-    """Stage 0 — the gate. New in Week 5.
+    """Stage 0: run the ingestion contract, write `reports/validation.json`, raise on a failure.
 
-    Runs the INGESTION contract against the DVC-tracked dataset, writes the
-    verdict to `reports/validation.json`, and raises `ValidationFailed` if the
-    data did not pass. The CLI turns that into a non-zero exit, which is what
-    makes `dvc repro` stop here instead of training on data it was told not to.
-
-    Note the ordering inside the function: the report is written BEFORE the
-    failure is raised. A gate that blocks the pipeline and leaves no evidence
-    behind is untriageable — you want the file that says exactly which 15 things
-    were wrong, and you want it even on the run that failed.
+    The report is written first, so a failed run still leaves its evidence.
     """
     source = _require_measurements(settings)
     frame = read_raw(source)
@@ -139,16 +97,9 @@ def _require_validated(settings: Settings) -> dict:
 
 
 def prepare(settings: Settings) -> dict:
-    """Stage 1 — split the versioned dataset into train and test CSVs.
+    """Stage 1: split the dataset into train and test CSVs, only after a passing validation.
 
-    `measurement_date` is KEPT in the written files (lineage survives into the
-    processed data, and Weeks 11-12 get a time axis for free) but is not a
-    feature — `train` selects FEATURE_COLUMNS explicitly.
-
-    New in Week 5: it refuses to run at all unless a PASSING validation report
-    exists. `dvc.yaml` already enforces that through the dependency graph; this
-    check is what makes a manual `python src/main.py prepare` behave the same
-    way. A gate that only holds when you use the front door is not a gate.
+    `measurement_date` stays in the files but is not a feature.
     """
     _require_validated(settings)
     source = _require_measurements(settings)
@@ -171,19 +122,9 @@ def prepare(settings: Settings) -> dict:
 
 
 def prepare_model_input(frame) -> tuple:
-    """Turn a processed split into something `ModelInput` accepts. New in Week 5.
+    """Select the model's columns, turn sentinel zeros into nulls, validate against `ModelInput`.
 
-    Three steps, in this order, and the order is the lesson:
-
-    1. **Project** to exactly the model's columns, in the contract's order. The
-       processed CSVs still carry `measurement_date`; the model must never see
-       it (it would leak batch identity, and a new patient does not have one).
-    2. **Convert** the sentinel zeros to nulls. This is a statement of fact — we
-       do not know these values — and nothing more.
-    3. **Validate** against `ModelInput`, which permits nulls and forbids zeros.
-
-    Returns `(features, labels, report)`. The report is returned rather than
-    printed so the caller can log it to MLflow.
+    Returns `(features, labels, report)`; `train` logs the report to MLflow.
     """
     projected = frame[MODEL_INPUT_COLUMNS]
     nullable = to_nullable(projected)
@@ -203,16 +144,9 @@ def prepare_model_input(frame) -> tuple:
 
 
 def train(settings: Settings) -> dict:
-    """Stage 2 — fit the model, and record the data version on the MLflow run.
+    """Stage 2: fit the model and, if MLflow is reachable, log params, data version and verdict.
 
-    The MLflow half is guarded: if the tracking server is not reachable, the
-    stage still produces its model and writes `{"run_id": null}`, so the DVC
-    pipeline is not hostage to a running container. That guard is why this stage
-    works in CI.
-
-    New in Week 5: the TRAINING contract runs here, right before `fit`, and the
-    imputer that makes the nulls trainable lives inside the Pipeline rather than
-    in this function — see `model.build_model`.
+    Without MLflow the model is still written with a null run id, so the stage runs in CI.
     """
     train_path = settings.processed_dir / "train.csv"
     if not train_path.exists():
@@ -261,17 +195,12 @@ def train(settings: Settings) -> dict:
                     "random_seed": settings.random_seed,
                     "test_size": settings.test_size,
                     "n_rows_train": len(frame),
-                    # New in Week 5 — the imputation strategy is part of what
-                    # produced this model, so it is part of the run.
                     "impute_strategy": settings.impute_strategy,
                 }
             )
             mlflow.set_tags({"git_commit": git_commit()})
-            # The Week 4 addition: which BYTES did this run consume?
             log_data_version(settings)
-            # The Week 5 addition: did those bytes pass their contract, and
-            # which version of the contract was that? Without the version,
-            # "it passed validation" is a claim with no referent.
+            # The verdict and the contract version, so "it passed" names a set of rules.
             log_validation(settings, input_report)
             digest = log_dataset_input(frame, settings, dvc_data_url(settings))
             mlflow.sklearn.log_model(model, name="model")
@@ -287,19 +216,9 @@ def train(settings: Settings) -> dict:
 
 
 def evaluate(settings: Settings) -> dict:
-    """Stage 3 — score the model, aggregate and per slice.
+    """Stage 3: score the model on the test split, overall and per slice.
 
-    `metrics/metrics.json` is unchanged from Week 5. New in Week 6 is its
-    companion, `metrics/slices.json`: the same model scored again on each group
-    declared in `evaluation.slices`.
-
-    Both are `cache: false` DVC outputs, so they live in Git. That is what makes
-    `dvc metrics diff` work with no remote and puts the numbers in the same
-    commit as the pointer, the lock file and the validation verdict.
-
-    Note what this function still does NOT do: compare anything to a threshold.
-    Measurement and policy are separate stages for the same reason they are
-    separate blocks in `params.yaml` — see the header there.
+    It writes `metrics.json` and `slices.json` and applies no thresholds; `gate` does that.
     """
     model_path = settings.models_dir / "model.pkl"
     test_path = settings.processed_dir / "test.csv"
@@ -311,18 +230,12 @@ def evaluate(settings: Settings) -> dict:
 
     model = joblib.load(model_path)
     frame = load_measurements(test_path)
-    # The test set goes through the SAME three steps as the training set —
-    # project, convert, validate. Scoring the model on raw zeros while it was
-    # fitted on imputed nulls would be training-serving skew inside our own
-    # pipeline, which is precisely the mistake Week 5 exists to prevent.
+    # The test set goes through the same steps as the training set;
+    # anything else would be training-serving skew.
     features, labels, _ = prepare_model_input(frame)
     metrics = evaluate_model(model, features, labels)
 
-    # The slice frame is `frame` — the RAW test split, sentinel zeros intact —
-    # and NOT `features`, which the conversion has already emptied out. Slice on
-    # imputed values and a patient whose BMI was never measured joins whichever
-    # band the training median fell in: their group stops existing and the band
-    # they joined reports a number partly about people it does not describe.
+    # Slice on the raw split: after imputation, a patient with no BMI would join the median's band.
     slices = slice_report(
         frame,
         labels,
@@ -333,10 +246,8 @@ def evaluate(settings: Settings) -> dict:
 
     settings.metrics_path.parent.mkdir(parents=True, exist_ok=True)
     settings.metrics_path.write_text(json.dumps(metrics, indent=2) + "\n")
-    # No timestamp, no hostname, no run id generated at write time. This file is
-    # a `cache: false` output committed to Git, so anything that changed between
-    # two identical runs would leave `gate` permanently stale, the working tree
-    # permanently dirty, and every commit carrying a diff that says nothing.
+    # No timestamps or run ids: this file is in Git, and a value that changes each run
+    # would leave the working tree dirty.
     settings.slices_path.write_text(json.dumps(slices, indent=2) + "\n")
 
     # Attach the scores to the run that produced the model, if there was one.
@@ -363,12 +274,9 @@ _METRIC_NAME_SAFE = str.maketrans({"+": "plus", " ": "_", "/": "_"})
 
 
 def flatten_slice_metrics(slices: dict, keys=("f1", "recall", "roc_auc")) -> dict:
-    """Per-slice scores as flat MLflow metric names.
+    """Per-slice scores as flat MLflow metric names, e.g. `slice.age_band.50plus.f1`.
 
-    `slice.age_band.50plus.f1` and friends. Only a few keys, on purpose: the
-    full table is logged as an artifact, and a run with two hundred metrics is a
-    run nobody reads. Nulls are dropped — MLflow cannot store "undefined", and
-    writing 0.0 instead is exactly the lie this week is about.
+    Nulls are dropped: MLflow cannot store "undefined", and 0.0 would be wrong.
     """
     flat = {}
     for axis, groups in (slices.get("slices") or {}).items():
@@ -381,23 +289,9 @@ def flatten_slice_metrics(slices: dict, keys=("f1", "recall", "roc_auc")) -> dic
 
 
 def gate(settings: Settings) -> dict:
-    """Stage 4 — the model quality gate. New in Week 6, and the point of it.
+    """Stage 4: apply the acceptance criteria, write `reports/gate.json`, raise on a NO-GO.
 
-    Reads the measurements (`metrics.json`, `slices.json`), the recorded
-    champion (`baseline.json`) and the policy (`acceptance` in params.yaml);
-    writes the verdict to `reports/gate.json`; raises `GateFailed` on NO-GO so
-    the CLI exits non-zero and `dvc repro` stops.
-
-    Two orderings matter here and both are deliberate:
-
-    1. **The report is written BEFORE the failure is raised.** A gate that blocks
-       a release and leaves no evidence behind is untriageable. You want the file
-       that says exactly which check failed and by how much, and you want it on
-       the run that failed most of all.
-    2. **Nothing is deleted.** `models/model.pkl` survives a NO-GO. This is the
-       opposite of Week 5, where a failing data gate meant no processed data was
-       written at all — and the difference is that a bad model is evidence,
-       whereas bad data is just bad data.
+    The model stays on disk after a NO-GO, so you can find out why it failed.
     """
     metrics = read_metrics(settings)
     if not metrics:
@@ -429,20 +323,9 @@ def gate(settings: Settings) -> dict:
 
 
 def log_gate_to_run(settings: Settings, report: dict) -> dict:
-    """Stamp the verdict onto the MLflow run that produced the model.
+    """Tag the gate verdict on the MLflow run that produced the model, on a NO-GO too.
 
-    This is the last link in a chain that has been growing since Week 3, and it
-    is what turns the registry alias into an audit trail:
-
-        alias -> version -> run -> git commit -> data md5 -> validation verdict
-              -> params -> GATE VERDICT
-
-    Tagged even on a NO-GO, deliberately. A run that failed its gate and still
-    exists is exactly the run you want to be able to find later — either to
-    understand why, or to notice that somebody released it anyway.
-
-    Guarded by reachability, like every other MLflow call in this pipeline, so
-    the stage still works with the stack down and in CI.
+    Does nothing when there is no run id or MLflow is not reachable.
     """
     run_id = read_run_id(settings)
     if not run_id:
@@ -487,21 +370,13 @@ def read_gate(settings: Settings) -> dict:
 
 
 def require_go(settings: Settings) -> dict:
-    """The recorded GO verdict, or a refusal. New in Week 6.
-
-    This is the function that gives the gate its teeth, and it lives here rather
-    than inside `registry.py` so that there is exactly ONE definition of "may
-    this model be released?" in the project. `register` and `promote` both call
-    it. A second, slightly different copy of this rule is how a gate quietly
-    stops applying to the path somebody actually uses.
-    """
+    """The recorded GO verdict, or `GateFailed`. `register` and `promote` both call it."""
     report = read_gate(settings)
     if not report:
         raise GateFailed(
             f"reports/{settings.gate_report_path.name} is missing — the gate has never "
             "run for this model. Run `make gate` (or `make repro`, which runs "
-            "it last). Releasing an ungated model is not a shortcut; it is the "
-            "thing the gate exists to prevent."
+            "it last)."
         )
     if report.get("verdict") != "GO":
         failed = [c["id"] for c in report.get("checks", []) if c["status"] == "fail"]

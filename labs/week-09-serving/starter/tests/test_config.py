@@ -34,13 +34,7 @@ def test_params_come_from_params_yaml(settings, params) -> None:
 
 
 def test_pipeline_params_ignore_env_override(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Setting PIPELINE_RANDOM_SEED must NOT change the seed.
-
-    This encodes the week's rule: DVC can only hash a file, so a hyperparameter
-    reachable through the environment would be invisible to dvc.lock and the
-    lock could claim a run used a value it did not. params.yaml is the only
-    source for these.
-    """
+    """PIPELINE_RANDOM_SEED must not change the seed: dvc.lock records only params.yaml."""
     monkeypatch.setenv("PIPELINE_RANDOM_SEED", "999")
     monkeypatch.setenv("PIPELINE_TEST_SIZE", "0.9")
     settings = load_settings()
@@ -51,12 +45,7 @@ def test_pipeline_params_ignore_env_override(monkeypatch: pytest.MonkeyPatch) ->
 def test_missing_measurements_file_is_not_an_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A missing DVC-tracked dataset must not break configuration loading.
-
-    This is the CI constraint written down. The measurements file is absent in
-    a fresh clone and in the autograder (which never runs `dvc pull`); if
-    _validate() checked it, every test in CI would fail.
-    """
+    """A missing measurements.csv must not break config loading: CI never runs `dvc pull`."""
     monkeypatch.setenv("PIPELINE_MEASUREMENTS_PATH", "data/does-not-exist.csv")
     settings = load_settings()
     assert not settings.measurements_path.exists()
@@ -65,7 +54,7 @@ def test_missing_measurements_file_is_not_an_error(
 def test_missing_canonical_dataset_is_still_an_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """data/diabetes.csv IS validated — it is committed, so absence is a bug."""
+    """data/diabetes.csv is committed, so a missing copy is an error."""
     monkeypatch.setenv("PIPELINE_DATA_PATH", "data/nope.csv")
     with pytest.raises(FileNotFoundError):
         load_settings()
@@ -90,7 +79,7 @@ def test_invalid_test_size_rejected(monkeypatch: pytest.MonkeyPatch, tmp_path) -
 
 
 def test_mlflow_tracking_uri_overridable(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Environment wiring (as opposed to hyperparameters) IS overridable."""
+    """Service addresses, unlike hyperparameters, can come from the environment."""
     monkeypatch.setenv("MLFLOW_TRACKING_URI", "http://custom-server:9999")
     settings = load_settings()
     assert settings.mlflow_tracking_uri == "http://custom-server:9999"

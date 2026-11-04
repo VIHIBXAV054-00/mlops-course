@@ -1,10 +1,4 @@
-"""The contracts themselves.
-
-Every test here builds its own frame in memory, so the whole file runs with no
-Docker, no Silo, no DVC and no dataset on disk. That is deliberate: a data
-contract is the one part of an MLOps stack you can test in complete isolation,
-and if you cannot, the contract is entangled with something it should not be.
-"""
+"""The data contracts. Every test builds its own frame in memory."""
 
 from __future__ import annotations
 
@@ -61,12 +55,7 @@ def test_legal_batch_passes_ingestion_contract():
 
 
 def test_ingestion_contract_tolerates_the_sentinel_zeros():
-    """The whole reason there are two schemas.
-
-    A recorded 0 in these columns is the real dataset's real behaviour. An
-    ingestion contract that rejected it would reject every genuine file, and a
-    gate that rejects everything gets switched off within a week.
-    """
+    """The ingestion contract accepts the recorded zeros; the training contract rejects them."""
     report = validate_frame(raw_frame(glucose=0, insulin=0, bmi=0), RawMeasurements)
     assert report["passed"], report["by_check"]
 
@@ -89,12 +78,7 @@ def test_ingestion_contract_rejects_each_error_class(overrides, expected_check):
 
 
 def test_ingestion_contract_rejects_an_undeclared_column():
-    """`Config.strict = True` is load-bearing, not decoration.
-
-    The negative half of this test is the interesting half: with strict off, the
-    same frame passes. A schema that ignores unexpected columns cannot tell you
-    that the producer changed the file.
-    """
+    """strict = True rejects an undeclared column; with strict off, the same frame passes."""
     frame = raw_frame()
     frame["notes"] = "imported from lab system v2"
 
@@ -102,11 +86,7 @@ def test_ingestion_contract_rejects_an_undeclared_column():
     assert not report["passed"]
     assert "column_in_schema" in report["by_check"]
 
-    # deepcopy is NOT optional here. `DataFrameModel.to_schema()` returns a
-    # CACHED, SHARED, MUTABLE DataFrameSchema — the same object every call — so
-    # `RawMeasurements.to_schema().strict = False` silently disables strictness
-    # for the whole process. (Found the hard way: it made a later test in another
-    # file see 14 failure cases instead of 15.)
+    # to_schema() returns one shared object, so change a deep copy, never the original.
     lenient = copy.deepcopy(RawMeasurements.to_schema())
     lenient.strict = False
     assert validate_frame(frame, lenient)["passed"]
@@ -140,24 +120,15 @@ def test_model_input_rejects_a_sentinel_zero():
 
 
 def test_model_input_accepts_a_null():
-    """`gt=0, nullable=True`, second half: missing is honest.
-
-    This is the assertion that makes the whole remediation flow legal. If a
-    pandera upgrade ever changed it so that checks applied to nulls, this test
-    would fail loudly instead of the pipeline failing mysteriously.
-    """
+    """`gt=0, nullable=True`, second half: missing is honest."""
     frame = to_nullable(model_frame(glucose=0))
     assert frame["glucose"].isna().sum() == 1
     assert validate_frame(frame, ModelInput)["passed"]
 
 
 def test_model_input_enforces_column_order():
-    """`Config.ordered = True`.
-
-    sklearn matches features by POSITION when handed a bare array, so a
-    reordered frame produces a confident prediction about a different patient.
-    A `column_ordered` failure is cheap; that bug is not.
-    """
+    """ordered = True: sklearn matches columns by position, so a reordered frame scores a
+    different patient."""
     frame = to_nullable(model_frame())
     swapped = frame[
         ["glucose", "pregnancies"] + [c for c in MODEL_INPUT_COLUMNS
@@ -169,19 +140,12 @@ def test_model_input_enforces_column_order():
 
 
 def test_model_input_declaration_order_matches_the_pipeline():
-    """The import-time assertion in schemas.py, restated as a test.
-
-    Two places name the model's columns; this is what stops them drifting.
-    """
+    """ModelInput lists its columns in the order the pipeline uses."""
     assert list(ModelInput.to_schema().columns) == MODEL_INPUT_COLUMNS
 
 
 def test_sentinel_columns_are_the_five_documented_ones():
-    """`pregnancies` must NOT be in here — a 0 there is a real zero.
-
-    Telling a real zero from a sentinel takes domain knowledge, which is the
-    part of a data contract that cannot be generated from the data.
-    """
+    """pregnancies is not a sentinel column: a zero there is real."""
     assert set(SENTINEL_COLUMNS) == {
         "glucose",
         "blood_pressure",
@@ -196,11 +160,8 @@ def test_sentinel_columns_are_the_five_documented_ones():
 
 
 def test_prediction_input_makes_the_label_optional():
-    """The serving contract is the training contract minus the answer.
-
-    It INHERITS from ModelInput rather than restating the rules, so there is one
-    definition of a legal feature row. Two copies would eventually disagree.
-    """
+    """PredictionInput inherits from ModelInput without the label, so there is one
+    definition of a legal row."""
     features = to_nullable(model_frame()).drop(columns=["outcome"])
     assert validate_frame(features, PredictionInput)["passed"]
     assert not validate_frame(features, ModelInput)["passed"]
@@ -215,13 +176,7 @@ def test_prediction_input_inherits_the_value_rules():
 
 
 def test_to_schema_returns_a_shared_mutable_object():
-    """A trap worth knowing about before it costs you an afternoon.
-
-    `to_schema()` is cached per model class, so two calls return the SAME object
-    and any mutation is global and permanent for the process. If you need a
-    variant of a schema — to demonstrate what a flag does, or to relax a rule in
-    one place — deepcopy it first.
-    """
+    """to_schema() returns the same object on every call: deep-copy it before you change it."""
     assert RawMeasurements.to_schema() is RawMeasurements.to_schema()
 
     variant = copy.deepcopy(RawMeasurements.to_schema())
@@ -230,11 +185,7 @@ def test_to_schema_returns_a_shared_mutable_object():
 
 
 def test_lazy_validation_reports_every_violation_at_once():
-    """Why `lazy=True` is not optional.
-
-    Non-lazy validation raises on the FIRST problem, so fixing a broken file
-    becomes one round trip per fault. Lazy collects them all in one pass.
-    """
+    """lazy=True reports every violation in one pass; the default stops at the first."""
     frame = raw_frame(age=250, outcome=2, insulin=-1)
     report = validate_frame(frame, RawMeasurements)
     assert report["n_failure_cases"] >= 3

@@ -5,11 +5,7 @@ from sklearn.model_selection import train_test_split
 
 from .config import Settings
 
-# FEATURE_COLUMNS, TARGET_COLUMN, load_dataframe and build_dataset are UNCHANGED
-# from Weeks 1-3. They still operate on data/diabetes.csv, which is what keeps
-# the course's pinned baseline metrics (LR F1 0.5785 / accuracy 0.7344)
-# reproducible in tests/test_smoke.py while Week 4 changes what the *pipeline*
-# trains on.
+# build_dataset reads data/diabetes.csv; tests/test_smoke.py checks its pinned F1 0.5785.
 
 FEATURE_COLUMNS = [
     "pregnancies",
@@ -23,14 +19,12 @@ FEATURE_COLUMNS = [
 ]
 TARGET_COLUMN = "outcome"
 
-# Columns the measurement batches carry that are NOT features. `measurement_date`
-# is metadata: it identifies when a row arrived, it would leak batch identity
-# into the model, and it does not exist for a new patient at inference time.
+# Not a feature: a new patient has no measurement_date at inference time.
 METADATA_COLUMNS = ["measurement_date"]
 
 
 def load_dataframe(settings: Settings) -> pd.DataFrame:
-    """Load the canonical Week 1-3 dataset from the configured CSV path."""
+    """Load the dataset at `settings.data_path` (data/diabetes.csv)."""
     return pd.read_csv(settings.data_path)
 
 
@@ -66,9 +60,7 @@ def load_measurements(path) -> pd.DataFrame:
 def require_columns(frame: pd.DataFrame) -> None:
     """Fail early and readably if the expected modelling columns are missing.
 
-    This is a presence check, not a schema. It has no types, no ranges, and no
-    opinion about the physically-impossible zeros sitting in `glucose`,
-    `insulin` and `bmi` — real data contracts, and those zeros, are Week 5.
+    A presence check only; the value rules are in schemas.py.
     """
     missing = [c for c in FEATURE_COLUMNS + [TARGET_COLUMN] if c not in frame.columns]
     if missing:

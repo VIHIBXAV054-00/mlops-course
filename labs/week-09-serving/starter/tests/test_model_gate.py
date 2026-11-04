@@ -1,14 +1,5 @@
-"""The gate as a pipeline stage, and as the thing register/promote consult.
-
-Week 5's `tests/test_gate.py` defends the DATA gate: nothing downstream runs.
-This file defends the MODEL gate, whose contract is different in exactly one
-important way — **the model survives.** A failing data gate means no processed
-data was written. A failing model gate means a release was refused and the
-artifact is still there to be debugged.
-
-Every test builds a project directory in `tmp_path`, so nothing here needs
-Docker, Silo, DVC or the tracked dataset.
-"""
+"""The model gate as a pipeline stage. Unlike the data gate, a NO-GO keeps the model, so
+you can debug it."""
 
 from __future__ import annotations
 
@@ -108,11 +99,7 @@ def test_a_failing_gate_raises_but_writes_the_report_first(sandbox):
 
 
 def test_a_failing_gate_does_not_delete_the_model(sandbox):
-    """The load-bearing difference from Week 5's data gate.
-
-    You need the artifact to work out why it failed. A gate that destroyed its
-    own evidence would make every NO-GO a mystery.
-    """
+    """A NO-GO keeps the model on disk, so you can find out why it failed."""
     seed(sandbox, metrics=dict(GOOD_METRICS, f1=0.20))
     model = sandbox.models_dir / "model.pkl"
     before = model.read_bytes()
@@ -178,14 +165,8 @@ def test_require_go_accepts_a_recorded_go(sandbox):
 
 
 def test_a_stale_go_is_still_a_go_and_that_is_the_dangerous_part(sandbox):
-    """An honest test of a real limitation, not a defect being papered over.
-
-    `require_go` reads a FILE. Nothing in it knows whether the model on disk is
-    the one that verdict was about. DVC's dependency graph is what keeps the two
-    aligned during `dvc repro` — and a human running `make register` after
-    hand-editing a model has stepped outside it. Worth knowing where the
-    guarantee comes from, because it does not come from this function.
-    """
+    """require_go reads a file, so it cannot tell whether the model changed after the gate
+    ran."""
     seed(sandbox)
     pipeline.gate(sandbox)
     (sandbox.models_dir / "model.pkl").write_bytes(b"a completely different model")
@@ -203,7 +184,7 @@ def test_the_baseline_file_has_no_timestamp(sandbox):
 
 
 def test_the_baseline_is_written_with_stable_key_order(sandbox):
-    """A committed file whose bytes depend on dict order produces empty diffs."""
+    """Key order is fixed, so the same baseline always gives the same bytes."""
     write_baseline({"metrics": {"roc_auc": 0.8, "f1": 0.6}, "source": "a"},
                    sandbox.baseline_path)
     first = sandbox.baseline_path.read_bytes()

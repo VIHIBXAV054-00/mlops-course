@@ -1,24 +1,9 @@
-# Week 7 — the MODEL path. Continuous Training.
-#
-# Read this file next to `ci.yml` and notice how little differs. The commands
-# are the same; only the TRIGGER is different. That is the whole point:
-#
-#   CI  fires because the CODE changed.  A human made a change and is waiting.
-#   CT  fires because TIME passed, or because new data arrived. Nobody is
-#       waiting, nobody is watching, and the artifact it produces is a model
-#       that no code review ever saw.
-#
-# That second path is why Weeks 5 and 6 exist. A retrained model ships without
-# a code change, so every check that lives in code review is simply not on it.
-# The data contract and the acceptance gate are the only things standing
-# between a clock and a released model.
-#
-# It is also, exactly, the shape of the CrowdStrike incident: two release paths
-# into production, and only one of them carried the tests.
+# CT: retrain and gate the model on a schedule or by hand, with no code change.
+# The steps are the same as in ci.yml; only the trigger differs.
 name: Week 9 CT
 
 on:
-  # A human, on purpose, with a reason.
+  # Manual run, with a recorded reason.
   workflow_dispatch:
     inputs:
       reason:
@@ -27,18 +12,8 @@ on:
         default: 'manual check'
         type: string
 
-  # A clock. 03:00 UTC on Mondays.
-  #
-  # Two honest caveats worth knowing before you rely on this:
-  #   * GitHub's scheduler is best-effort and runs late under load. It is a
-  #     trigger, not a guarantee.
-  #   * On a public repository GitHub disables scheduled workflows after 60
-  #     days without activity, silently. A schedule that stops firing and does
-  #     not tell you is Week 8's cold open in miniature.
-  #
-  # And the boundary: cron here runs ONE workflow on a clock. It does not own a
-  # graph of work, its state, its retries or its history. That is an
-  # orchestrator, and it is Week 8.
+  # Scheduled: 03:00 UTC every Monday. GitHub may run it late, and it disables
+  # schedules in a public repository after 60 days without activity.
   schedule:
     - cron: '0 3 * * 1'
 
@@ -64,12 +39,7 @@ jobs:
       - name: Rebuild the dataset
         run: make data-v2
 
-      # THE SAME ENTRY POINT `ci.yml` USES. Not a copy of it.
-      #
-      # `tests/test_workflows.py` asserts that these two files invoke the same
-      # make target, so the property is enforced rather than hoped for. If CT
-      # re-listed the commands here, the two paths would drift — and the one
-      # that drifts is always the one nobody watches.
+      # Same make target as ci.yml; tests/test_workflows.py checks this.
       - name: retrain and gate
         run: make ct-local
 
@@ -93,14 +63,4 @@ jobs:
             labs/week-09-serving/solution/reports/
             labs/week-09-serving/solution/models/model.pkl
 
-  # THIS WORKFLOW DOES NOT REGISTER, PROMOTE OR DEPLOY, and the omission is the
-  # lesson rather than a limitation.
-  #
-  # Two reasons, and the second is the one worth arguing about:
-  #
-  #   1. Mechanically, the registry needs a tracking server this runner has
-  #      not got.
-  #   2. Substantively, nobody has decided that a model trained at 03:00 on a
-  #      Monday, seen by no one, should be allowed to reach users because a
-  #      threshold said GO. A gate is a necessary condition for a release, not
-  #      a sufficient one. Deciding what else is required is Week 10.
+  # Retraining only: registering and promoting need the MLflow server and a human decision.

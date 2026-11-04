@@ -16,7 +16,7 @@ from .schemas import FEATURE_COLUMNS
 
 
 def batch_score(model: Any, frame: pd.DataFrame) -> dict:
-    """All rows in one call, as `make predict` does."""
+    """All rows in one call, as the evaluate stage does."""
     features = frame[list(FEATURE_COLUMNS)]
     start = time.perf_counter()
     model.predict_proba(features)
