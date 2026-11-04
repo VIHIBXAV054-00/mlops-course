@@ -17,7 +17,7 @@ New in this lab:
 - `api.py`: a FastAPI app with the request and response models.
 - `bench.py`: scores the test rows in batch and online.
 - `serve.Dockerfile`: the recipe for the serving image. `make image` builds it.
-- `k8s/`: the directory for your Kubernetes manifests.
+- `k8s/`: the Deployment and Service manifests, with `<fill in>` where you write a value.
 
 You have used `make predict` to check a request against the data contract and score it in a Python
 process. The service does the same over HTTP, so a caller can send a request without loading the
@@ -65,13 +65,13 @@ Run `uv run pytest -q` before starting the exercises. With the stack still up af
 expected result is:
 
 ```
-209 passed, 25 skipped
+209 passed, 26 skipped
 ```
 
-The 25 skipped tests belong to this lab: 16 in `tests/test_api.py` and 9 in
+The 26 skipped tests belong to this lab: 16 in `tests/test_api.py` and 10 in
 `tests/test_k8s_manifests.py`. Each `@pytest.mark.skip` names an exercise. Once you have completed
 the code for an exercise, delete its skip markers and run the tests. With the stack down, the 8
-MLflow-link tests are skipped too: 201 passed, 33 skipped.
+MLflow-link tests are skipped too: 201 passed, 34 skipped.
 
 ## Exercises
 
@@ -170,16 +170,27 @@ check its model and see what happens when you try to build one with a NO-GO mode
 
 1. Read `serve.Dockerfile` from top to bottom. Find where the locked packages are installed,
    where the model is copied in, and where the model version comes from.
-2. With the stack up, run `make image`. Then run `make run-image`, and in a second terminal
-   `curl localhost:5542/health`. Compare the answer with `make trace`. Stop the container with
-   Ctrl-C.
-3. Make a NO-GO model: in `params.yaml`, set `C` under `train` to `0.01`, and run `make repro`.
+2. With the stack up, run `make image`. Then run `make run-image` and leave it running.
+3. In a second terminal, run `curl localhost:5542/health` and compare the answer with
+   `make trace`. Then send the two patients from Exercise 2 to the container: the one with a
+   glucose of 148 and the one with a glucose of 0. Use port 5542 in curl, Bruno or Postman:
+
+   ```bash
+   curl -w '\n%{http_code}\n' -X POST localhost:5542/predict -H 'Content-Type: application/json' -d '{"pregnancies": 6, "glucose": 148, "blood_pressure": 72, "skin_thickness": 35, "insulin": 125, "bmi": 33.6, "diabetes_pedigree": 0.627, "age": 50}'
+   ```
+
+   Stop the container with Ctrl-C.
+4. Make a NO-GO model: in `params.yaml`, set `C` under `train` to `0.01`, and run `make repro`.
    The gate stage fails. Run `make image` again.
-4. Set `C` back to `1.0`, and run `make repro`.
+5. Set `C` back to `1.0`, and run `make repro`.
 
 **Check:** `/health` from the container shows the same `model_version` and `run_id` as lines 2
-and 3 of `make trace`, with `"gate_verdict": "GO"` and `"model_source": "registry champion"`. In
-step 3, `make image` ends with `REFUSING to build: the recorded gate verdict is 'NO-GO'.`
+and 3 of `make trace`, with `"gate_verdict": "GO"` and `"model_source": "registry champion"`.
+`/predict` gives the same answers as your service in Exercise 2: `"prediction": 1,
+"probability": 0.7293` for the glucose of 148, and 422 with `"failures": {"greater_than(0)": 1}`
+for the glucose of 0. Only `model_version` differs: `null` from `make serve-api`, the
+champion's version from the container. In step 4, `make image` ends with
+`REFUSING to build: the recorded gate verdict is 'NO-GO'.`
 
 1. The registry is down when Kubernetes starts a new pod, for example to replace one that
    crashed. What happens with this image, and with an image that downloads the model from the
@@ -192,30 +203,42 @@ declares how many pods should run, and a Service gives those pods one stable add
 finds its pods by their labels.
 
 Kubernetes also sends probes to check a container. A pod receives traffic only after its
-readiness probe passes; if its liveness probe fails, Kubernetes restarts the container. In this
-exercise, you write the Deployment and Service manifests with both probes and deploy your image to
-a local cluster using kind. You will also see what happens when the cluster cannot find the image.
+readiness probe passes; if its liveness probe fails, Kubernetes restarts the container.
+
+At work, a platform or DevOps engineer usually writes the manifests. You still check that they
+fit your service. The labels must match, the image must be the one you built, and the probes
+must call a route that says whether the model is loaded. In this exercise, you fill in the
+Deployment and Service manifests, check them with tests, and deploy your image to a local
+cluster with kind. You will also see what happens when the cluster cannot find the image.
 
 1. Stop the stack with `make down`. The cluster needs the memory.
-2. Write `k8s/deployment.yaml` and `k8s/service.yaml`, as `k8s/README.md` describes.
-3. In `k8s/deployment.yaml`, add a `readinessProbe` and a `livenessProbe` to the container. Both
-   call `GET /health` on the port named `http`. Set `initialDelaySeconds`, `periodSeconds` and
-   `failureThreshold` on each, so that the liveness probe gives up later than the readiness probe.
-4. Run `make kind-up`. The first time, it downloads the image for the cluster's node.
-5. Apply the manifests before the image is on the cluster: `kubectl apply -f k8s/`. After half a
+2. Open `k8s/deployment.yaml` and `k8s/service.yaml`, and replace each `<fill in>`. The comment
+   next to it says what goes there, and which values must match a value elsewhere.
+   `k8s/README.md` lists what the files must say.
+3. In `k8s/deployment.yaml`, fill in both probes. Both call `GET /health` on the port named
+   `http`. Choose `initialDelaySeconds`, `periodSeconds` and `failureThreshold` for each, so that
+   the liveness probe gives up later than the readiness probe.
+4. Remove the skip markers in the "A Deployment, a Service and probes (Exercise 5)" section of
+   `tests/test_k8s_manifests.py`, and run `uv run pytest tests/test_k8s_manifests.py`. The tests
+   check the files without a cluster; fix what they report before you continue.
+5. Run `make kind-up`. The first time, it downloads the image for the cluster's node.
+6. Apply the manifests before the image is on the cluster: `kubectl apply -f k8s/`. After half a
    minute, run `make k8s-status`, then `kubectl describe pod -l app=diabetes-api`. The events at
    the end of the output say what went wrong.
-6. Run `make k8s-deploy`. It copies the image onto the kind node with
+7. Run `make k8s-deploy`. It copies the image onto the kind node with
    `kind load docker-image`, applies the manifests and waits for the pods.
-7. Run `make k8s-status`. In a second terminal, run
+8. Run `make k8s-status`. In a second terminal, run
    `kubectl port-forward svc/diabetes-api 5543:80` and leave it running. In a third terminal, run
    `curl localhost:5543/health`. Paste the answer at the top of `answers.md`.
+9. Send the same two patients as in Exercise 4 to `localhost:5543/predict`. The port-forward
+   connects to one of the two pods, so these requests check that pod, not how the Service
+   spreads requests across both.
 
-**Check:** remove the skip markers in the "A Deployment, a Service and probes (Exercise 5)" section
-of `tests/test_k8s_manifests.py`, and the tests pass. `make k8s-status` shows two pods `Running`
+**Check:** the tests in the "A Deployment, a Service and probes (Exercise 5)" section of
+`tests/test_k8s_manifests.py` pass without skip markers. `make k8s-status` shows two pods `Running`
 with `1/1` in the `READY` column, which means their readiness probes pass, and two addresses on
 the Service's `Endpoints` line. `/health` through the port-forward shows the model version from
-Exercise 4.
+Exercise 4, and `/predict` gives the same two answers as the container in Exercise 4.
 
 ### Finish — commit your work
 
@@ -243,8 +266,9 @@ in it. Set `C` back to `1.0` before you commit.
 | `make k8s-deploy` | copy the image onto the cluster, apply `k8s/`, wait for the pods (Exercise 5) |
 | `make k8s-status` | the pods, and the pods behind the Service (Exercise 5) |
 
-The earlier targets still work, including `make ci`, `make repro`, `make flow` and both GitHub
-Actions workflows. `make serve` still starts the scheduled Prefect flow.
+The pipeline, registry and CI targets from earlier weeks still work, including `make ci`,
+`make repro`, `make flow` and both GitHub Actions workflows. The targets of earlier weeks'
+exercises are gone; the commands behind them are still in `src/main.py`.
 
 ## Troubleshooting
 
@@ -252,7 +276,6 @@ Actions workflows. `make serve` still starts the scheduled Prefect flow.
 | --- | --- | --- |
 | `make serve-mlflow` fails, and the error names the alias `champion` | no version has the champion alias yet | `make register` and `make promote-champion` (Setup) |
 | `make serve-mlflow` fails with `No such artifact: 'MLmodel'` | the registered version's files are gone, for example after `make down-v` | with the stack up, `make repro`, `make register`, `make promote-champion` |
-| `make serve` starts a Prefect deployment | `serve` is Week 8's target | `make serve-api` |
 | `/health` answers 503 | no `models/model.pkl` | `make repro` |
 | `make image` refuses to build | the recorded gate verdict is not GO | `make repro`, and check `reports/gate.json` |
 | `docker build` fails with `OSError: Readme file does not exist` | a file that `pyproject.toml` names is not copied into the image | `COPY` it in `serve.Dockerfile` |
@@ -274,7 +297,7 @@ that URL to Moodle.
    your own service.
 2. **The image contains the model.** `make image` copies `models/model.pkl` into the image, so
    the cluster runs with the Compose stack down. Week 10 loads the model at startup instead.
-3. **The manifests are written by hand** and contain only a Deployment, a Service and two probes:
-   no Ingress, autoscaling or Helm. That is enough for one model on one laptop.
+3. **The manifests ship with `<fill in>` placeholders** and contain only a Deployment, a Service
+   and two probes: no Ingress, autoscaling or Helm. That is enough for one model on one laptop.
 4. **The tests need no server and no cluster.** FastAPI's `TestClient` runs the app in the test
    process, and the manifests are checked as YAML.

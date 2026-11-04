@@ -85,7 +85,7 @@ def validation_report(settings) -> Path:
 @pytest.fixture(scope="session")
 def dvc_repo(project_root) -> Path:
     if not (project_root / ".dvc" / "config").is_file():
-        pytest.skip("No DVC repo yet — run `make dvc-init` (Week 4 setup).")
+        pytest.skip("No DVC repo: .dvc/config is committed, so restore it with `git checkout .dvc/config`.")
     return project_root
 
 
@@ -93,7 +93,7 @@ def dvc_repo(project_root) -> Path:
 def measurements_pointer(project_root) -> Path:
     pointer = project_root / "data" / "measurements.csv.dvc"
     if not pointer.is_file():
-        pytest.skip("No DVC pointer yet — run `make dvc-add` (Week 4 setup).")
+        pytest.skip("No DVC pointer: restore it with `git checkout data/measurements.csv.dvc`.")
     return pointer
 
 

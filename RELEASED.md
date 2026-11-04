@@ -1,6 +1,6 @@
 # What is published
 
-Generated 2026-11-02. Course materials are released week by week —
+Generated 2026-11-04. Course materials are released week by week —
 a week appears here on the morning of its lecture.
 
 Run `git pull upstream main` in your fork to fetch the latest.
