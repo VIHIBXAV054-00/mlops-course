@@ -142,10 +142,7 @@ def _regression_checks(metrics: dict, baseline: dict, rules: dict) -> tuple[list
         ], deltas
 
     delta = float(observed) - float(previous)
-    # TODO(student) Exercise 3: set `dropped` to True when `delta` is a larger drop
-    # than the champion comparison tolerates (`max_drop`), and to False otherwise.
-    # `delta` is negative when this model is worse than the champion.
-    dropped = False
+    dropped = delta < -float(max_drop)
     return [
         _check(
             id=f"regression.{primary}",
@@ -203,12 +200,13 @@ def _slice_checks(metrics: dict, slices: dict, rules: dict) -> list[dict]:
                 f1=m["f1"],
             )
 
-            # TODO(student) Exercise 3: the support rules. Set `too_small` to a reason
-            # when the group has fewer than `min_support` rows, or fewer than
-            # `min_positives` positives. Put both numbers in the reason, in this form:
-            # "support 19 < min_support 20" or "positives 1 < min_positives 10".
-            # Leave it None when the group is large enough to judge.
             too_small = None
+            if m["n"] < min_support:
+                too_small = f"support {m['n']} < min_support {min_support}"
+            elif m["n_positives"] < min_positives:
+                too_small = (
+                    f"positives {m['n_positives']} < min_positives {min_positives}"
+                )
             if too_small:
                 out.append(dict(check, status=SKIPPED, reason=too_small))
                 continue
@@ -217,12 +215,15 @@ def _slice_checks(metrics: dict, slices: dict, rules: dict) -> list[dict]:
             if aggregate_f1 is not None and m["f1"] is not None:
                 gap = round(float(aggregate_f1) - float(m["f1"]), 4)
 
-            # TODO(student) Exercise 3: the F1 rules. Append a reason to `violations`
-            # when the group's F1 is below `min_f1`, and another when `gap` is above
-            # `max_gap`. A rule that `params.yaml` leaves out is None: do not apply it.
-            # Write the F1 with 4 decimals, and say "below the aggregate" in the gap
-            # reason; the tests look for both.
             violations: list[str] = []
+            group_f1 = m["f1"]
+            if min_f1 is not None and group_f1 is not None and group_f1 < min_f1:
+                violations.append(f"f1 {group_f1:.4f} is below the floor {min_f1:.4f}")
+            if max_gap is not None and gap is not None and gap > max_gap:
+                violations.append(
+                    f"f1 {group_f1:.4f} is {gap:.4f} below the aggregate "
+                    f"(max_f1_gap {max_gap:.4f})"
+                )
 
             out.append(
                 dict(
@@ -279,9 +280,7 @@ def _fairness_checks(slices: dict, rules: dict) -> list[dict]:
                     )
                 )
                 continue
-            # TODO(student) Exercise 5: set `exceeded` to True when the observed gap
-            # is above the limit this axis configures, and to False otherwise.
-            exceeded = False
+            exceeded = float(observed) > float(limit)
             out.append(
                 _check(
                     id=f"fairness.{axis}.{key}",

@@ -215,7 +215,6 @@ def test_the_champion_is_scored_on_the_test_split_it_is_given(settings, tmp_path
     assert today != smaller, "a different test split must give a different baseline"
 
 
-@pytest.mark.skip(reason="Exercise 6 — finish baseline_from_registry in baseline.py, then delete this skip marker.")
 def test_baseline_sync_scores_the_champion_it_loads_by_alias(settings, tmp_path, monkeypatch):
     """The baseline is the champion, found by its alias and scored on today's test split."""
     import mlflow.sklearn
@@ -263,7 +262,6 @@ def _refuse_mlflow(*args, **kwargs):
     raise MlflowReached("MLflow was called before the gate verdict was checked.")
 
 
-@pytest.mark.skip(reason="Exercise 4 — add the gate stage to dvc.yaml and call require_go in registry.py, then delete this skip marker.")
 def test_register_refuses_a_no_go_before_it_reaches_mlflow(sandbox, monkeypatch):
     from week_06_evaluation_pipeline import registry
 
@@ -275,7 +273,6 @@ def test_register_refuses_a_no_go_before_it_reaches_mlflow(sandbox, monkeypatch)
         registry.register_best_model(sandbox, "any-run-id")
 
 
-@pytest.mark.skip(reason="Exercise 4 — add the gate stage to dvc.yaml and call require_go in registry.py, then delete this skip marker.")
 def test_promote_refuses_a_no_go_before_it_reaches_mlflow(sandbox, monkeypatch):
     from week_06_evaluation_pipeline import registry
 
@@ -287,7 +284,6 @@ def test_promote_refuses_a_no_go_before_it_reaches_mlflow(sandbox, monkeypatch):
         registry.promote_to_staging(sandbox, "1")
 
 
-@pytest.mark.skip(reason="Exercise 4 — add the gate stage to dvc.yaml and call require_go in registry.py, then delete this skip marker.")
 def test_the_gate_is_a_stage_that_no_other_stage_depends_on(project_root):
     """`dvc repro` runs the gate last; `register` and `promote` read its verdict instead."""
     import yaml

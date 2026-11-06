@@ -14,7 +14,6 @@ from week_03_mlflow_integration.registry import load_aliased_model, trace_alias
 pytestmark = pytest.mark.live
 
 
-@pytest.mark.skip(reason="Exercise 5 — implement register_best_model(), then delete this skip marker.")
 def test_registration_creates_version_with_run_id(live_settings, staging_version) -> None:
     """Exercise 5: the version exists AND links back to its source run.
 
@@ -27,7 +26,6 @@ def test_registration_creates_version_with_run_id(live_settings, staging_version
     assert staging_version.run_id, "ModelVersion.run_id is empty — register from a run"
 
 
-@pytest.mark.skip(reason="Exercise 6 — implement promote_to_staging(), then delete this skip marker.")
 def test_alias_resolves_to_version(live_settings, staging_version) -> None:
     """Exercise 6: the alias points at the promoted version.
 
@@ -42,7 +40,6 @@ def test_alias_resolves_to_version(live_settings, staging_version) -> None:
     assert "champion" in staging_version.aliases
 
 
-@pytest.mark.skip(reason="Exercise 6 — implement promote_to_staging() and trace_alias(), then delete this skip marker.")
 def test_alias_traceability_chain(live_settings, staging_version) -> None:
     """Exercise 6: alias -> version -> run -> the params that produced it."""
     chain = trace_alias(live_settings)
@@ -62,7 +59,6 @@ def test_alias_traceability_chain(live_settings, staging_version) -> None:
     assert chain["version_tags"]["promotion_reason"] == "pytest session"
 
 
-@pytest.mark.skip(reason="Exercise 6 — implement promote_to_staging(), then delete this skip marker.")
 def test_aliased_model_loads_and_predicts(live_settings, staging_version) -> None:
     """Exercise 6: models:/<name>@<alias> loads with NO object-store credentials.
 

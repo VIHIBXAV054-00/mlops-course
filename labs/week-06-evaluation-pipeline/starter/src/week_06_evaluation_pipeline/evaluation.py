@@ -85,17 +85,29 @@ def slice_labels(frame: pd.DataFrame, spec: dict) -> pd.Series:
 
 def group_scores(y_true, y_pred, y_prob, groups) -> pd.DataFrame:
     """One row per group, one column per metric, from fairlearn's MetricFrame."""
-    # TODO(student) Exercise 1: score every group with fairlearn's `MetricFrame`, with
-    # `groups` as the sensitive features, and return its `by_group` table.
-    #   - Score `y_pred` with these metrics, named exactly so: accuracy, precision,
-    #     recall and f1 from scikit-learn (the last three with zero_division=0, which
-    #     `functools.partial` can set), and selection_rate and fpr from fairlearn
-    #     (`selection_rate`, `false_positive_rate`).
-    #   - ROC AUC ranks the predicted probabilities, not the classes. Score `y_prob`
-    #     with `roc_auc_score` in a second MetricFrame, under the name roc_auc, and
-    #     join its `by_group` to the first table. Skip it when `y_prob` is None.
-    # Reference: https://fairlearn.org/main/user_guide/assessment/perform_fairness_assessment.html
-    return pd.DataFrame()
+    metrics = {
+        "accuracy": accuracy_score,
+        "precision": partial(precision_score, zero_division=0),
+        "recall": partial(recall_score, zero_division=0),
+        "f1": partial(f1_score, zero_division=0),
+        "selection_rate": selection_rate,
+        "fpr": false_positive_rate,
+    }
+    table = MetricFrame(
+        metrics=metrics,
+        y_true=y_true,
+        y_pred=y_pred,
+        sensitive_features=groups,
+    ).by_group
+    if y_prob is not None:
+        auc = MetricFrame(
+            metrics={"roc_auc": roc_auc_score},
+            y_true=y_true,
+            y_pred=y_prob,
+            sensitive_features=groups,
+        ).by_group
+        table = table.join(auc)
+    return table
 
 
 METRIC_KEYS = ("accuracy", "precision", "recall", "f1", "roc_auc", "selection_rate", "fpr")

@@ -25,14 +25,12 @@ def added(settings, all_batches, tmp_path):
     return dataclasses.replace(settings, measurements_path=data)
 
 
-@pytest.mark.skip(reason="Exercise 7 (optional) — implement require_data_added(), then delete this skip marker.")
 def test_added_data_is_accepted(added) -> None:
     assert require_data_added(added) == file_md5(added.measurements_path), (
         "When the file matches its pointer, require_data_added should return its md5."
     )
 
 
-@pytest.mark.skip(reason="Exercise 7 (optional) — implement require_data_added(), then delete this skip marker.")
 def test_edited_data_is_refused(added) -> None:
     path = added.measurements_path
     text = path.read_text()

@@ -39,7 +39,6 @@ def test_confusion_matrix_figure_returns_figure(fitted_model) -> None:
     assert isinstance(figure, matplotlib.figure.Figure)
 
 
-@pytest.mark.skip(reason="Exercise 2 — implement roc_curve_figure(), then delete this skip marker.")
 def test_roc_curve_figure_is_populated(fitted_model) -> None:
     """The ROC figure has a titled axes with the curve and the chance line."""
     model, x_test, y_test = fitted_model
@@ -50,7 +49,6 @@ def test_roc_curve_figure_is_populated(fitted_model) -> None:
     assert len(axes.get_lines()) >= 2
 
 
-@pytest.mark.skip(reason="Exercise 2 — implement confusion_matrix_figure(), then delete this skip marker.")
 def test_confusion_matrix_figure_has_four_cells(fitted_model) -> None:
     """The confusion matrix has 4 cells whose counts sum to the test-set size."""
     model, x_test, y_test = fitted_model
