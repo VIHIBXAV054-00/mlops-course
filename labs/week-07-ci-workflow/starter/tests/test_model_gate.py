@@ -22,8 +22,7 @@ from week_07_ci_workflow.data import split_measurements
 from week_07_ci_workflow.model import build_model
 from week_07_ci_workflow.pipeline import GateFailed
 
-# TODO(student) Exercise 3: mark this module's layer with `pytestmark`:
-# unit, data, eval or integration.
+pytestmark = pytest.mark.eval
 
 GOOD_METRICS = {
     "accuracy": 0.7656, "precision": 0.6964, "recall": 0.5821,

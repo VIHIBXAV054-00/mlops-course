@@ -17,8 +17,7 @@ from week_07_ci_workflow.validation import (
     write_report,
 )
 
-# TODO(student) Exercise 3: mark this module's layer with `pytestmark`:
-# unit, data, eval or integration.
+pytestmark = pytest.mark.data
 
 # Measured on datasets/quality/broken_batch.csv (60 rows, 4 faults).
 EXPECTED_FAILURE_CASES = 7
