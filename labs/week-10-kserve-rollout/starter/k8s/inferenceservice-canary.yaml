@@ -1,0 +1,36 @@
+apiVersion: serving.kserve.io/v1beta1
+kind: InferenceService
+metadata:
+  name: diabetes
+  annotations:
+    serving.kserve.io/enable-tag-routing: "true"
+spec:
+  predictor:
+    canaryTrafficPercent: 10
+    minReplicas: 1
+    containers:
+      - name: kserve-container
+        image: diabetes-api:local
+        imagePullPolicy: IfNotPresent
+        ports:
+          - containerPort: 8000
+            protocol: TCP
+        env:
+          - name: STORAGE_URI
+            value: pvc://diabetes-models/v2
+          - name: MODEL_PATH
+            value: /mnt/models/model.pkl
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 2
+          periodSeconds: 3
+          failureThreshold: 3
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: "1"
+            memory: 1Gi

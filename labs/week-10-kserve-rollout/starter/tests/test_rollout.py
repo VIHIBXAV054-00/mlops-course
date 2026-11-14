@@ -77,7 +77,6 @@ def test_publishing_writes_the_model_and_its_provenance(workspace):
     assert provenance["metrics"]["f1"] == 0.6341
 
 
-@pytest.mark.skip(reason="Exercise 1: refuse a non-GO model in publish_version()")
 def test_the_store_is_the_fourth_door_and_it_is_locked(workspace):
     """Week 6 gave the gate teeth at `register`; Week 9 at `docker build`.
 

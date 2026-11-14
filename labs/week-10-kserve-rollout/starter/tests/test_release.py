@@ -58,13 +58,11 @@ def test_a_dotted_key_reads_a_nested_value():
 # ── Exercise 2: your release.yaml ─────────────────────────────────────────────
 
 
-@pytest.mark.skip(reason="Exercise 2: fill in release.yaml")
 def test_your_rollout_plan_is_complete():
     found = problems(load_release())
     assert found == [], "release.yaml is not ready:\n  " + "\n  ".join(found)
 
 
-@pytest.mark.skip(reason="Exercise 2: fill in release.yaml")
 def test_your_request_releases_a_version_from_the_store():
     release = load_release()
     assert release["model"]["candidate"] != release["model"]["replaces"]
