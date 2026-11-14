@@ -1,3 +1,7 @@
+https://github.com/tamas722/mlops-course/actions/workflows/week07-ct.yml
+https://github.com/tamas722/mlops-course/actions/workflows/week07-ci.yml
+
+
 # 7. heti labor: válaszok
 
 CI-futás: a GitHubra pusholás után beillesztendő.
