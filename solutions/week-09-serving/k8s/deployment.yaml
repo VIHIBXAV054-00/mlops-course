@@ -1,0 +1,47 @@
+# Two pods running the diabetes-api image, with a readiness and a liveness probe.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: diabetes-api
+  labels:
+    app: diabetes-api        # a label on the Deployment itself, not on its pods
+spec:
+  replicas: 2                # enough pods that one can stop while another serves
+  selector:
+    matchLabels:
+      app: diabetes-api      # the same value as the pods' label in template.metadata.labels below
+  template:                  # the pod that Kubernetes creates `replicas` times
+    metadata:
+      labels:
+        app: diabetes-api    # the pods' label from k8s/README.md; `make k8s-status` selects by it
+    spec:
+      containers:
+        - name: api
+          image: diabetes-api:local
+          imagePullPolicy: IfNotPresent    # the image is copied onto the node, so never pull it
+          ports:
+            - containerPort: 8000
+              name: http                   # a name for this port; the probes and service.yaml use it
+
+          # While readiness fails, the Service sends the pod no traffic.
+          readinessProbe:
+            httpGet:
+              path: /health                # the route in api.py that says whether the model is loaded
+              port: http                   # the port name you gave under ports above
+            initialDelaySeconds: 2         # seconds before the first probe
+            periodSeconds: 3               # seconds between probes
+            failureThreshold: 2            # failed probes in a row before it gives up
+
+          # When liveness fails, Kubernetes restarts the container, so it must give up later than
+          # readiness. A probe gives up after initialDelaySeconds + periodSeconds × failureThreshold.
+          livenessProbe:
+            httpGet:
+              path: /health                # the same route as the readiness probe above
+              port: http                   # the port name you gave under ports above
+            initialDelaySeconds: 10        # these three must give up later than readiness's three
+            periodSeconds: 10
+            failureThreshold: 3
+
+          env:
+            - name: MODEL_PATH
+              value: /app/models/model.pkl

@@ -1,0 +1,91 @@
+# The training pipeline: validate -> prepare -> train -> evaluate -> gate.
+# A stage that reads a file lists it in deps. Graph: make dag. Run: make repro.
+
+stages:
+
+  validate:
+    cmd: uv run python src/main.py validate
+    deps:
+      - data/measurements.csv
+      - src/week_09_serving/schemas.py
+      - src/week_09_serving/validation.py
+      - src/week_09_serving/pipeline.py
+    outs:
+      # cache: false keeps the file in Git, not in the DVC cache.
+      - reports/validation.json:
+          cache: false
+
+  prepare:
+    cmd: uv run python src/main.py prepare
+    deps:
+      - data/measurements.csv
+      # prepare waits for validate's report, so a failed contract stops the pipeline.
+      - reports/validation.json
+      - src/week_09_serving/pipeline.py
+      - src/week_09_serving/data.py
+    params:
+      - random_seed
+      - prepare.test_size
+    outs:
+      - data/processed/train.csv
+      - data/processed/test.csv
+
+  train:
+    cmd: uv run python src/main.py train
+    deps:
+      - data/processed/train.csv
+      - src/week_09_serving/pipeline.py
+      - src/week_09_serving/model.py
+      - src/week_09_serving/schemas.py
+      - src/week_09_serving/validation.py
+      - src/week_09_serving/dvc_link.py
+    params:
+      - random_seed
+      - train.family
+      - train.C
+      - train.max_iter
+      - train.impute_strategy
+      - train.n_estimators
+    outs:
+      - models/model.pkl
+      - models/mlflow_run_id.json:
+          cache: false
+
+  evaluate:
+    cmd: uv run python src/main.py evaluate
+    deps:
+      - models/model.pkl
+      - models/mlflow_run_id.json
+      - data/processed/test.csv
+      - src/week_09_serving/pipeline.py
+      - src/week_09_serving/model.py
+      - src/week_09_serving/schemas.py
+      - src/week_09_serving/validation.py
+      - src/week_09_serving/evaluation.py
+      - src/week_09_serving/fairness.py
+    params:
+      - random_seed
+      - evaluation
+    metrics:
+      - metrics/metrics.json:
+          cache: false
+      - metrics/slices.json:
+          cache: false
+
+  gate:
+    cmd: uv run python src/main.py gate
+    deps:
+      - metrics/metrics.json
+      # gate writes its verdict to this MLflow run, so the file is a dependency.
+      - models/mlflow_run_id.json
+      - metrics/slices.json
+      # The champion's metrics, written by make baseline-sync.
+      - metrics/baseline.json
+      - src/week_09_serving/gates.py
+      - src/week_09_serving/baseline.py
+      - src/week_09_serving/pipeline.py
+    params:
+      - acceptance
+    outs:
+      - reports/gate.json:
+          cache: false

@@ -1,0 +1,2 @@
+# DVC hashes raw bytes, so CSV files keep LF line endings on every OS.
+*.csv text eol=lf

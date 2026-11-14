@@ -1,0 +1,66 @@
+# CT: retrain and gate the model on a schedule or by hand, with no code change.
+# The steps are the same as in ci.yml; only the trigger differs.
+name: Week 9 CT
+
+on:
+  # Manual run, with a recorded reason.
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Why are you retraining? (recorded in the run)'
+        required: true
+        default: 'manual check'
+        type: string
+
+  # Scheduled: 03:00 UTC every Monday. GitHub may run it late, and it disables
+  # schedules in a public repository after 60 days without activity.
+  schedule:
+    - cron: '0 3 * * 1'
+
+defaults:
+  run:
+    working-directory: labs/week-09-serving/solution
+
+jobs:
+  retrain:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v9.0.0
+        with:
+          enable-cache: true
+      - run: uv sync --locked --all-groups
+
+      - name: Why this run happened
+        run: |
+          echo "trigger: ${{ github.event_name }}"
+          echo "reason : ${{ inputs.reason || 'scheduled' }}"
+
+      - name: Rebuild the dataset
+        run: make data-v2
+
+      # Same make target as ci.yml; tests/test_workflows.py checks this.
+      - name: retrain and gate
+        run: make ct-local
+
+      - name: Publish the gate verdict to the job summary
+        if: always()
+        run: make gate-summary >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Annotate a NO-GO
+        if: failure()
+        run: |
+          echo "::error title=Scheduled retrain refused::The new model did not clear the acceptance criteria. Nothing was released."
+
+      - name: Upload the evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ct-evidence
+          if-no-files-found: warn
+          path: |
+            labs/week-09-serving/solution/metrics/
+            labs/week-09-serving/solution/reports/
+            labs/week-09-serving/solution/models/model.pkl
+
+  # Retraining only: registering and promoting need the MLflow server and a human decision.

@@ -1,0 +1,63 @@
+# The model path: retrain and gate with no code change, started by a person or a clock.
+# It stops at the gate: it does not register, promote or deploy.
+name: Week 7 CT
+
+on:
+  # A person, from the Actions tab, with a reason.
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Why are you retraining? (recorded in the run)'
+        required: true
+        default: 'manual check'
+        type: string
+
+  # A clock: 03:00 UTC on Mondays. GitHub may run it late, or skip it under load.
+  schedule:
+    - cron: '0 3 * * 1'
+
+defaults:
+  run:
+    working-directory: labs/week-07-ci-workflow/solution
+
+jobs:
+  retrain:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v9.0.0
+        with:
+          enable-cache: true
+      - run: uv sync --locked --all-groups
+
+      - name: Why this run happened
+        run: |
+          echo "trigger: ${{ github.event_name }}"
+          echo "reason : ${{ inputs.reason || 'scheduled' }}"
+
+      - name: Rebuild the dataset
+        run: make data-v2
+
+      # The Makefile's targets, as in ci.yml: one definition of the pipeline.
+      - name: retrain and gate
+        run: make ct-local
+
+      - name: Publish the gate verdict to the job summary
+        if: always()
+        run: make gate-summary >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Annotate a NO-GO
+        if: failure()
+        run: |
+          echo "::error title=Scheduled retrain refused::The new model did not clear the acceptance criteria. Nothing was released."
+
+      - name: Upload the evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ct-evidence
+          if-no-files-found: warn
+          path: |
+            labs/week-07-ci-workflow/solution/metrics/
+            labs/week-07-ci-workflow/solution/reports/
+            labs/week-07-ci-workflow/solution/models/model.pkl

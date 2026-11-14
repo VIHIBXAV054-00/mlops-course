@@ -1,0 +1,132 @@
+# Week 7 — the CODE path.
+#
+# Something changed in the repository, so check that the change is good.
+# `ct.yml` is the other path: nothing changed in the repository, and we build a
+# new model anyway. Those two sentences are the whole of CI vs CT.
+#
+# THIS FILE DOES NOT RUN FROM HERE. GitHub only executes workflows in
+# `.github/workflows/` at the REPOSITORY ROOT — a workflow in a subdirectory is
+# never run and never warns you about it. `make install-ci` copies it up.
+name: Week 8 CI
+
+on:
+  push:
+    # Without a paths filter this fires on every commit to the whole course
+    # repository, including ones that only touch slides. Scope a workflow to
+    # what it actually tests.
+    paths:
+      - 'labs/week-08-prefect-flow/solution/**'
+      - '.github/workflows/week08-ci.yml'
+  pull_request:
+    paths:
+      - 'labs/week-08-prefect-flow/solution/**'
+      - '.github/workflows/week08-ci.yml'
+  workflow_dispatch:
+
+defaults:
+  run:
+    # Every `run:` below starts here, so the commands are the ones a student
+    # types. If they differed, this file would be a second copy of the build.
+    working-directory: labs/week-08-prefect-flow/solution
+
+# A second push to the same branch cancels the first. Without this, a busy
+# branch queues runs that are already answering a stale question.
+concurrency:
+  group: week08-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ── Layer 0: does it even parse? ───────────────────────────────────────────
+  # Its own job because it finishes in seconds. Waiting for a full test suite
+  # to learn about an unused import is a waste of everyone's afternoon.
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v9.0.0
+        with:
+          enable-cache: true
+      - run: uv sync --locked --group lint
+      - run: make lint
+
+  # ── Layers 1-3: the test pyramid, one job each ─────────────────────────────
+  # A matrix rather than one job running everything, and the reason is the red
+  # X: three jobs give you "data tests failed" at a glance, where one job gives
+  # you "tests failed" and a log to read.
+  #
+  # `fail-fast: false` because you want to know whether the eval layer is also
+  # broken, not just that the data layer failed first.
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        layer: [unit, data, eval]
+    name: test (${{ matrix.layer }})
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v9.0.0
+        with:
+          enable-cache: true
+      # --locked: refuse a stale lock rather than silently re-resolving it.
+      - run: uv sync --locked --all-groups
+      - run: make test-${{ matrix.layer }}
+
+  # ── The expensive one ──────────────────────────────────────────────────────
+  # `needs:` is the point of the job graph: there is no reason to spend two
+  # minutes training a model from a branch whose tests do not pass.
+  #
+  # NOTE WHAT IS ABSENT: no service containers, no Compose, no secrets, no
+  # `dvc pull`. The whole pipeline runs on a bare runner because of decisions
+  # made in Weeks 4-6 — the dataset rebuilds from git-committed batches, the
+  # contracts read committed files, the gate is a pure function, and `train`
+  # degrades cleanly when no tracking server answers. Designing for CI happened
+  # three weeks ago; this file just collects the winnings.
+  pipeline:
+    needs: [lint, test]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v9.0.0
+        with:
+          enable-cache: true
+      - run: uv sync --locked --all-groups
+
+      # Rebuild the DVC-tracked dataset from the committed raw batches instead
+      # of pulling it. No credentials, no object store, and the result is
+      # byte-identical because the builder is deterministic.
+      - name: Rebuild the dataset
+        run: make data-v2
+
+      - name: validate -> prepare -> train -> evaluate -> gate
+        id: pipeline
+        run: make ci
+
+      # `always()` so the evidence survives a NO-GO. A gate that blocks a
+      # release and leaves nothing behind is untriageable.
+      - name: Publish the gate verdict to the job summary
+        if: always()
+        run: make gate-summary >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Annotate a NO-GO
+        if: failure()
+        run: |
+          echo "::error title=Gate refused this model::See the job summary and the gate-report artifact."
+
+      - name: Upload the evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: gate-evidence
+          if-no-files-found: warn
+          path: |
+            labs/week-08-prefect-flow/solution/metrics/
+            labs/week-08-prefect-flow/solution/reports/
+            labs/week-08-prefect-flow/solution/models/model.pkl
+
+  # CI stops here, and the boundary is deliberate.
+  #
+  # `register` and `promote` need the MLflow tracking server, which this runner
+  # does not have and should not be given. There is a second reason that
+  # matters more: publishing a model is a decision about the outside world, and
+  # Week 7 has not yet said who makes it. Weeks 9 and 10 do.

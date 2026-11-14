@@ -1,0 +1,246 @@
+schema: '2.0'
+stages:
+  validate:
+    cmd: uv run python src/main.py validate
+    deps:
+    - path: data/measurements.csv
+      hash: md5
+      md5: a8fd7b4f0d6d1bc4e378a8f76c5fff0c
+      size: 31750
+    - path: src/week_08_prefect_flow/pipeline.py
+      hash: md5
+      md5: 306280c0c32350a83ec60c1bbb7f1e4a
+      size: 22202
+    - path: src/week_08_prefect_flow/schemas.py
+      hash: md5
+      md5: c67217e8dc1213dfa7083962f7ef9349
+      size: 10115
+    - path: src/week_08_prefect_flow/validation.py
+      hash: md5
+      md5: 9e68a2a0eb4b5461a251e8e55e8b32c1
+      size: 8982
+    outs:
+    - path: reports/validation.json
+      hash: md5
+      md5: c18d486ab8ab86bbce95f85d2ec12525
+      size: 564
+  prepare:
+    cmd: uv run python src/main.py prepare
+    deps:
+    - path: data/measurements.csv
+      hash: md5
+      md5: a8fd7b4f0d6d1bc4e378a8f76c5fff0c
+      size: 31750
+    - path: reports/validation.json
+      hash: md5
+      md5: c18d486ab8ab86bbce95f85d2ec12525
+      size: 564
+    - path: src/week_08_prefect_flow/data.py
+      hash: md5
+      md5: d149ac231f61e375573cfae490b5150e
+      size: 3311
+    - path: src/week_08_prefect_flow/pipeline.py
+      hash: md5
+      md5: 306280c0c32350a83ec60c1bbb7f1e4a
+      size: 22202
+    params:
+      params.yaml:
+        prepare.test_size: 0.25
+        random_seed: 42
+    outs:
+    - path: data/processed/test.csv
+      hash: md5
+      md5: c0893fb60844c5f31b0f5b7c2e9df865
+      size: 8041
+    - path: data/processed/train.csv
+      hash: md5
+      md5: d9eba76cf921c13f5af2032d09a12f35
+      size: 23818
+  train:
+    cmd: uv run python src/main.py train
+    deps:
+    - path: data/processed/train.csv
+      hash: md5
+      md5: d9eba76cf921c13f5af2032d09a12f35
+      size: 23818
+    - path: src/week_08_prefect_flow/dvc_link.py
+      hash: md5
+      md5: 1bb4d0f1423b862cd773b35cf71d1c60
+      size: 4461
+    - path: src/week_08_prefect_flow/model.py
+      hash: md5
+      md5: 11d9da4a55d1c10c194ffc238cc446b8
+      size: 5437
+    - path: src/week_08_prefect_flow/pipeline.py
+      hash: md5
+      md5: 306280c0c32350a83ec60c1bbb7f1e4a
+      size: 22202
+    - path: src/week_08_prefect_flow/schemas.py
+      hash: md5
+      md5: c67217e8dc1213dfa7083962f7ef9349
+      size: 10115
+    - path: src/week_08_prefect_flow/validation.py
+      hash: md5
+      md5: 9e68a2a0eb4b5461a251e8e55e8b32c1
+      size: 8982
+    params:
+      params.yaml:
+        random_seed: 42
+        train.C: 1.0
+        train.family: logreg
+        train.impute_strategy: median
+        train.max_iter: 1000
+        train.n_estimators: 100
+    outs:
+    - path: models/mlflow_run_id.json
+      hash: md5
+      md5: 473e9901a9ccd5194191e054526d2235
+      size: 82
+    - path: models/model.pkl
+      hash: md5
+      md5: f6f7d2832bfbd795008dfc54b4be0347
+      size: 2273
+  evaluate:
+    cmd: uv run python src/main.py evaluate
+    deps:
+    - path: data/processed/test.csv
+      hash: md5
+      md5: c0893fb60844c5f31b0f5b7c2e9df865
+      size: 8041
+    - path: models/mlflow_run_id.json
+      hash: md5
+      md5: 473e9901a9ccd5194191e054526d2235
+      size: 82
+    - path: models/model.pkl
+      hash: md5
+      md5: f6f7d2832bfbd795008dfc54b4be0347
+      size: 2273
+    - path: src/week_08_prefect_flow/evaluation.py
+      hash: md5
+      md5: ba9698cbfcc07b5f943bbbbaa79b7e39
+      size: 11297
+    - path: src/week_08_prefect_flow/fairness.py
+      hash: md5
+      md5: 5f50b88876312fc1a9f095a3231b793b
+      size: 9202
+    - path: src/week_08_prefect_flow/model.py
+      hash: md5
+      md5: 11d9da4a55d1c10c194ffc238cc446b8
+      size: 5437
+    - path: src/week_08_prefect_flow/pipeline.py
+      hash: md5
+      md5: 306280c0c32350a83ec60c1bbb7f1e4a
+      size: 22202
+    - path: src/week_08_prefect_flow/schemas.py
+      hash: md5
+      md5: c67217e8dc1213dfa7083962f7ef9349
+      size: 10115
+    - path: src/week_08_prefect_flow/validation.py
+      hash: md5
+      md5: 9e68a2a0eb4b5461a251e8e55e8b32c1
+      size: 8982
+    params:
+      params.yaml:
+        evaluation:
+          slices:
+            age_band:
+              column: age
+              kind: bins
+              bins:
+              - 21
+              - 30
+              - 40
+              - 50
+              - .inf
+              labels:
+              - 21-29
+              - 30-39
+              - 40-49
+              - 50+
+            bmi_band:
+              column: bmi
+              kind: bins
+              bins:
+              - 0
+              - 25
+              - 30
+              - .inf
+              labels:
+              - under_normal
+              - overweight
+              - obese
+              missing_label: missing
+            insulin_missing:
+              column: insulin
+              kind: missing_flag
+              labels:
+              - insulin_present
+              - insulin_missing
+        random_seed: 42
+    outs:
+    - path: metrics/metrics.json
+      hash: md5
+      md5: 6a5f49039d799a608192bdbccb853a27
+      size: 105
+    - path: metrics/slices.json
+      hash: md5
+      md5: 638d4ebe56c881bedc2491b27dbf9aa2
+      size: 4975
+  gate:
+    cmd: uv run python src/main.py gate
+    deps:
+    - path: metrics/baseline.json
+      hash: md5
+      md5: 20a2ddf457de05236fc2eb7371d6ddc7
+      size: 253
+    - path: metrics/metrics.json
+      hash: md5
+      md5: 6a5f49039d799a608192bdbccb853a27
+      size: 105
+    - path: metrics/slices.json
+      hash: md5
+      md5: 638d4ebe56c881bedc2491b27dbf9aa2
+      size: 4975
+    - path: src/week_08_prefect_flow/baseline.py
+      hash: md5
+      md5: 2349c347a397b95907e75217802f9951
+      size: 5766
+    - path: src/week_08_prefect_flow/gates.py
+      hash: md5
+      md5: 35ddc4d0799ff81dbb21f7c8a9c53d62
+      size: 21639
+    - path: src/week_08_prefect_flow/pipeline.py
+      hash: md5
+      md5: 306280c0c32350a83ec60c1bbb7f1e4a
+      size: 22202
+    params:
+      params.yaml:
+        acceptance:
+          criteria_version: 1.0.0
+          minimum:
+            accuracy: 0.7
+            f1: 0.55
+            roc_auc: 0.75
+          regression:
+            primary_metric: f1
+            max_drop: 0.01
+            also_report:
+            - accuracy
+            - roc_auc
+          slice_rules:
+            min_support: 20
+            min_positives: 10
+            min_f1: 0.5
+            max_f1_gap: 0.1
+          fairness:
+            axis: insulin_missing
+            max_selection_rate_gap: 0.1
+            max_tpr_gap: 0.2
+            report_only:
+            - age_band
+            - bmi_band
+    outs:
+    - path: reports/gate.json
+      hash: md5
+      md5: 7a67838b9ad371a6035a614e9ad7a93b
+      size: 4481

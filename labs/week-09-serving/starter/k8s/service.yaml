@@ -1,0 +1,15 @@
+# A stable name and address in front of the pods. It finds them by their label.
+# TODO(student) Exercise 5: replace each <fill in>. The comment next to it says what goes there.
+apiVersion: v1
+kind: Service
+metadata:
+  name: diabetes-api
+spec:
+  type: ClusterIP
+  # A selector that matches no pod gives no error: the Service just has no pods behind it.
+  selector:
+    app: <fill in>          # the pods' label: spec.template.metadata.labels.app in deployment.yaml
+  ports:
+    - name: http
+      port: 80              # the port that callers and `kubectl port-forward` use
+      targetPort: <fill in> # the container port's name: ports[0].name in deployment.yaml

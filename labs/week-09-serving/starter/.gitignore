@@ -1,0 +1,19 @@
+# Environment and secrets — never commit
+.env
+
+# Python virtual environment and caches
+.venv/
+__pycache__/
+.pytest_cache/
+*.pyc
+*.pyo
+*.egg-info/
+
+# Build artifacts
+build/
+dist/
+
+# DVC machine-local state (.dvc/config itself is committed).
+.dvc/cache/
+.dvc/tmp/
+.dvc/config.local

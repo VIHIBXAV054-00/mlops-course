@@ -1,0 +1,29 @@
+# Rollout plan: what the ML engineer hands to the platform team before a rollout.
+# Check it with `make release-check`.
+
+model:
+  candidate: <fill in>   # the store version to release (`make store-list`)
+  replaces: <fill in>    # the store version that serves now
+
+strategy: canary  # chosen in the lecture: the lab's platform cannot store shadow answers
+
+canary:
+  percent: <fill in>     # the canary percentage: the percentage of requests the candidate gets, a whole number from 1 to 50
+
+smoke:
+  # the smoke test's behaviour check: how far apart the probabilities for the clearly
+  # ill and the healthy test patient must be, a number between 0 and 1
+  min_probability_spread: <fill in>
+
+load:
+  expected_rps: <fill in>     # requests per second you expect at the busiest hour
+  max_p95_ms: <fill in>       # the p95 latency the service must stay under at that load
+  max_error_rate: <fill in>   # the share of failed requests you accept, between 0 and 1
+
+promote:
+  when:
+    - <fill in>   # one condition per line that must hold before the candidate gets 100%
+
+rollback:
+  when:
+    - <fill in>   # one condition per line that makes you roll back; add lines as needed

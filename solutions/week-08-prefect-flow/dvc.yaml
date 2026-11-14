@@ -1,0 +1,166 @@
+# Week 6 — the training pipeline, declared as a graph, with a gate at each end.
+#
+#   validate ──▶ prepare ──▶ train ──▶ evaluate ──▶ gate
+#   (data in)                                       (model out)
+#
+# `validate` is Week 5's. It is a gate because `prepare` lists
+# `reports/validation.json` in its `deps`: DVC refuses to run `prepare` until
+# `validate` has produced that file, and `validate` exits non-zero when the
+# contract fails — so a failing dataset stops the pipeline before any model is
+# fitted.
+#
+# `gate` is new in Week 6, and it CANNOT work the same way, which is the most
+# interesting structural fact in this file. It sits at the END; there is nothing
+# downstream to withhold. And a failing model gate must not destroy the model —
+# you need the artifact to work out why it failed. So the enforcement lives one
+# layer out: `gate` writes a verdict and exits non-zero, and `register` and
+# `promote` read that verdict and refuse without a GO.
+#
+#   A GATE IS ONLY AS STRONG AS THE THING THAT CONSULTS IT.
+#   A verdict file nobody reads is a log line.
+#
+# Six conventions this file follows, worth copying into your own projects:
+#
+#  1. Every `cmd` is `uv run python src/main.py <subcommand>` — exactly what you
+#     can type by hand. A stage you cannot run manually is a stage you cannot
+#     debug. `uv run` (rather than bare `python`) means the stage uses the
+#     project's locked environment even if `dvc` came from somewhere else.
+#
+#  2. Source files are listed in `deps`. Edit model.py and `train` becomes
+#     stale. That is not paranoia — it is the difference between a pipeline and
+#     a shell script that happens to run in order.
+#
+#  3. `metrics/*.json`, `models/mlflow_run_id.json` and `reports/*.json` are
+#     `cache: false`, so they live in Git rather than the DVC cache. That makes
+#     `dvc metrics diff` work with no remote, and it puts the evidence for a
+#     claim in the same commit as the claim.
+#
+#  4. `evaluate` lists `models/mlflow_run_id.json` in `deps` because it READS
+#     that file — it logs the metrics to the run named in it. A dependency you
+#     can see in the graph beats one you have to remember. Leave it out and DVC
+#     concludes that a re-trained model with a brand-new MLflow run needs no
+#     re-evaluation, because this model is deterministic and `model.pkl` comes
+#     back byte-identical — so the pipeline succeeds while the new run ends up
+#     with params, tags and NO metrics. An undeclared dependency does not cause
+#     an error; it causes correct caching with a wrong result. If your stage
+#     reads a file, that file is a dep.
+#
+#  5. NEW IN WEEK 6 — `evaluate` and `gate` declare DIFFERENT param blocks.
+#     `evaluate` takes `evaluation` (the slice definitions: WHAT we measure),
+#     `gate` takes `acceptance` (the thresholds: WHETHER it is good enough).
+#     The payoff is visible in one command: tighten `acceptance.minimum.f1` and
+#     `dvc repro` re-runs ONLY `gate`. Nothing is retrained, because changing
+#     your mind about what "good" means does not require new evidence. Put both
+#     in one block and every threshold edit invalidates the model.
+#
+#  6. NEW IN WEEK 6 — `metrics/baseline.json` is a dep of `gate`, and it is
+#     written by a HUMAN command (`make baseline-sync`), never by a stage. The
+#     alternative — having `gate` query the registry for the current champion —
+#     would make this stage's result depend on a database in another container,
+#     which is precisely the thing `dvc.lock` exists to rule out. See
+#     baseline.py for the full argument.
+#
+# See the graph:  make dag      (or: dvc dag --mermaid)
+# Run it:         make repro
+
+stages:
+
+  validate:
+    cmd: uv run python src/main.py validate
+    deps:
+      - data/measurements.csv
+      - src/week_08_prefect_flow/schemas.py
+      - src/week_08_prefect_flow/validation.py
+      - src/week_08_prefect_flow/pipeline.py
+    outs:
+      # cache: false, so the verdict lands in Git next to the data pointer, the
+      # lock file and the metrics. The evidence for a claim belongs in the same
+      # commit as the claim.
+      - reports/validation.json:
+          cache: false
+
+  prepare:
+    cmd: uv run python src/main.py prepare
+    deps:
+      - data/measurements.csv
+      # THE DATA GATE. Not decoration — this edge is what stops the pipeline.
+      - reports/validation.json
+      - src/week_08_prefect_flow/pipeline.py
+      - src/week_08_prefect_flow/data.py
+    params:
+      - random_seed
+      - prepare.test_size
+    outs:
+      - data/processed/train.csv
+      - data/processed/test.csv
+
+  train:
+    cmd: uv run python src/main.py train
+    deps:
+      - data/processed/train.csv
+      - src/week_08_prefect_flow/pipeline.py
+      - src/week_08_prefect_flow/model.py
+      - src/week_08_prefect_flow/schemas.py
+      - src/week_08_prefect_flow/validation.py
+      - src/week_08_prefect_flow/dvc_link.py
+    params:
+      - random_seed
+      - train.family
+      - train.C
+      - train.max_iter
+      - train.impute_strategy
+      - train.n_estimators
+    outs:
+      - models/model.pkl
+      - models/mlflow_run_id.json:
+          cache: false
+
+  evaluate:
+    cmd: uv run python src/main.py evaluate
+    deps:
+      - models/model.pkl
+      - models/mlflow_run_id.json
+      - data/processed/test.csv
+      - src/week_08_prefect_flow/pipeline.py
+      - src/week_08_prefect_flow/model.py
+      - src/week_08_prefect_flow/schemas.py
+      - src/week_08_prefect_flow/validation.py
+      - src/week_08_prefect_flow/evaluation.py
+      - src/week_08_prefect_flow/fairness.py
+    params:
+      - random_seed
+      # WHAT we measure. Change a slice definition and the evidence itself is
+      # different, so this stage must re-run.
+      - evaluation
+    metrics:
+      - metrics/metrics.json:
+          cache: false
+      - metrics/slices.json:
+          cache: false
+
+  gate:
+    cmd: uv run python src/main.py gate
+    deps:
+      - metrics/metrics.json
+      # `gate` STAMPS its verdict onto the MLflow run (log_gate_to_run), so it
+      # READS this file — and a file a stage reads is a dep. Without the edge,
+      # a `make link` that produces a fresh run leaves `gate` looking unchanged,
+      # DVC skips it, and `make trace` reports "Gate: (not recorded)" for a run
+      # that was in fact gated. Correct caching, wrong result, success reported
+      # at every step. Exactly the Week 4 `evaluate` defect, one stage later.
+      - models/mlflow_run_id.json
+      - metrics/slices.json
+      # The recorded champion. A dep, so a `make baseline-sync` that raises the
+      # bar correctly marks the verdict stale — the same model can be a GO
+      # against yesterday's champion and a NO-GO against today's.
+      - metrics/baseline.json
+      - src/week_08_prefect_flow/gates.py
+      - src/week_08_prefect_flow/baseline.py
+      - src/week_08_prefect_flow/pipeline.py
+    params:
+      # WHETHER it is good enough. Nothing here can change a measurement, so
+      # nothing upstream re-runs when it changes.
+      - acceptance
+    outs:
+      - reports/gate.json:
+          cache: false

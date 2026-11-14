@@ -1,0 +1,56 @@
+[project]
+name = "week-07-ci-workflow"
+version = "0.1.0"
+description = "Week 7 guided lab — CI and CT workflows, the ML test pyramid"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "scikit-learn>=1.8.0",
+    "pandas>=2.0.0,<3",       # upper bound: every week stays on one major
+    "python-dotenv>=1.0.0",
+    "mlflow==3.13.0",         # must match the server pin in mlflow.Dockerfile
+    "dvc[s3]>=3.67.1",
+    "joblib>=1.4.0",
+    "pyyaml>=6.0",
+    "pandera[pandas]>=0.32.1",
+    "fairlearn>=0.14.0",
+]
+
+[dependency-groups]
+test = [
+    "pytest>=8.0.0",
+]
+lint = [
+    "ruff==0.16.1",           # exact: newer releases select more rules by default
+]
+
+[tool.pytest.ini_options]
+markers = [
+    # The layer: what a test checks. Every test carries exactly one.
+    "unit: our code is correct; no dataset, no model, no services",
+    "data: the data and its contracts are correct",
+    "eval: the model, its metrics and the release gate are correct",
+    "integration: several real components at once, over a real connection",
+    # The guard: what a test needs to run.
+    "live: requires the Docker Compose stack to be running",
+    "dvc: requires a DVC-initialised repo",
+]
+# Warnings raised inside pandera and joblib, not by your code.
+filterwarnings = [
+    "ignore:The behavior of DataFrame concatenation with empty or all-NA entries:FutureWarning:pandera.backends.pandas.error_formatters",
+    "ignore:Setting the shape on a NumPy array has been deprecated:DeprecationWarning:joblib.numpy_pickle",
+]
+
+[tool.ruff]
+target-version = "py312"
+
+[tool.ruff.lint]
+# E4 imports, E7 statements, E9 syntax errors, F pyflakes (undefined names, unused imports).
+select = ["E4", "E7", "E9", "F"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/week_07_ci_workflow"]

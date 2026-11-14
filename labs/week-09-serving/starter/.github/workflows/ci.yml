@@ -1,0 +1,99 @@
+# CI: tests and the pipeline run on every change to this lab.
+# GitHub runs workflows only from the repository root; make install-ci copies this file there.
+name: Week 9 CI
+
+on:
+  push:
+    # Run only when this lab or this workflow changes.
+    paths:
+      - 'labs/week-09-serving/solution/**'
+      - '.github/workflows/week09-ci.yml'
+  pull_request:
+    paths:
+      - 'labs/week-09-serving/solution/**'
+      - '.github/workflows/week09-ci.yml'
+  workflow_dispatch:
+
+defaults:
+  run:
+    # Run every command from the lab folder, as a student would.
+    working-directory: labs/week-09-serving/solution
+
+# A second push to the same branch cancels the first. Without this, a busy
+# branch queues runs that are already answering a stale question.
+concurrency:
+  group: week09-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ── Lint: a separate job, because it finishes in seconds ───────────────────
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v9.0.0
+        with:
+          enable-cache: true
+      - run: uv sync --locked --group lint
+      - run: make lint
+
+  # ── Tests: one job per layer, so a failure names the layer ─────────────────
+  # fail-fast: false runs all three, even when one fails.
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        layer: [unit, data, eval]
+    name: test (${{ matrix.layer }})
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v9.0.0
+        with:
+          enable-cache: true
+      # --locked: refuse a stale lock rather than silently re-resolving it.
+      - run: uv sync --locked --all-groups
+      - run: make test-${{ matrix.layer }}
+
+  # ── Pipeline: runs only after lint and tests pass ──────────────────────────
+  # No services or secrets: the dataset is rebuilt from committed files.
+  pipeline:
+    needs: [lint, test]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v9.0.0
+        with:
+          enable-cache: true
+      - run: uv sync --locked --all-groups
+
+      # Rebuild the dataset from committed batches instead of a dvc pull.
+      - name: Rebuild the dataset
+        run: make data-v2
+
+      - name: validate -> prepare -> train -> evaluate -> gate
+        id: pipeline
+        run: make ci
+
+      # always(): keep the evidence after a NO-GO too, so the failure can be investigated.
+      - name: Publish the gate verdict to the job summary
+        if: always()
+        run: make gate-summary >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Annotate a NO-GO
+        if: failure()
+        run: |
+          echo "::error title=Gate refused this model::See the job summary and the gate-report artifact."
+
+      - name: Upload the evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: gate-evidence
+          if-no-files-found: warn
+          path: |
+            labs/week-09-serving/solution/metrics/
+            labs/week-09-serving/solution/reports/
+            labs/week-09-serving/solution/models/model.pkl
+
+  # register and promote need the MLflow server, so CI stops here.

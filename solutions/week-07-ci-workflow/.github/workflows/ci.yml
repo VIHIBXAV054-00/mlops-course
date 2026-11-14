@@ -1,0 +1,89 @@
+# The code path: lint, tests, then the pipeline and the gate, on every push and pull request.
+# GitHub runs workflows only from .github/workflows at the repository root: `make install-ci`.
+name: Week 7 CI
+
+on:
+  push:
+    # Run only when this lab or this workflow changes.
+    paths:
+      - 'labs/week-07-ci-workflow/solution/**'
+      - '.github/workflows/week07-ci.yml'
+  pull_request:
+    paths:
+      - 'labs/week-07-ci-workflow/solution/**'
+      - '.github/workflows/week07-ci.yml'
+  workflow_dispatch:
+
+defaults:
+  run:
+    working-directory: labs/week-07-ci-workflow/solution
+
+# A new push to the same branch cancels the run still going.
+concurrency:
+  group: week07-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v9.0.0
+        with:
+          enable-cache: true
+      - run: uv sync --locked --group lint
+      - run: make lint
+
+  # One job per test layer, so a red job names the layer.
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        layer: [unit, data, eval]
+    name: test (${{ matrix.layer }})
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v9.0.0
+        with:
+          enable-cache: true
+      - run: uv sync --locked --all-groups
+      - run: make test-${{ matrix.layer }}
+
+  pipeline:
+    needs: [lint, test]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v9.0.0
+        with:
+          enable-cache: true
+      - run: uv sync --locked --all-groups
+
+      # From the committed batches: no object store and no credentials needed.
+      - name: Rebuild the dataset
+        run: make data-v2
+
+      - name: validate -> prepare -> train -> evaluate -> gate
+        id: pipeline
+        run: make ci
+
+      - name: Publish the gate verdict to the job summary
+        if: always()
+        run: make gate-summary >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Annotate a NO-GO
+        if: failure()
+        run: |
+          echo "::error title=Gate refused this model::See the job summary and the gate-report artifact."
+
+      - name: Upload the evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: gate-evidence
+          if-no-files-found: warn
+          path: |
+            labs/week-07-ci-workflow/solution/metrics/
+            labs/week-07-ci-workflow/solution/reports/
+            labs/week-07-ci-workflow/solution/models/model.pkl

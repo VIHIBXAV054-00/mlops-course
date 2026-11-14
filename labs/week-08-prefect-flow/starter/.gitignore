@@ -1,0 +1,38 @@
+# Environment and secrets — never commit
+.env
+
+# Scratch copies made by `make gate-fail`, `make data-gate-fail` and
+# `make ratchet` while they plant a fault (in params.yaml, in the tracked data,
+# or in the recorded baseline). Each is restored at the end of its target; the
+# ignore rules are here so a ctrl-C halfway through cannot leave a stray copy
+# staged for commit.
+.gate-fail.bak
+.baseline.bak
+
+# Python virtual environment and caches
+.venv/
+__pycache__/
+.pytest_cache/
+*.pyc
+*.pyo
+*.egg-info/
+
+# Docker Compose volumes directory (if using bind mounts)
+volumes/
+
+# Build artifacts
+build/
+dist/
+
+# DVC machine-local state.
+#
+# Note what is NOT here: `.dvc/` itself. DVC hard-fails `dvc init` if the .dvc
+# directory is git-ignored, and .dvc/config MUST be committed — it is the shared
+# remote definition. `dvc init` writes these same three entries into
+# .dvc/.gitignore for you; they are repeated here as a safety net.
+#
+# DVC also writes data/.gitignore listing the files it tracks. That file is
+# generated, and committing it is part of Exercise 2 — do not pre-empt it here.
+.dvc/cache/
+.dvc/tmp/
+.dvc/config.local

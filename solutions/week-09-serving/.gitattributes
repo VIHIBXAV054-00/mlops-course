@@ -1,0 +1,3 @@
+# DVC hashes raw bytes, so force LF: a Windows CRLF checkout would change every hash.
+# See https://doc.dvc.org/user-guide/upgrade
+*.csv text eol=lf

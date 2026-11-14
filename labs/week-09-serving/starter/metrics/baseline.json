@@ -1,0 +1,13 @@
+{
+  "source": "week-05 reference run",
+  "model_name": "diabetes-classifier",
+  "model_version": null,
+  "run_id": null,
+  "metrics": {
+    "accuracy": 0.7656,
+    "f1": 0.6341,
+    "precision": 0.6964,
+    "recall": 0.5821,
+    "roc_auc": 0.8345
+  }
+}
