@@ -1,0 +1,52 @@
+# What NOT to send to the Docker daemon.
+#
+# MEASURED IN WEEK 11 and back-ported. This is the reason the file exists.
+# Without it the build context of this lab directory is **783 MB**, of which
+# **780 MB is `.venv/`** — a virtualenv full of Linux-incompatible macOS wheels
+# that the image would never use, because the Dockerfile runs its own
+# `uv sync --locked` inside the container.
+#
+# `docker build` tars the ENTIRE context and uploads it to the daemon before the
+# first instruction runs. With BuildKit that transfer is incremental, cached and
+# parallel, so the cost is hidden; with the legacy builder (`DOCKER_BUILDKIT=0`)
+# it is a single serial tar with no progress output until it finishes — and on
+# this context it ran for **26 minutes** having printed nothing but the
+# deprecation banner.
+#
+# The lesson is not "use BuildKit". It is that **a build context is exactly what
+# you put in it**, which is the same sentence Week 9 wrote when `README.md` was
+# missing from it — the error just arrives at the other end of the range this
+# time. BuildKit did not fix the defect; it hid it.
+#
+# Verify with:  du -sh .    then    docker build --progress=plain . 2>&1 | head -3
+
+# The virtualenv. 780 MB, host-specific, and rebuilt inside the image anyway.
+.venv/
+
+# DVC's local cache and machine-local state. Data, not source.
+.dvc/cache/
+.dvc/tmp/
+.dvc/config.local
+
+# Tool caches.
+.pytest_cache/
+.ruff_cache/
+__pycache__/
+*.pyc
+
+# Secrets and local state. `.env` must never reach an image layer.
+.env
+
+# Written exercise answers. Committed to git (it is part of the submission),
+# but a serving image has no use for it.
+answers.md
+
+# Build outputs and vendored installers from earlier weeks.
+.kserve/
+build/
+dist/
+*.egg-info/
+
+# The model store (Week 10). The image bakes models/model.pkl and nothing else;
+# every other version is fetched at runtime.
+model-store/

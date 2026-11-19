@@ -1,0 +1,43 @@
+# A Job template for the in-cluster measurements (`make _job`); the Makefile
+# replaces __NAME__ and __ARGS__. It runs inside the cluster, against the
+# cluster-local address, because `kubectl port-forward` reaches one pod: a client
+# behind it reports a 100/0 split whatever the route says. Measured in August 2026:
+# through port-forward, a healthy rolling update showed 25 failed requests in 40.
+#
+# The image is the service's own image, already loaded into kind, so the code that
+# measures is the code under test.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: __NAME__
+spec:
+  # No retries. A failed measurement is evidence, and a Job that quietly ran
+  # three times would average away exactly the thing being measured.
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 300
+  template:
+    metadata:
+      annotations:
+        # Do not inject the Istio sidecar into a measurement pod. The mesh is
+        # what we are measuring THROUGH; putting another proxy in the path adds
+        # latency that belongs to the instrument rather than the service.
+        sidecar.istio.io/inject: "false"
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: measure
+          image: diabetes-api:local
+          imagePullPolicy: IfNotPresent
+          # `--no-sync`, because `uv run` otherwise re-installs the local package
+          # on every start — 2 seconds of noise in the log and a rebuild of the
+          # very thing being measured. The image's environment is already exactly
+          # what `uv.lock` says.
+          command: ["uv", "run", "--no-dev", "--no-sync", "python", "src/main.py"]
+          args: [__ARGS__]
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi

@@ -110,7 +110,7 @@ Do **not** push to `upstream`; you have no write access to it, by design.
 | :--- | :--- |
 | [`docs/syllabus.md`](docs/syllabus.md) | The 14-week plan and assessment. |
 | [`docs/resources.md`](docs/resources.md) | Recommended books, free courses, papers — mapped per week. |
-| `docs/exam-revision.md` | Revision guide for the Week 14 written exam — published in Week 13. |
+| `docs/exam-revision.md` | Revision guide for the written test (ZH) on Wednesday 2 December — published in Week 11. |
 | `docs/notes/` | Short study notes for each week. |
 | `lectures/week-XX-topic/` | Lecture slides (Slidev). Rendered slides are published to the course Pages site. |
 | `labs/week-XX-topic/starter/` | The lab you work in — exercises marked `TODO(student)`. |
@@ -150,7 +150,7 @@ in a dependency **group**.
 **Week 13 adds one container.** Alertmanager on **5570**, pinned in `compose.yaml`, with `amtool` inside it — so there is no new host tool either. Governance turns out to
 be `hashlib`, `json`, string formatting and YAML: `uv.lock` moves by the project name and nothing else. The cluster stays down.
 
-**Week 14 has no lab.** The syllabus reserves the slot as a spare session; the lecture is a summary and an LLMOps outlook, and the revision guide for the written exam is `docs/exam-revision.md`, published in Week 13.
+**Week 14 has no lab.** The lecture is a summary and an LLMOps outlook. The written test (ZH) is on Wednesday 2 December, in the Week 13 lab slot, and its revision guide is `docs/exam-revision.md`, published in Week 11.
 
 Python itself is installed for you by `uv`. Windows, macOS, and Linux are all supported.
 
@@ -175,13 +175,13 @@ official tutorial each lab is based on.
 
 ## Homework & your project
 
-The five homework assignments are **not** done in this repository. In Week 2 you
+The four homework assignments are **not** done in this repository. In Week 2 you
 create your own **private** project repo from the project template — click *Use
-this template* on **<https://github.com/VIHIBXAV054-00/mlops-project-template>** — and grow it across HW1-HW5.
+this template* on **<https://github.com/VIHIBXAV054-00/mlops-project-template>** — and grow it across HW1-HW4.
 
 In Week 2 you also choose a dataset and prediction task (see
 [`homework/project-topic/`](homework/project-topic/)) that you carry through all
-five homework assignments. Need ideas? See the
+four homework assignments. Need ideas? See the
 [dataset catalogue](datasets/README.md).
 
 ## Licensing

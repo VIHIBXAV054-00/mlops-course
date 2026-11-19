@@ -1,0 +1,79 @@
+# Service-level alerting rules — the ones that are not about the SLO.
+#
+# Reference: https://prometheus.io/docs/prometheus/latest/configuration/alerting_rules/
+#
+# Two alerts. An alert is an interrupt aimed at a person, so each one must have
+# somebody who acts on it.
+
+groups:
+  - name: service
+    # How often this group is evaluated. Inherits `evaluation_interval` from
+    # prometheus.yml when omitted; stated here because a rule's `for:` duration
+    # is only meaningful in multiples of it.
+    interval: 15s
+    rules:
+
+      # ── The alert you get without instrumenting anything ──────────────────
+      #
+      # `up` is synthesised by Prometheus for every target on every scrape: 1 if
+      # the scrape succeeded, 0 if it did not. It exists because a pull system
+      # can tell the difference between "the service reported no errors" and
+      # "the service did not answer" — and a ratio-based SLI structurally
+      # cannot. A dead service has a perfect error ratio, because
+      # zero-divided-by-zero is not a failure, it is silence.
+      #
+      # `for: 1m` — four consecutive failed scrapes at this job's 5s interval,
+      # or one missed scrape plus a bit at the global 15s. WITHOUT IT, a single
+      # container restart, a rolling deploy, or a two-second network hiccup
+      # pages somebody at 3 a.m. for a service that was already back before
+      # they picked up the phone. `for:` is the single most effective
+      # anti-fatigue control in Prometheus and it costs one line.
+      #
+      # Measured in the lab: after `make api-down`, the alert appears as PENDING
+      # within about one scrape interval and turns FIRING one minute later.
+      - alert: ServiceDown
+        expr: up{job="diabetes-api"} == 0
+        for: 1m
+        labels:
+          severity: page
+          service: diabetes-api
+        annotations:
+          summary: "diabetes-api is not answering scrapes"
+          description: >-
+            Prometheus has been unable to scrape {{ $labels.instance }} for over a
+            minute. No SLO alert will fire for this: with no requests there are no
+            events, and a ratio of zero good to zero valid is not a violation. This
+            is the alert that covers that hole.
+
+      # ── The one alert that is about the MODEL's inputs ────────────────────
+      #
+      # Week 5 wrote a contract; Week 9 made it hold over HTTP; this is what it
+      # looks like when somebody starts breaking it in production.
+      #
+      # WHY IT NEEDS ITS OWN ALERT: a 422 is the service working correctly, so
+      # it is not a 5xx, so it does not touch the availability SLO, so from the
+      # outside a caller who has started sending glucose in mmol/L instead of
+      # mg/dL looks like a perfectly healthy service. Availability 100%, latency
+      # fine, error budget untouched, and every patient being scored on data the
+      # model has never seen the like of. No generic web dashboard would ever
+      # show you this; you only get it because YOU decided this service should
+      # report it.
+      #
+      # The threshold is a RATE, not a count. "More than 0.2 rejected fields per
+      # second, sustained for five minutes" survives a single fat-fingered
+      # curl and catches a client deployment. A count would fire on the first
+      # test request anyone ever sends.
+      - alert: ContractViolationSpike
+        expr: sum(rate(model_contract_violations_total{job="diabetes-api"}[5m])) > 0.2
+        for: 5m
+        labels:
+          severity: ticket
+          service: diabetes-api
+        annotations:
+          summary: "Callers are sending data the model-input contract rejects"
+          description: >-
+            The rejection rate has been above 0.2/s for five minutes. This is NOT a
+            service failure and deliberately does not consume the error budget - the
+            contract is doing its job. It means a caller changed. Look at
+            model_contract_violations_total by `check` to see which rule is being
+            broken, then find out who deployed what.

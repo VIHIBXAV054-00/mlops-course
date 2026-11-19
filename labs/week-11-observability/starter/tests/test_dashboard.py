@@ -1,0 +1,276 @@
+"""The Grafana dashboard, checked as data.
+
+A DASHBOARD IS THE MOST DRIFT-PRONE ARTIFACT IN THIS REPOSITORY, and its failure
+mode is the quietest. Rename a metric in `metrics.py` and the panel does not
+break, does not error and does not warn: it goes EMPTY. Which is exactly what a
+healthy service with no traffic looks like. Somebody glances at a flat zero and
+concludes everything is fine.
+
+That is why this file exists, and why Exercise 3 asks you to cause the failure
+on purpose and watch this test catch it.
+
+Everything here is JSON parsing. No Grafana, no browser, no network — so it runs
+in the autograder alongside everything else.
+"""
+
+from __future__ import annotations
+
+import json
+import re
+from pathlib import Path
+
+import pytest
+import yaml
+from prometheus_client import CollectorRegistry
+
+from week_11_observability.metrics import build_metrics, render
+from week_11_observability.slo import load_slo
+
+pytestmark = pytest.mark.unit
+
+LAB = Path(__file__).resolve().parents[1]
+GRAFANA = LAB / "grafana"
+DASHBOARD_DIR = GRAFANA / "dashboards"
+DATASOURCE_FILE = GRAFANA / "provisioning" / "datasources" / "prometheus.yml"
+PROVIDER_FILE = GRAFANA / "provisioning" / "dashboards" / "provider.yml"
+
+
+def dashboards() -> list[Path]:
+    return sorted(DASHBOARD_DIR.glob("*.json"))
+
+
+def load_dashboard(path: Path) -> dict:
+    return json.loads(path.read_text())
+
+
+def panels(dashboard: dict) -> list[dict]:
+    """Flattened, because a `row` panel nests its children."""
+    found = []
+    for panel in dashboard.get("panels", []):
+        found.append(panel)
+        found.extend(panel.get("panels", []))
+    return [panel for panel in found if panel.get("type") != "row"]
+
+
+def expressions(dashboard: dict) -> list[tuple[str, str]]:
+    """(panel title, PromQL) for every target on every panel."""
+    return [
+        (panel.get("title", "<untitled>"), target["expr"])
+        for panel in panels(dashboard)
+        for target in panel.get("targets", [])
+        if target.get("expr")
+    ]
+
+
+def exported_metric_names() -> set[str]:
+    """Read from a live registry, so there is no third copy to maintain."""
+    registry = CollectorRegistry()
+    build_metrics(registry)
+    names: set[str] = set()
+    for line in render(registry).splitlines():
+        if line.startswith("# TYPE "):
+            _, _, name, kind = line.split(maxsplit=3)
+            names.add(name)
+            if kind == "counter":
+                names.add(f"{name}_total")
+            elif kind == "histogram":
+                names |= {f"{name}_bucket", f"{name}_sum", f"{name}_count"}
+    names.add("up")  # Synthesised by Prometheus, not by us.
+    return names
+
+
+PROMQL_KEYWORDS = {
+    "rate", "irate", "increase", "sum", "avg", "min", "max", "count", "by", "without",
+    "and", "or", "unless", "on", "ignoring", "group_left", "group_right", "offset",
+    "histogram_quantile", "clamp_min", "clamp_max", "absent", "vector", "scalar",
+    "le", "job", "route", "status", "instance", "check", "outcome", "service",
+}
+
+
+def metric_names_in(expr: str) -> set[str]:
+    without_labels = re.sub(r"\{[^}]*\}", " ", expr)
+    without_durations = re.sub(r"\[[^\]]*\]", " ", without_labels)
+    candidates = set(re.findall(r"\b[a-zA-Z_:][a-zA-Z0-9_:]*\b", without_durations))
+    return {name for name in candidates if name not in PROMQL_KEYWORDS}
+
+
+# ── The drift guard ──────────────────────────────────────────────────────────
+
+
+def test_every_panel_queries_a_metric_we_actually_export():
+    """THE ONE THAT MATTERS. Exercise 3 makes this fail on purpose.
+
+    Rename `http_requests_total` in the code and this goes red immediately,
+    instead of a dashboard going quietly, plausibly, catastrophically blank.
+    """
+    exported = exported_metric_names()
+    problems = []
+    for path in dashboards():
+        for title, expr in expressions(load_dashboard(path)):
+            unknown = metric_names_in(expr) - exported
+            if unknown:
+                problems.append(f"{path.name} / '{title}': {sorted(unknown)}")
+    assert not problems, (
+        "dashboard panels query metrics the application does not export:\n  "
+        + "\n  ".join(problems)
+        + f"\nexported: {sorted(exported)}"
+    )
+
+
+def test_every_panel_uses_the_provisioned_datasource_uid():
+    """A uid mismatch makes every panel silently empty, for everyone but you.
+
+    Grafana generates a uid when you add a datasource by hand, so a dashboard
+    exported from one machine points at a uid that exists nowhere else. Pinning
+    it in the provisioning file and asserting the dashboards agree is the whole
+    fix.
+    """
+    declared = yaml.safe_load(DATASOURCE_FILE.read_text())["datasources"][0]["uid"]
+    for path in dashboards():
+        dashboard = load_dashboard(path)
+        for panel in panels(dashboard):
+            for source in [panel.get("datasource"), *[t.get("datasource") for t in panel.get("targets", [])]]:
+                if source is None:
+                    continue
+                assert source.get("uid") == declared, (
+                    f"{path.name} / '{panel.get('title')}' points at datasource uid "
+                    f"{source.get('uid')!r}, but provisioning declares {declared!r}"
+                )
+
+
+def test_the_provider_points_at_the_directory_the_dashboards_are_mounted_in():
+    provider = yaml.safe_load(PROVIDER_FILE.read_text())["providers"][0]
+    assert provider["options"]["path"] == "/etc/grafana/dashboards"
+    assert provider["allowUiUpdates"] is False, (
+        "with UI updates allowed, an edit is saved and then overwritten on the "
+        "next rescan — a change that appears to work and then vanishes, which is "
+        "the worst possible way to discover where the source of truth is"
+    )
+
+
+# ── What the dashboard has to cover ──────────────────────────────────────────
+
+
+@pytest.mark.skip(reason="Exercise 3 — add the Predictions by outcome panel in Grafana")
+def test_the_syllabus_panels_exist():
+    """Latency, RPS and error rate are what the week promises. Assert them.
+
+    Not pedantry: a dashboard is a claim about what matters, and these three are
+    the claim this lab makes. If one disappears in a refactor, the lab quietly
+    stops teaching what it says it teaches.
+    """
+    titles = " ".join(
+        panel.get("title", "").lower()
+        for path in dashboards()
+        for panel in panels(load_dashboard(path))
+    )
+    for expected in ("request rate", "error rate", "latency", "predictions by outcome"):
+        assert expected in titles, f"no panel about {expected}"
+
+
+def test_latency_percentiles_are_computed_from_summed_bucket_rates():
+    """`histogram_quantile(q, sum by (le) (rate(..._bucket[...])))`, in that order.
+
+    Any other order is wrong, and wrong in a way that produces plausible
+    numbers. Percentiles do not average: you cannot take the mean of two
+    replicas' p95 and get the fleet's p95, but you can add their buckets and get
+    exactly the right answer. That is the entire reason the service reports
+    buckets instead of computing percentiles itself.
+    """
+    found = False
+    for path in dashboards():
+        for title, expr in expressions(load_dashboard(path)):
+            if "histogram_quantile" not in expr:
+                continue
+            found = True
+            collapsed = " ".join(expr.split())
+            assert re.search(r"sum\s*by\s*\(le\)\s*\(\s*rate\(", collapsed), (
+                f"{path.name} / '{title}': histogram_quantile must be applied to "
+                f"`sum by (le) (rate(..._bucket[...]))`. Got: {collapsed}"
+            )
+            assert "_bucket" in expr
+    assert found, "no panel computes a latency percentile"
+
+
+def test_counters_are_never_graphed_raw():
+    """A counter's value depends on when the process started.
+
+    Graphing it produces a line that goes up and to the right forever and tells
+    you nothing — and drops to zero on a restart, which looks like an outage and
+    is not one. `rate()` is defined to handle exactly that.
+    """
+    for path in dashboards():
+        for title, expr in expressions(load_dashboard(path)):
+            for name in metric_names_in(expr):
+                if not name.endswith("_total"):
+                    continue
+                assert re.search(rf"(rate|irate|increase)\(\s*{re.escape(name)}", expr), (
+                    f"{path.name} / '{title}' graphs the counter {name} without "
+                    "rate()/increase()"
+                )
+
+
+def test_the_error_budget_panel_uses_the_budget_from_slo_yaml():
+    """The 0.01 in the budget panel is `1 - target`, recomputed here.
+
+    Same seam as the alerting rules: the dashboard is a translation of slo.yaml,
+    and this is the compiler that checks it. A dashboard showing a budget nobody
+    promised is worse than no dashboard, because people make decisions from it.
+    """
+    budget = load_slo().objective("availability").error_budget
+    budget_panels = [
+        (title, expr)
+        for path in dashboards()
+        for title, expr in expressions(load_dashboard(path))
+        if "budget" in title.lower()
+    ]
+    assert budget_panels, "no error-budget panel"
+    for title, expr in budget_panels:
+        assert f"{budget}" in expr, (
+            f"'{title}' does not use the {budget} error budget slo.yaml declares"
+        )
+
+
+def test_the_latency_threshold_line_matches_the_slo():
+    """The red line on the latency panel must be the promise, not a round number."""
+    threshold = load_slo().objective("latency").threshold_seconds
+    steps = [
+        step
+        for path in dashboards()
+        for panel in panels(load_dashboard(path))
+        if "latency" in panel.get("title", "").lower()
+        for step in panel.get("fieldConfig", {}).get("defaults", {}).get("thresholds", {}).get("steps", [])
+    ]
+    values = {step.get("value") for step in steps}
+    assert threshold in values, (
+        f"the latency panel's threshold line is at {values}, but slo.yaml promises "
+        f"{threshold}s"
+    )
+
+
+# ── Hygiene ──────────────────────────────────────────────────────────────────
+
+
+def test_dashboards_are_valid_json_with_stable_uids():
+    """A dashboard without a uid gets a new one on every import, so links rot."""
+    assert dashboards(), "no dashboard JSON in grafana/dashboards/"
+    for path in dashboards():
+        dashboard = load_dashboard(path)
+        assert dashboard.get("uid"), f"{path.name} has no uid"
+        assert dashboard.get("title")
+        assert panels(dashboard), f"{path.name} has no panels"
+
+
+def test_every_panel_explains_itself():
+    """JSON has no comments, so the teaching notes live in `description`.
+
+    Grafana shows them on the panel's (i) icon, which means the explanation is
+    where somebody reading the graph actually is — rather than in a README they
+    will not have open at 3 a.m.
+    """
+    for path in dashboards():
+        for panel in panels(load_dashboard(path)):
+            description = panel.get("description", "")
+            assert len(description) > 60, (
+                f"{path.name} / '{panel.get('title')}' has no useful description"
+            )

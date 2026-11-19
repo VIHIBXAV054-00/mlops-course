@@ -19,7 +19,7 @@ Turn your project repository into a **reproducible MLOps project**:
 - Every training run records the model's parameters, metrics, and the dataset version it was trained on.
 - The best model is registered under a name and alias that a colleague can resolve.
 
-This is the first of five assignments that build on the same repository - the one you created
+This is the first of four assignments that build on the same repository - the one you created
 from `project-template/` in the Week 2 *Define Project Topic* milestone, with your own dataset.
 
 You will use only tools from Labs 1–4. **No Pandera, no data validation.**

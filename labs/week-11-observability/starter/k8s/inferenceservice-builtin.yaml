@@ -1,0 +1,42 @@
+# The zero-code path — KServe's headline feature, tried honestly.
+#
+# EIGHT LINES, no image, no Dockerfile, no code. A `ClusterServingRuntime` that
+# ships with KServe (`kserve-sklearnserver`) is matched by `modelFormat: sklearn`,
+# it loads the model from `storageUri`, and it serves the V1 and V2 inference
+# protocols. Compare that with Week 9's sixty lines plus a 1 GB image.
+#
+# RUN THIS FIRST AND READ WHAT HAPPENS. It is Exercise 1's written question, and
+# the answer is a measurement rather than an opinion — see the lab README for the
+# log lines this actually produces on this course's model, and why.
+#
+# The tension is Week 9's cold open, arriving one week later by a different road:
+# fetching a model at startup separates the ARTIFACT from its ENVIRONMENT, and a
+# built-in runtime is SOMEBODY ELSE'S environment. KServe 0.20.0's sklearnserver
+# pins `scikit-learn~=1.5.1` on Python 3.11; this course trains on scikit-learn
+# 1.9.0 on Python 3.12. Whether a pickle survives that gap is not a thing to
+# assume in either direction.
+#
+# Deliberately named `diabetes-builtin` so it can live beside the real one and be
+# compared, and deleted (`kubectl delete -f k8s/inferenceservice-builtin.yaml`)
+# without touching the rollout.
+apiVersion: serving.kserve.io/v1beta1
+kind: InferenceService
+metadata:
+  name: diabetes-builtin
+spec:
+  predictor:
+    minReplicas: 1
+    model:
+      modelFormat:
+        name: sklearn
+      # The FIELD this time, not the STORAGE_URI environment variable: built-in
+      # runtimes take `storageUri` directly. Custom containers cannot, which is
+      # the single most confusing asymmetry in the KServe spec.
+      storageUri: pvc://diabetes-models/v1
+      resources:
+        requests:
+          cpu: 100m
+          memory: 512Mi
+        limits:
+          cpu: "1"
+          memory: 1Gi

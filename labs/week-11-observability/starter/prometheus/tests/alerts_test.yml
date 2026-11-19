@@ -1,0 +1,275 @@
+# Unit tests for the alerting rules.
+#
+# Reference: https://prometheus.io/docs/prometheus/latest/configuration/unit_testing_rules/
+# Run with:  make alerts-test
+#
+# `promtool test rules` takes synthetic series, runs the real rules over them,
+# and checks which alerts are firing at which times. It needs no Prometheus
+# server and no clock.
+#
+# Two notes on the syntax:
+#
+#   * `rule_files` are resolved RELATIVE TO THIS FILE. Hence `../rules/...`.
+#   * The values notation is expanding: `0+1x60` means "start at 0, add 1, sixty
+#     times" - i.e. one sample per `interval`, producing a counter that
+#     increases by 1 per interval. `1x60` means "the value 1, sixty times", which
+#     is a FLAT counter (rate 0), not a counter incrementing by 1. That
+#     distinction is the single most common mistake in these files and it
+#     silently makes every rate zero.
+
+rule_files:
+  - ../rules/service.yml
+  - ../rules/slo.yml
+
+# EVALUATION_INTERVAL IS A TRAP, and promtool is what found it.
+#
+# This is how often the RULES are evaluated during the test, and it must match
+# the `interval:` on the rule groups being tested (15s, in both rule files). It
+# was 1m here first, and the effect is subtle and entirely silent: every `for:`
+# duration is rounded up to the evaluation grid, so a `for: 1m` alert whose
+# condition became true at t=75s does not fire at t=135s as the arithmetic says
+# — it fires at the next evaluation, t=180s.
+#
+# Nothing warns you. The rule is right, the input is right, the assertion is
+# right, and the test fails on an off-by-one-evaluation you cannot see in any of
+# the three. Which is a fair description of most alerting bugs, and a good
+# reason to test alerting rules at all.
+evaluation_interval: 15s
+
+tests:
+
+  # ── ServiceDown ───────────────────────────────────────────────────────────
+
+  - name: "a target that stops answering pages after one minute, not before"
+    interval: 15s
+    input_series:
+      # Up for a minute, then down for the rest. `_` would mean "no sample";
+      # 0 means "the scrape ran and failed", which is what a stopped container
+      # actually produces.
+      - series: 'up{job="diabetes-api", instance="api:8000"}'
+        # WRITTEN OUT RATHER THAN EXPANDED, deliberately. `1x4 0x20` is shorter
+        # and it is ambiguous about whether `1x4` is four samples or five — a
+        # detail that moves every assertion below by 15 seconds. When the exact
+        # sample times ARE the thing under test, spell them out.
+        #   t = 0, 15, 30, 45 -> up 1
+        #   t = 60 onwards    -> up 0
+        values: "1 1 1 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0"
+    alert_rule_test:
+      # At 1m the target has only just gone down: the rule is PENDING, and
+      # `exp_alerts: []` asserts that nothing has FIRED. This assertion is the
+      # `for:` clause being tested, and it is the one that stops a deploy from
+      # paging somebody.
+      - eval_time: 1m
+        alertname: ServiceDown
+        exp_alerts: []
+      # ...and at 2m it has been down since t=60, the `for: 1m` has elapsed, and
+      # it FIRES. Both of these times are measured rather than assumed: the
+      # first version of this file asserted 2m5s against an expanded series and
+      # a 1m evaluation interval, and promtool refused it twice for two
+      # different reasons before either number was right.
+      - eval_time: 2m
+        alertname: ServiceDown
+        exp_alerts:
+          - exp_labels:
+              severity: page
+              service: diabetes-api
+              job: diabetes-api
+              instance: api:8000
+            exp_annotations:
+              summary: "diabetes-api is not answering scrapes"
+              description: >-
+                Prometheus has been unable to scrape api:8000 for over a minute. No SLO
+                alert will fire for this: with no requests there are no events, and a
+                ratio of zero good to zero valid is not a violation. This is the alert
+                that covers that hole.
+
+  - name: "a healthy target never fires ServiceDown"
+    interval: 15s
+    input_series:
+      - series: 'up{job="diabetes-api", instance="api:8000"}'
+        values: "1x40"
+    alert_rule_test:
+      - eval_time: 9m
+        alertname: ServiceDown
+        exp_alerts: []
+
+  # ── The availability burn-rate alerts ─────────────────────────────────────
+
+  - name: "a hard outage burns the availability budget fast and pages"
+    interval: 1m
+    input_series:
+      # 10 requests per minute, ALL of them 500. Both the 1h and the 5m error
+      # ratios go to 1.0, which is well past the 0.144 threshold.
+      #
+      # Two hours of samples, because the rule reads a 1h window and a window
+      # that is not yet full gives a ratio computed from whatever is there. The
+      # assertions are taken at 70m, comfortably after it has filled.
+      - series: 'http_requests_total{job="diabetes-api", route="/predict", status="500"}'
+        values: "0+10x130"
+    alert_rule_test:
+      - eval_time: 70m
+        alertname: AvailabilityBudgetBurnFast
+        exp_alerts:
+          - exp_labels:
+              severity: page
+              service: diabetes-api
+              objective: availability
+              burn_rate: "14.4"
+            exp_annotations:
+              summary: "Burning the availability budget 14.4x too fast"
+              description: >-
+                Over 14.4% of prediction requests have failed for the last hour and are
+                still failing now. That is 2% of the 30-day error budget spent in one
+                hour; at this rate the whole budget is gone in about two days. Page.
+
+  - name: "a healthy service at full traffic fires nothing at all"
+    interval: 1m
+    input_series:
+      - series: 'http_requests_total{job="diabetes-api", route="/predict", status="200"}'
+        values: "0+60x130"
+    alert_rule_test:
+      - eval_time: 70m
+        alertname: AvailabilityBudgetBurnFast
+        exp_alerts: []
+      - eval_time: 70m
+        alertname: AvailabilityBudgetBurnMedium
+        exp_alerts: []
+      - eval_time: 70m
+        alertname: AvailabilityBudgetBurnSlow
+        exp_alerts: []
+      - eval_time: 70m
+        alertname: LatencyBudgetBurnFast
+        exp_alerts: []
+
+  # THE MOST IMPORTANT TEST IN THIS FILE, and the least obvious.
+  #
+  # A 0.5% error rate is a real problem - it will exhaust the 1% budget - and it
+  # must NOT page. Getting this wrong in the permissive direction gives you an
+  # alert that misses outages; getting it wrong in the strict direction gives you
+  # an alert that fires on every bad afternoon, which is how a team learns to
+  # ignore it. The whole burn-rate apparatus exists to place this boundary
+  # deliberately rather than by taste.
+  - name: "a small persistent error rate does not page (this is the whole idea)"
+    interval: 1m
+    input_series:
+      # 199 good + 1 bad per minute = 0.5% errors. Half the budget rate.
+      - series: 'http_requests_total{job="diabetes-api", route="/predict", status="200"}'
+        values: "0+199x200"
+      - series: 'http_requests_total{job="diabetes-api", route="/predict", status="503"}'
+        values: "0+1x200"
+    alert_rule_test:
+      - eval_time: 100m
+        alertname: AvailabilityBudgetBurnFast
+        exp_alerts: []
+      - eval_time: 100m
+        alertname: AvailabilityBudgetBurnMedium
+        exp_alerts: []
+      # And the SLOW alert must not fire either at 0.5%, because 0.5% is inside
+      # the 1% budget: it is spending it, but not faster than the window allows.
+      - eval_time: 100m
+        alertname: AvailabilityBudgetBurnSlow
+        exp_alerts: []
+
+  - name: "a 422 is the contract working and must not touch the availability SLO"
+    interval: 1m
+    input_series:
+      # Every single request rejected by the contract. Availability is untouched,
+      # because these are the service refusing bad data, not the service failing.
+      - series: 'http_requests_total{job="diabetes-api", route="/predict", status="422"}'
+        values: "0+30x130"
+    alert_rule_test:
+      - eval_time: 70m
+        alertname: AvailabilityBudgetBurnFast
+        exp_alerts: []
+    promql_expr_test:
+      # Stated as an assertion rather than left implicit: the numerator is 0
+      # while the denominator is not, so the error ratio is exactly 0.
+      - expr: slo:availability:error_ratio_1h
+        eval_time: 70m
+        exp_samples:
+          - labels: "slo:availability:error_ratio_1h"
+            value: 0
+
+  # ── ContractViolationSpike ────────────────────────────────────────────────
+  #
+  # ...and here is the alert that DOES catch it, which is why the previous test
+  # is not a hole in the design.
+
+  - name: "a caller sending rejected data raises a ticket"
+    interval: 1m
+    input_series:
+      # 60 rejections per minute = 1/s, five times the 0.2/s threshold.
+      - series: 'model_contract_violations_total{job="diabetes-api", check="greater_than(0)"}'
+        values: "0+60x40"
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: ContractViolationSpike
+        exp_alerts:
+          - exp_labels:
+              severity: ticket
+              service: diabetes-api
+            exp_annotations:
+              summary: "Callers are sending data the model-input contract rejects"
+              description: >-
+                The rejection rate has been above 0.2/s for five minutes. This is NOT a
+                service failure and deliberately does not consume the error budget - the
+                contract is doing its job. It means a caller changed. Look at
+                model_contract_violations_total by `check` to see which rule is being
+                broken, then find out who deployed what.
+
+  - name: "one person testing a bad payload by hand does not raise anything"
+    interval: 1m
+    input_series:
+      # Three rejections in total, then nothing. Averages to 0.001/s.
+      - series: 'model_contract_violations_total{job="diabetes-api", check="greater_than(0)"}'
+        values: "0 1 2 3 3x40"
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: ContractViolationSpike
+        exp_alerts: []
+
+  # ── The latency objective ─────────────────────────────────────────────────
+
+  - name: "a service where nearly everything is slow burns the latency budget"
+    interval: 1m
+    input_series:
+      # 100 requests/min, of which only 10 land in the <=0.25s bucket.
+      # Latency error ratio = 1 - 10/100 = 0.9, past the 0.72 threshold.
+      #
+      # `_count` and the `le="0.25"` bucket are separate series and BOTH have to
+      # be supplied: a histogram's buckets are not derived from its count.
+      - series: 'http_request_duration_seconds_bucket{job="diabetes-api", route="/predict", le="0.25"}'
+        values: "0+10x130"
+      - series: 'http_request_duration_seconds_count{job="diabetes-api", route="/predict"}'
+        values: "0+100x130"
+    alert_rule_test:
+      - eval_time: 70m
+        alertname: LatencyBudgetBurnFast
+        exp_alerts:
+          - exp_labels:
+              severity: page
+              service: diabetes-api
+              objective: latency
+              burn_rate: "14.4"
+            exp_annotations:
+              summary: "Burning the latency budget 14.4x too fast"
+              description: >-
+                More than 72% of prediction requests have been slower than 250ms for an
+                hour and still are. The 95%-under-250ms objective allows 5%; this is
+                14.4x that rate, so 2% of the 30-day budget went in the last hour.
+
+  - name: "a service that is 90% fast is inside its 95% target's budget, not paging"
+    interval: 1m
+    input_series:
+      # 90 of 100 under the threshold. That is a 10% miss rate against a 5%
+      # budget - a 2x burn, which is a genuine problem and NOT a page. Nothing
+      # in this rule set catches a 2x latency burn, and that is a deliberate
+      # gap.
+      - series: 'http_request_duration_seconds_bucket{job="diabetes-api", route="/predict", le="0.25"}'
+        values: "0+90x130"
+      - series: 'http_request_duration_seconds_count{job="diabetes-api", route="/predict"}'
+        values: "0+100x130"
+    alert_rule_test:
+      - eval_time: 70m
+        alertname: LatencyBudgetBurnFast
+        exp_alerts: []

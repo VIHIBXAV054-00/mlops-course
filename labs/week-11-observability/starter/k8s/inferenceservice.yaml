@@ -1,0 +1,90 @@
+# The whole deployment. Compare it with Week 9's k8s/deployment.yaml plus
+# k8s/service.yaml — sixty lines that produced two pods behind one address.
+#
+# What this file DOES NOT SAY, and gets anyway: a Deployment, a Service, a
+# route, a public URL, a revision history, a traffic split, and (unless told
+# otherwise) scale-to-zero. A controller reads this object and maintains all of
+# it. That is what "declarative" means in practice: you write the WHAT, and a
+# control loop keeps reality matching it.
+#
+# What it COSTS, and the honest accounting matters more than the line count:
+# a controller now owns your pod spec, and you inherit its opinions. Knative
+# forbids PersistentVolumeClaims in pod specs unless a feature flag is enabled
+# (see `make kserve-install`) — an opinion you did not know you had signed up
+# for until a perfectly reasonable manifest was rejected.
+#
+# THE POINT OF THE WHOLE WEEK, in one field: `storageUri`. Week 9 baked the
+# model into the image, so a new model meant a new build. Here the image is
+# constant and the model is fetched at pod startup, so a new model version is a
+# new DIRECTORY and a one-line edit. `kubectl get revision` then records which
+# model each revision serves — which is what makes a gradual rollout possible
+# at all.
+apiVersion: serving.kserve.io/v1beta1
+kind: InferenceService
+metadata:
+  name: diabetes
+  annotations:
+    # Tag routing, and it is not decoration: it gives every revision its own
+    # stable hostname (`latest-…`, `prev-…`) IN ADDITION to its share of the
+    # main URL. That is blue/green — two versions live, addressable, with
+    # traffic switched between them — and it is also how you smoke-test a canary
+    # directly instead of firing requests at the split and hoping.
+    serving.kserve.io/enable-tag-routing: "true"
+spec:
+  predictor:
+    # Scale-to-zero is Knative's default and it is a good default. It is
+    # switched off here for ONE reason: this lab measures a traffic split and a
+    # latency distribution, and a revision that scaled to zero between two
+    # measurements adds a cold start to one of them. Keeping a replica warm is a
+    # measurement decision, not an autoscaling lesson — autoscaling is not this
+    # course's subject.
+    minReplicas: 1
+    containers:
+      # The name is REQUIRED to be `kserve-container`. KServe finds the user
+      # container by name to inject the storage initializer, the model mount and
+      # the queue-proxy wiring; call it `api` (as Week 9 did) and the manifest is
+      # accepted, the pod starts, and nothing is mounted.
+      - name: kserve-container
+        # The SAME image Week 9 built. Not a variant, not a rebuild — the
+        # `/health` endpoint reports which of the two model sources it used, so
+        # you can prove it.
+        image: diabetes-api:local
+        imagePullPolicy: IfNotPresent
+        ports:
+          # Knative allows exactly one user port. Week 9's image serves 8000, so
+          # 8000 is what is declared; KServe's own runtimes use 8080 and this is
+          # the one place the difference shows.
+          - containerPort: 8000
+            protocol: TCP
+        env:
+          # THE FETCH. KServe reads STORAGE_URI from a custom container (the
+          # `storageUri` FIELD is for its built-in model runtimes), adds an init
+          # container, and downloads the model into /mnt/models before this
+          # container starts. `v1` is a directory in the store, so promoting a
+          # new model is a one-word edit.
+          - name: STORAGE_URI
+            value: pvc://diabetes-models/v1
+          - name: MODEL_PATH
+            value: /mnt/models/model.pkl
+        readinessProbe:
+          # Week 9's probes, unchanged and still doing their job. Note what they
+          # can and cannot see: this proves the model DESERIALISED. It cannot
+          # prove the model is the one you meant, or that its predictions are
+          # sane — that is what `make smoke` is for, and Exercise 4 is the proof
+          # that the distinction is not academic.
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 2
+          periodSeconds: 3
+          failureThreshold: 3
+        resources:
+          # Modest and explicit, because this cluster is already running
+          # cert-manager, Istio, Knative and KServe on a laptop. Two revisions
+          # coexist during a canary, so these numbers are paid twice.
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: "1"
+            memory: 1Gi

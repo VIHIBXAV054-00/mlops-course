@@ -1,0 +1,309 @@
+# Week 11 Lab — Observability (starter)
+#
+#   postgres           relational store — MLflow metadata and Prefect state
+#   s3                 Silo object store — model files and DVC data
+#   s3-create-bucket   one-shot job that creates both buckets
+#   mlflow             tracking server and model registry
+#   prefect            orchestration server and UI
+#   prometheus         scrapes /metrics, stores the time series, evaluates the rules
+#   grafana            draws the dashboards provisioned from ./grafana
+#   api                the serving container; behind the `api` profile, so `make up`
+#                      does not start it (`make api-up` does)
+#
+# Tutorials:
+#   https://prometheus.io/docs/prometheus/latest/getting_started/
+#   https://grafana.com/docs/grafana/latest/administration/provisioning/
+# Deviation: no Alertmanager. Prometheus shows pending and firing alerts on its
+# own /alerts page.
+#
+#   cp .env.example .env
+#   docker compose up -d --wait                 # everything except the api
+#   docker compose --profile api up -d --wait   # and the api
+#   docker compose down                         # stop; data persists in the named volumes
+#   docker compose down -v                      # stop and wipe the volumes
+#
+# Every lab uses the same 55xx host ports, so stop the Week 10 stack first, and
+# delete the Week 10 cluster, which nothing here needs:
+#   cd ../../week-10-kserve-rollout/starter && make down
+#   kind delete cluster --name mlops
+
+# A per-lab project name. Without it, Compose uses the directory name, which
+# every lab shares, so the labs would share containers and volumes.
+name: week11-observability-starter
+
+services:
+
+  # ── Postgres: relational backend store ─────────────────────────────────────
+  # Stores experiment names, run IDs, parameters, metrics, and tags.
+  # Image pinned to 16.3 for reproducibility.
+  postgres:
+    image: postgres:16.3
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      # NEW in Week 8. Prefect keeps its own state -- flow runs, task runs,
+      # deployments, schedules -- and it does NOT share MLflow's schema.
+      PREFECT_DB: ${PREFECT_DB:-prefectdb}
+    ports:
+      - "${POSTGRES_HOST_PORT:-5532}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      # Creates the SECOND database on first initialisation of the volume.
+      #
+      # THE TRAP, and it is worth knowing before it costs you an hour: scripts
+      # in docker-entrypoint-initdb.d run ONLY when the data directory is
+      # empty. Re-use a volume from an earlier week and this never executes, so
+      # the Prefect server starts, fails to find its database, and says nothing
+      # about volumes. `make down-v` (or the per-week project name, which gives
+      # this week its own volume) is what actually fixes it.
+      - ./init-prefect-db.sh:/docker-entrypoint-initdb.d/10-prefect-db.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  # ── Silo: S3-compatible object store ───────────────────────────────────────
+  # Silo is a community fork of MinIO (MinIO's own images left Docker Hub in
+  # September 2026). It keeps MinIO's MINIO_* variables, `mc` client and console.
+  # Stores model artifacts (serialized pipelines, plots, etc.).
+  # Uses a TCP healthcheck (from the official MLflow tutorial) rather than
+  # the HTTP endpoint, for maximum compatibility.
+  s3:
+    image: pgsty/silo:RELEASE.2026-09-16T00-00-00Z
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY}
+    command: server /data --console-address ":9001"
+    ports:
+      - "${S3_API_PORT:-5510}:9000"
+      - "${S3_CONSOLE_PORT:-5511}:9001"
+    volumes:
+      - s3-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "mc ready local || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  # ── s3-create-bucket: one-shot bucket initialisation ───────────────────────
+  # Runs once after Silo is healthy. Creates the artifacts bucket if it does
+  # not already exist (idempotent via --ignore-existing).
+  s3-create-bucket:
+    image: pgsty/mc:RELEASE.2026-09-16T00-00-00Z
+    depends_on:
+      s3:
+        condition: service_healthy
+    entrypoint: >
+      bash -c "
+        mc alias set s3 http://s3:9000 ${S3_ACCESS_KEY} ${S3_SECRET_KEY} &&
+        mc mb --ignore-existing s3/${MLFLOW_BUCKET} &&
+        mc mb --ignore-existing s3/${DVC_BUCKET}
+      "
+
+  # ── MLflow tracking server ──────────────────────────────────────────────────
+  # Built from our pinned mlflow.Dockerfile.
+  # --backend-store-uri: Postgres connection using the compose DNS name "postgres"
+  # --artifacts-destination: Silo bucket via S3 protocol
+  # --allowed-hosts: required by MLflow 3.5.0+ security middleware (--host 0.0.0.0)
+  # The client only needs MLFLOW_TRACKING_URI; Silo credentials stay server-side.
+  mlflow:
+    build:
+      context: .
+      dockerfile: mlflow.Dockerfile
+    environment:
+      # Silo S3 credentials — server-side only, not exposed to the client
+      MLFLOW_S3_ENDPOINT_URL: http://s3:9000
+      AWS_ACCESS_KEY_ID: ${S3_ACCESS_KEY}
+      AWS_SECRET_ACCESS_KEY: ${S3_SECRET_KEY}
+    command:
+      - --backend-store-uri
+      - postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      - --artifacts-destination
+      - s3://${MLFLOW_BUCKET}
+      - --host
+      - "0.0.0.0"
+      - --port
+      - "5000"
+      - --allowed-hosts
+      # MLflow's host check is an exact/fnmatch match that does NOT strip the port,
+      # so bare "localhost" will not match the browser's "Host: localhost:5500".
+      # The "host:*" wildcards accept any port (host 5500, internal 5000, or a
+      # student-overridden MLFLOW_PORT) while still restricting to localhost/127.0.0.1.
+      - "localhost,127.0.0.1,mlflow,localhost:*,127.0.0.1:*,mlflow:*"
+    ports:
+      - "${MLFLOW_PORT:-5500}:5000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      s3-create-bucket:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:5000/health\")' 2>/dev/null || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 15s
+    restart: unless-stopped
+
+  # ── Prefect server ────────────────────────────────────────────────────────
+  #
+  # PINNED to the same version as the client in pyproject.toml, for the same
+  # reason `mlflow==3.13.0` is pinned: a client and a server that drift are a
+  # class of bug you end up debugging through a REST API. Note this is a real
+  # tag -- `3.8.2-python3.12` -- not `3-latest`.
+  prefect:
+    image: prefecthq/prefect:3.8.2-python3.12
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      # `PREFECT_SERVER_DATABASE_CONNECTION_URL`, NOT `PREFECT_API_...`.
+      # The setting was renamed; every older blog post uses the old name and
+      # the failure mode is a server that starts and then cannot find its
+      # database.
+      PREFECT_SERVER_DATABASE_CONNECTION_URL: >-
+        postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${PREFECT_DB:-prefectdb}
+      PREFECT_SERVER_API_HOST: 0.0.0.0
+    command: prefect server start --host 0.0.0.0 --port 4200
+    ports:
+      - "${PREFECT_PORT:-5520}:4200"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:4200/api/health')\""]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 30s
+    restart: unless-stopped
+
+  # ── Prometheus: the time-series database that does the asking ──────────────
+  #
+  # NEW IN WEEK 11, and the first thing to understand about it is the direction
+  # of the arrow. Prometheus is a PULL system: nothing is sent to it. On a
+  # schedule (`scrape_interval`, 15s here) it makes an HTTP GET to every target
+  # it knows about and reads whatever numbers are there right now. Every
+  # logging system you have used works the other way round, which is why the
+  # first question is always "why is my target DOWN?" and the answer is always
+  # a networking one.
+  #
+  # Two consequences, both worth a minute of your time:
+  #   * Prometheus must be able to REACH your service. That is why the API is a
+  #     container on this network rather than a process on your laptop — see
+  #     prometheus/prometheus.yml, which names it as `api:8000`.
+  #   * Prometheus knows the difference between "the service reported zero
+  #     errors" and "the service did not answer". The second one is `up == 0`,
+  #     and it is a metric you get without instrumenting anything.
+  #
+  # --web.enable-lifecycle turns on POST /-/reload, so `make prom-reload`
+  # applies a rule change in about a second rather than by restarting the
+  # container. It is off by default because it is an unauthenticated write
+  # endpoint; enabling it on a laptop is fine and on the internet is not.
+  prometheus:
+    image: prom/prometheus:v3.13.2
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --web.enable-lifecycle
+    ports:
+      - "${PROMETHEUS_PORT:-5560}:9090"
+    volumes:
+      # READ-ONLY, and on purpose: the configuration lives in Git, and a
+      # container that cannot write its own config cannot drift from the repo.
+      #
+      # The WHOLE ./prometheus directory is mounted, which puts the rule unit
+      # tests (./prometheus/tests) inside the container where `promtool` can
+      # reach them — see `make alerts-test`. Note they live in `tests/` and not
+      # in `rules/`: `rule_files: /etc/prometheus/rules/*.yml` would otherwise
+      # try to load a TEST file as a rule file, and Prometheus refuses to start
+      # on an unparseable rule file. Directory layout is interface here.
+      - ./prometheus:/etc/prometheus:ro
+      - prometheus-data:/prometheus
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:9090/-/healthy"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  # ── Grafana: the part everyone thinks is the monitoring ────────────────────
+  #
+  # NEW IN WEEK 11, and it holds no data at all. Every number on every panel is
+  # a PromQL query answered by Prometheus at the moment you look. Grafana is a
+  # query editor with opinions about colour — which is exactly why a dashboard
+  # is worth keeping in Git and not worth clicking together.
+  #
+  # PROVISIONED FROM FILES. ./grafana/provisioning is mounted at Grafana's
+  # provisioning directory, so the datasource and the dashboard exist the first
+  # time the container starts, with no login, no import, and no "works on my
+  # machine". A dashboard built in the browser is not reviewable, not
+  # diffable, and lives in a volume you will delete.
+  #
+  # Anonymous Editor access lets you edit panels in the lab without a login.
+  # A lab convenience only: never give anonymous users the Editor role on a real server.
+  grafana:
+    image: grafana/grafana:13.1.3
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Editor
+      # Land on our dashboard instead of Grafana's welcome page.
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /etc/grafana/dashboards/diabetes-service.json
+      # Nothing here needs to phone home for a classroom lab.
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+    ports:
+      - "${GRAFANA_PORT:-5561}:3000"
+    volumes:
+      - ./grafana/grafana.ini:/etc/grafana/grafana.ini:ro
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/etc/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://localhost:3000/api/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+    restart: unless-stopped
+
+  # ── The service being observed ─────────────────────────────────────────────
+  #
+  # `image:`, NOT `build:`, and that is a deliberate refusal.
+  #
+  # Week 9 made `make image` refuse to build on a non-GO gate verdict, because
+  # a container is a release and Week 6's gate applies to every door into
+  # production. A `build:` block here would give Compose a fourth door with no
+  # lock on it — `docker compose up` would quietly produce a release nobody
+  # approved. So the image is built by `make image` and merely RUN here.
+  #
+  # Profile `api`: this service does not start with the rest. See the header.
+  api:
+    profiles: ["api"]
+    image: diabetes-api:local
+    # No `environment:` block at all. The image already runs ONE uvicorn worker
+    # (see serve.Dockerfile, which explains why that is now load-bearing) and
+    # everything else it needs was baked in at build time. A serving container
+    # with no runtime configuration is a serving container that cannot be
+    # misconfigured on the way to production.
+    ports:
+      - "${API_PORT:-5562}:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
+  s3-data:
+  prometheus-data:
+  grafana-data:

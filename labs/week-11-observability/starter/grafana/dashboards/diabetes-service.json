@@ -1,0 +1,490 @@
+{
+  "uid": "diabetes-service",
+  "title": "Diabetes prediction service",
+  "description": "Week 11 starter. Exercise 3 adds the \"Predictions by outcome\" panel in the Grafana UI. Panel descriptions carry the notes, because JSON has no comments; hover the (i) on any panel.",
+  "tags": [
+    "mlops",
+    "week-11",
+    "slo"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": false,
+  "refresh": "10s",
+  "time": {
+    "from": "now-15m",
+    "to": "now"
+  },
+  "templating": {
+    "list": []
+  },
+  "annotations": {
+    "list": []
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Which model is this?",
+      "description": "The info-metric pattern: model_info is a gauge that is always 1, and its LABELS are the payload. This is link ten of the course's traceability chain \u2014 the dashboard can name the model behind every other panel, so a latency step change can be attributed to a deployment without leaving the browser. Note what would have gone wrong if model_version had been a label on http_requests_total instead: a deploy would look like a traffic drop, because the old series stops and a new one starts at zero.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 8,
+        "x": 0,
+        "y": 0
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "name",
+        "colorMode": "none",
+        "graphMode": "none"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "model_info{job=\"diabetes-api\"}",
+          "legendFormat": "v{{model_version}} \u00b7 store {{store_version}} \u00b7 gate {{gate_verdict}} \u00b7 schema {{schema_version}}",
+          "instant": true
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Is it answering? (up)",
+      "description": "Synthesised by Prometheus on every scrape: 1 if the scrape succeeded, 0 if it did not. You get it for free from the act of scraping, and it covers the hole a ratio-based SLI structurally cannot \u2014 a service with no traffic has a perfect error ratio. This is what ServiceDown alerts on.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 8,
+        "y": 0
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "none"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "DOWN",
+                  "color": "red",
+                  "index": 0
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "1": {
+                  "text": "UP",
+                  "color": "green",
+                  "index": 1
+                }
+              }
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "up{job=\"diabetes-api\"}",
+          "legendFormat": "{{instance}}",
+          "instant": true
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "gauge",
+      "title": "Availability error budget remaining (30d)",
+      "description": "1 minus (5xx responses / the number the 99% target allows) over the rolling 30-day window. The 0.01 in the denominator is the error budget from slo.yaml, and tests/test_dashboard.py recomputes it from that file rather than trusting the literal here. Read it as a decision-making device, not a score: a budget that has never been touched means the target is too low, and reliability bought is latency headroom or velocity not bought.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 12,
+        "x": 12,
+        "y": 0
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0.25
+              },
+              {
+                "color": "green",
+                "value": 0.5
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "clamp_min(1 - (sum(increase(http_requests_total{job=\"diabetes-api\",route=~\"/predict|/v1/.*\",status=~\"5..\"}[30d])) / (0.01 * sum(increase(http_requests_total{job=\"diabetes-api\",route=~\"/predict|/v1/.*\"}[30d])))), 0)",
+          "legendFormat": "remaining",
+          "instant": true
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Request rate by status",
+      "description": "rate() FIRST, always. A counter's raw value depends on when the process started and is meaningless on its own; rate() also handles a restart (the counter going back to zero) as a reset rather than as a huge negative spike. The [1m] window must span at least two scrapes or the series goes empty \u2014 at this job's 5s interval that is comfortable, at a 60s interval it would not be.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": {
+            "fillOpacity": 20,
+            "stacking": {
+              "mode": "normal"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (status) (rate(http_requests_total{job=\"diabetes-api\"}[1m]))",
+          "legendFormat": "{{status}}"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Error rate (5xx as a share of prediction traffic)",
+      "description": "The availability SLI itself, on a graph. Note the numerator: 5xx only. A 422 from Week 5's contract is the service working correctly \u2014 refusing an impossible patient \u2014 so counting it here would let any caller burn our error budget by sending rubbish. The cost of that decision is that a flood of 422s is invisible on this panel, which is exactly why 'Contract violations' below exists. The `or vector(0)` is there because sum() over no matching series returns an EMPTY vector, not zero \u2014 without it a healthy service with no 5xx renders as 'No data', which looks exactly like a broken panel.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0.01
+              },
+              {
+                "color": "red",
+                "value": 0.144
+              }
+            ]
+          },
+          "custom": {
+            "fillOpacity": 10,
+            "thresholdsStyle": {
+              "mode": "dashed"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "(sum(rate(http_requests_total{job=\"diabetes-api\",route=~\"/predict|/v1/.*\",status=~\"5..\"}[5m])) or vector(0)) / sum(rate(http_requests_total{job=\"diabetes-api\",route=~\"/predict|/v1/.*\"}[5m]))",
+          "legendFormat": "error ratio"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Latency percentiles",
+      "description": "histogram_quantile over the SUMMED bucket rates \u2014 and the order is not negotiable. rate() each bucket, sum them by le, then take the quantile. Doing it the other way (a quantile per series, then averaged) is wrong, because percentiles do not average: you cannot mean two p95s and get a p95. That is the entire reason the service reports buckets instead of computing percentiles itself. The 250ms line is the latency SLO threshold from slo.yaml, and it is a bucket boundary so the SLI counting it is exact rather than interpolated.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 12
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 0.25
+              }
+            ]
+          },
+          "custom": {
+            "fillOpacity": 0,
+            "thresholdsStyle": {
+              "mode": "line"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.5, sum by (le) (rate(http_request_duration_seconds_bucket{job=\"diabetes-api\"}[5m])))",
+          "legendFormat": "p50"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket{job=\"diabetes-api\"}[5m])))",
+          "legendFormat": "p95"
+        },
+        {
+          "refId": "C",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(http_request_duration_seconds_bucket{job=\"diabetes-api\"}[5m])))",
+          "legendFormat": "p99"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Requests in flight",
+      "description": "A GAUGE, because it goes both ways \u2014 the one thing a counter structurally cannot tell you. This is the panel that distinguishes a saturated service from a slow one: when throughput stops rising while this and latency keep climbing, the extra requests are queued rather than served. Week 10's in-cluster load test showed exactly that shape at concurrency 64.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 12
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "custom": {
+            "fillOpacity": 20
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "http_requests_in_flight{job=\"diabetes-api\"}",
+          "legendFormat": "in flight"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Median predicted probability",
+      "description": "The shape of what the model says, not whether it is right. A model that has started answering 0.5 to everything is broken in a way no latency or error-rate graph can show \u2014 and this is the panel that would show it. The comparison against a reference window that turns this from a curiosity into a signal is drift detection: Week 12.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 8,
+        "y": 20
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "custom": {
+            "fillOpacity": 0
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.5, sum by (le) (rate(model_prediction_score_bucket{job=\"diabetes-api\"}[5m])))",
+          "legendFormat": "median score"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Contract violations by check",
+      "description": "Week 5's contract, aggregated \u2014 and the panel that catches what the error-rate panel deliberately cannot. A caller who starts sending glucose in the wrong unit produces a service with 100% availability, latency well inside budget, an untouched error budget, and every patient scored on data the model has never seen. The label is the CHECK NAME, a small closed set fixed by the pandera schema; the failing VALUE is attacker-controlled and would be unbounded cardinality.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 16,
+        "y": 20
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0.2
+              }
+            ]
+          },
+          "custom": {
+            "fillOpacity": 20,
+            "thresholdsStyle": {
+              "mode": "dashed"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (check) (rate(model_contract_violations_total{job=\"diabetes-api\"}[5m]))",
+          "legendFormat": "{{check}}"
+        }
+      ]
+    }
+  ]
+}

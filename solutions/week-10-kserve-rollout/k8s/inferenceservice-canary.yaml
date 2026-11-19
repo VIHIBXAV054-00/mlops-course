@@ -1,0 +1,40 @@
+# The canary: a copy of inferenceservice.yaml with two changes, the canary percentage and the model.
+# Apply with `make isvc-canary`.
+apiVersion: serving.kserve.io/v1beta1
+kind: InferenceService
+metadata:
+  name: diabetes
+  annotations:
+    # gives each revision its own address (latest-..., prev-...) next to its percentage of traffic
+    serving.kserve.io/enable-tag-routing: "true"
+spec:
+  predictor:
+    canaryTrafficPercent: 10  # canary.percent in release.yaml; 0 rolls back, removing it promotes
+    minReplicas: 1  # keeps one pod running, so a measurement never waits for a cold start
+    containers:
+      - name: kserve-container  # KServe mounts the model only into a container with this name
+        image: diabetes-api:local
+        imagePullPolicy: IfNotPresent
+        ports:
+          - containerPort: 8000
+            protocol: TCP
+        env:
+          # KServe copies this store version to /mnt/models before the container starts
+          - name: STORAGE_URI
+            value: pvc://diabetes-models/v2
+          - name: MODEL_PATH
+            value: /mnt/models/model.pkl
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 2
+          periodSeconds: 3
+          failureThreshold: 3
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: "1"
+            memory: 1Gi

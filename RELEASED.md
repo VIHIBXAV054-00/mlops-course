@@ -1,6 +1,6 @@
 # What is published
 
-Generated 2026-11-12. Course materials are released week by week —
+Generated 2026-11-19. Course materials are released week by week —
 a week appears here on the morning of its lecture.
 
 Run `git pull upstream main` in your fork to fetch the latest.
@@ -18,7 +18,7 @@ Run `git pull upstream main` in your fork to fetch the latest.
 | 8 | orchestration | published |
 | 9 | serving | published |
 | 10 | rollout strategies | published |
-| 11 | observability | arrives 2026-11-16 |
+| 11 | observability | published |
 | 12 | drift monitoring | arrives 2026-11-23 |
 | 13 | governance | arrives 2026-11-30 |
 | 14 | summary llmops | arrives 2026-12-07 |
@@ -29,7 +29,6 @@ Run `git pull upstream main` in your fork to fetch the latest.
 | 01 | 2026-10-05 | 2026-11-01 |
 | 02 | 2026-10-19 | 2026-11-15 |
 | 03 | 2026-11-02 | 2026-11-29 |
-| 04 | 2026-11-16 | 2026-12-06 |
-| 05 | 2026-11-30 | 2026-12-13 |
+| 04 | 2026-11-16 | 2026-12-13 |
 
 Slides for the published weeks: <https://vihibxav054-00.github.io/mlops-course>
