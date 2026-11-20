@@ -106,17 +106,68 @@ def test_the_image_names_the_champion_only_when_it_holds_the_champion():
 # ── /health (Exercise 2, step 2) ────────────────────────────────────────────
 
 
-@pytest.mark.skip(reason="Exercise 2, step 2 — write the /health endpoint in api.py, then delete this skip marker.")
-def test_health_reports_the_build_info(client):
+def test_a_valid_payload_scores(client):
+    response = client.post("/predict", json=VALID)
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["prediction"] in (0, 1)
+    assert 0.0 <= body["probability"] <= 1.0
+    assert body["schema_version"]
+
+
+def test_the_response_is_deterministic(client):
+    first = client.post("/predict", json=VALID)
+    second = client.post("/predict", json=VALID)
+    assert first.status_code == 200, first.text
+    assert first.json() == second.json()
+
+
+def test_a_sentinel_zero_is_rejected_by_name(client):
+    """pydantic accepts `glucose: 0`; the contract rejects it and says which check failed."""
+    response = client.post("/predict", json={**VALID, "glucose": 0})
+    assert response.status_code == 422, response.text
+    detail = response.json()["detail"]
+    assert "greater_than(0)" in str(detail), (
+        f"the 422 should name the failed check, greater_than(0); got {detail}"
+    )
+
+
+def test_a_missing_measurement_is_scored(client):
+    """A value that was not measured is sent as null; the model's imputer fills it in."""
+    response = client.post("/predict", json={**VALID, "insulin": None})
+    assert response.status_code == 200, response.text
+    assert 0.0 <= response.json()["probability"] <= 1.0
+
+
+def test_an_extra_field_is_rejected(client):
+    response = client.post("/predict", json={**VALID, "cholesterol": 180})
+    assert response.status_code == 422
+
+
+def test_a_missing_field_is_rejected(client):
+    payload = {k: v for k, v in VALID.items() if k != "bmi"}
+    assert client.post("/predict", json=payload).status_code == 422
+
+
+def test_field_order_does_not_matter(client):
+    """A JSON object has no column order, so the contract does not ask for one."""
+    reversed_payload = dict(reversed(list(VALID.items())))
+    assert client.post("/predict", json=reversed_payload).status_code == 200
+
+
+def test_a_non_numeric_value_is_rejected(client):
+    assert client.post("/predict", json={**VALID, "age": "fifty"}).status_code == 422
+
+
+def test_health_reports_the_baked_model(client):
     response = client.get("/health")
     assert response.status_code == 200, response.text
     body = response.json()
     assert body["status"] == "ok"
     assert body["schema_version"]
-    assert body["model_source"] == "working tree (not a built image)"
+    assert body["model_source"] == "working tree (not baked)"
 
 
-@pytest.mark.skip(reason="Exercise 2, step 2 — write the /health endpoint in api.py, then delete this skip marker.")
 def test_health_is_503_without_a_model(monkeypatch, tmp_path):
     """No model, no traffic: the readiness probe in Exercise 5 relies on this 503."""
     monkeypatch.setenv("MODEL_PATH", str(tmp_path / "missing.pkl"))
@@ -132,79 +183,14 @@ def test_health_does_not_need_the_registry():
     from week_09_serving import api
 
     source = inspect.getsource(api)
-    build_info = source[source.index("def _build_info("):source.index("def create_app(")]
+    baked = source[source.index("def _baked("):source.index("def create_app(")]
     for forbidden in ("MlflowClient", "mlflow.tracking", "get_model_version"):
-        assert forbidden not in build_info, (
-            f"`_build_info()` uses {forbidden}: /health must report what was "
+        assert forbidden not in baked, (
+            f"`_baked()` uses {forbidden}: /health must report what was "
             "written at build time, not what the registry says now"
         )
 
 
-# ── /predict (Exercise 2, step 3) ───────────────────────────────────────────
-
-
-@pytest.mark.skip(reason="Exercise 2, step 3 — write the /predict endpoint in api.py, then delete this skip marker.")
-def test_a_valid_payload_scores(client):
-    response = client.post("/predict", json=VALID)
-    assert response.status_code == 200, response.text
-    body = response.json()
-    assert body["prediction"] in (0, 1)
-    assert 0.0 <= body["probability"] <= 1.0
-    assert body["schema_version"]
-
-
-@pytest.mark.skip(reason="Exercise 2, step 3 — write the /predict endpoint in api.py, then delete this skip marker.")
-def test_the_response_is_deterministic(client):
-    first = client.post("/predict", json=VALID)
-    second = client.post("/predict", json=VALID)
-    assert first.status_code == 200, first.text
-    assert first.json() == second.json()
-
-
-@pytest.mark.skip(reason="Exercise 2, step 3 — write the /predict endpoint in api.py, then delete this skip marker.")
-def test_a_sentinel_zero_is_rejected_by_name(client):
-    """pydantic accepts `glucose: 0`; the contract rejects it and says which check failed."""
-    response = client.post("/predict", json={**VALID, "glucose": 0})
-    assert response.status_code == 422, response.text
-    detail = response.json()["detail"]
-    assert "greater_than(0)" in str(detail), (
-        f"the 422 should name the failed check, greater_than(0); got {detail}"
-    )
-
-
-@pytest.mark.skip(reason="Exercise 2, step 3 — write the /predict endpoint in api.py, then delete this skip marker.")
-def test_a_missing_measurement_is_scored(client):
-    """A value that was not measured is sent as null; the model's imputer fills it in."""
-    response = client.post("/predict", json={**VALID, "insulin": None})
-    assert response.status_code == 200, response.text
-    assert 0.0 <= response.json()["probability"] <= 1.0
-
-
-@pytest.mark.skip(reason="Exercise 2, step 3 — write the /predict endpoint in api.py, then delete this skip marker.")
-def test_an_extra_field_is_rejected(client):
-    response = client.post("/predict", json={**VALID, "cholesterol": 180})
-    assert response.status_code == 422
-
-
-@pytest.mark.skip(reason="Exercise 2, step 3 — write the /predict endpoint in api.py, then delete this skip marker.")
-def test_a_missing_field_is_rejected(client):
-    payload = {k: v for k, v in VALID.items() if k != "bmi"}
-    assert client.post("/predict", json=payload).status_code == 422
-
-
-@pytest.mark.skip(reason="Exercise 2, step 3 — write the /predict endpoint in api.py, then delete this skip marker.")
-def test_field_order_does_not_matter(client):
-    """A JSON object has no column order, so the contract does not ask for one."""
-    reversed_payload = dict(reversed(list(VALID.items())))
-    assert client.post("/predict", json=reversed_payload).status_code == 200
-
-
-@pytest.mark.skip(reason="Exercise 2, step 3 — write the /predict endpoint in api.py, then delete this skip marker.")
-def test_a_non_numeric_value_is_rejected(client):
-    assert client.post("/predict", json={**VALID, "age": "fifty"}).status_code == 422
-
-
-@pytest.mark.skip(reason="Exercise 2, step 3 — write the /predict endpoint in api.py, then delete this skip marker.")
 def test_the_openapi_schema_lists_both_endpoints(client):
     spec = client.get("/openapi.json").json()
     assert "/predict" in spec["paths"]
@@ -242,7 +228,6 @@ class _RejectsEveryFourth:
         return _Response(422 if self.calls % 4 == 0 else 200)
 
 
-@pytest.mark.skip(reason="Exercise 3 — write online_score in bench.py, then delete this skip marker.")
 def test_online_score_sends_one_request_per_row():
     from week_09_serving.bench import online_score
 
@@ -256,7 +241,6 @@ def test_online_score_sends_one_request_per_row():
     assert result["rows_per_second"] == pytest.approx(20 / result["wall_clock_s"], rel=0.05)
 
 
-@pytest.mark.skip(reason="Exercise 3 — write online_score in bench.py, then delete this skip marker.")
 def test_online_score_times_each_request():
     """An average hides the slow request; a time for each request shows it."""
     from week_09_serving.bench import online_score
@@ -271,7 +255,6 @@ def test_online_score_times_each_request():
     assert result["p50_ms"] <= result["p95_ms"] <= result["max_ms"]
 
 
-@pytest.mark.skip(reason="Exercise 3 — write online_score in bench.py, then delete this skip marker.")
 def test_online_score_counts_failed_requests():
     """A rejected request never reaches the model, so it must not count as a scored row."""
     from week_09_serving.bench import online_score
@@ -280,7 +263,6 @@ def test_online_score_counts_failed_requests():
     assert result["failed"] == 5, f"5 of 20 requests got a 422; failed is {result['failed']}"
 
 
-@pytest.mark.skip(reason="Exercise 3 — write online_score in bench.py, then delete this skip marker.")
 def test_online_score_sends_missing_values_as_null(client):
     """NaN is not valid JSON: a missing value must reach the service as null."""
     from week_09_serving.bench import online_score
@@ -290,7 +272,6 @@ def test_online_score_sends_missing_values_as_null(client):
     assert result["failed"] == 0, "the row with a missing insulin was rejected"
 
 
-@pytest.mark.skip(reason="Exercise 3 — write online_score in bench.py, then delete this skip marker.")
 def test_online_score_runs_against_the_service(client):
     from week_09_serving.bench import online_score
 

@@ -113,7 +113,6 @@ def test_both_routes_agree(good_client):
 # ── Exercise 2: the behaviour check ───────────────────────────────────────────
 
 
-@pytest.mark.skip(reason="Exercise 2: write check_behaviour() in smoke.py")
 def test_the_behaviour_check_returns_three_named_checks(good_client):
     names = [check.name for check in check_behaviour(good_client)]
     assert names == [
@@ -123,32 +122,27 @@ def test_the_behaviour_check_returns_three_named_checks(good_client):
     ]
 
 
-@pytest.mark.skip(reason="Exercise 2: write check_behaviour() in smoke.py")
 def test_the_behaviour_check_reports_the_probabilities_it_saw(good_client):
     details = " ".join(check.detail for check in check_behaviour(good_client))
     assert "p=" in details
     assert "spread" in details
 
 
-@pytest.mark.skip(reason="Exercise 2: write check_behaviour() in smoke.py")
 def test_the_shipped_model_behaves(good_client):
     assert all(check.passed for check in check_behaviour(good_client, min_spread=0.1))
 
 
-@pytest.mark.skip(reason="Exercise 2: write check_behaviour() in smoke.py")
 def test_the_spread_check_uses_the_threshold_it_is_given(good_client):
     """A spread can never reach 1.0, so this threshold must fail."""
     checks = {c.name: c for c in check_behaviour(good_client, min_spread=1.0)}
     assert not checks["behaviour.not_a_constant"].passed
 
 
-@pytest.mark.skip(reason="Exercise 2: write check_behaviour() in smoke.py")
 def test_the_suite_passes_against_the_model_we_ship(good_client):
     report = run_smoke(good_client, expect_version="v1", min_spread=0.1)
     assert report["verdict"] == "PASS", report["checks"]
 
 
-@pytest.mark.skip(reason="Exercise 2: write check_behaviour() in smoke.py")
 def test_the_suite_fails_against_a_healthy_pod_serving_a_broken_model(broken_client):
     """The platform sees nothing wrong; the smoke test must."""
     report = run_smoke(broken_client, expect_version="v3", min_spread=0.1)
@@ -157,7 +151,6 @@ def test_the_suite_fails_against_a_healthy_pod_serving_a_broken_model(broken_cli
     assert {"behaviour.positive_is_positive", "identity.gate"} <= failed, failed
 
 
-@pytest.mark.skip(reason="Exercise 2: write check_behaviour() in smoke.py")
 def test_your_release_spread_passes_the_shipped_model(good_client):
     """The threshold in release.yaml must not fail the model you ship today."""
     release = load_release()

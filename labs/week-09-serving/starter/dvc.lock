@@ -9,21 +9,21 @@ stages:
       size: 31750
     - path: src/week_09_serving/pipeline.py
       hash: md5
-      md5: 306280c0c32350a83ec60c1bbb7f1e4a
-      size: 22202
+      md5: 4b1d7db5b85a637afef21ef2ed53d78f
+      size: 22730
     - path: src/week_09_serving/schemas.py
       hash: md5
-      md5: c67217e8dc1213dfa7083962f7ef9349
-      size: 10115
+      md5: 6e9e24029440cb32db71a71e63569aab
+      size: 10330
     - path: src/week_09_serving/validation.py
       hash: md5
-      md5: 263012d8f2410138768b15d33e159f84
-      size: 8977
+      md5: e7bf2003bdbea44014ab4b82375dfb6b
+      size: 9207
     outs:
     - path: reports/validation.json
       hash: md5
-      md5: c18d486ab8ab86bbce95f85d2ec12525
-      size: 564
+      md5: a93c68efa227920689933ab1a8130a2f
+      size: 595
   prepare:
     cmd: uv run python src/main.py prepare
     deps:
@@ -33,16 +33,16 @@ stages:
       size: 31750
     - path: reports/validation.json
       hash: md5
-      md5: c18d486ab8ab86bbce95f85d2ec12525
-      size: 564
+      md5: a93c68efa227920689933ab1a8130a2f
+      size: 595
     - path: src/week_09_serving/data.py
       hash: md5
-      md5: d149ac231f61e375573cfae490b5150e
-      size: 3311
+      md5: 5d93ea7466461c5ff546dd7e6b0da983
+      size: 3406
     - path: src/week_09_serving/pipeline.py
       hash: md5
-      md5: 306280c0c32350a83ec60c1bbb7f1e4a
-      size: 22202
+      md5: 4b1d7db5b85a637afef21ef2ed53d78f
+      size: 22730
     params:
       params.yaml:
         prepare.test_size: 0.25
@@ -65,24 +65,24 @@ stages:
       size: 23818
     - path: src/week_09_serving/dvc_link.py
       hash: md5
-      md5: 1bb4d0f1423b862cd773b35cf71d1c60
-      size: 4461
+      md5: 126e69f5bd6ac497e755299976d904d8
+      size: 4575
     - path: src/week_09_serving/model.py
       hash: md5
-      md5: 11d9da4a55d1c10c194ffc238cc446b8
-      size: 5437
+      md5: bbc68d3b7d589c3a42ed8733c35c120d
+      size: 5583
     - path: src/week_09_serving/pipeline.py
       hash: md5
-      md5: 306280c0c32350a83ec60c1bbb7f1e4a
-      size: 22202
+      md5: 4b1d7db5b85a637afef21ef2ed53d78f
+      size: 22730
     - path: src/week_09_serving/schemas.py
       hash: md5
-      md5: c67217e8dc1213dfa7083962f7ef9349
-      size: 10115
+      md5: 6e9e24029440cb32db71a71e63569aab
+      size: 10330
     - path: src/week_09_serving/validation.py
       hash: md5
-      md5: 263012d8f2410138768b15d33e159f84
-      size: 8977
+      md5: e7bf2003bdbea44014ab4b82375dfb6b
+      size: 9207
     params:
       params.yaml:
         random_seed: 42
@@ -94,11 +94,11 @@ stages:
     outs:
     - path: models/mlflow_run_id.json
       hash: md5
-      md5: c02d26094a2a920c6155ff23f90f7e24
-      size: 82
+      md5: f240099c03d53878cbec1c45820f8e6c
+      size: 86
     - path: models/model.pkl
       hash: md5
-      md5: f6f7d2832bfbd795008dfc54b4be0347
+      md5: 0cb71718f4600c3b4b65a5c878ec4c7f
       size: 2273
   evaluate:
     cmd: uv run python src/main.py evaluate
@@ -109,36 +109,36 @@ stages:
       size: 8041
     - path: models/mlflow_run_id.json
       hash: md5
-      md5: c02d26094a2a920c6155ff23f90f7e24
-      size: 82
+      md5: f240099c03d53878cbec1c45820f8e6c
+      size: 86
     - path: models/model.pkl
       hash: md5
-      md5: f6f7d2832bfbd795008dfc54b4be0347
+      md5: 0cb71718f4600c3b4b65a5c878ec4c7f
       size: 2273
     - path: src/week_09_serving/evaluation.py
       hash: md5
-      md5: ba59fd18d6ac66d7463c8a4d538f442d
-      size: 11233
+      md5: ec91dc9fcfe70a715756f05908d9b9a9
+      size: 11526
     - path: src/week_09_serving/fairness.py
       hash: md5
-      md5: 70b661f14b99ac29c2b0e85316bbe9f9
-      size: 5261
+      md5: 94c58d765e191de502979c7b0a4a7fab
+      size: 5405
     - path: src/week_09_serving/model.py
       hash: md5
-      md5: 11d9da4a55d1c10c194ffc238cc446b8
-      size: 5437
+      md5: bbc68d3b7d589c3a42ed8733c35c120d
+      size: 5583
     - path: src/week_09_serving/pipeline.py
       hash: md5
-      md5: 306280c0c32350a83ec60c1bbb7f1e4a
-      size: 22202
+      md5: 4b1d7db5b85a637afef21ef2ed53d78f
+      size: 22730
     - path: src/week_09_serving/schemas.py
       hash: md5
-      md5: c67217e8dc1213dfa7083962f7ef9349
-      size: 10115
+      md5: 6e9e24029440cb32db71a71e63569aab
+      size: 10330
     - path: src/week_09_serving/validation.py
       hash: md5
-      md5: 263012d8f2410138768b15d33e159f84
-      size: 8977
+      md5: e7bf2003bdbea44014ab4b82375dfb6b
+      size: 9207
     params:
       params.yaml:
         evaluation:
@@ -180,43 +180,43 @@ stages:
     outs:
     - path: metrics/metrics.json
       hash: md5
-      md5: 6a5f49039d799a608192bdbccb853a27
-      size: 105
+      md5: 4fc17194f05e281582226f16cc98fbbf
+      size: 112
     - path: metrics/slices.json
       hash: md5
-      md5: 638d4ebe56c881bedc2491b27dbf9aa2
-      size: 4975
+      md5: f8ede8e10552b6e88b2036d03a132570
+      size: 5196
   gate:
     cmd: uv run python src/main.py gate
     deps:
     - path: metrics/baseline.json
       hash: md5
-      md5: 20a2ddf457de05236fc2eb7371d6ddc7
-      size: 253
+      md5: 60892b96fbead386df6c3fc2bb60cf38
+      size: 266
     - path: metrics/metrics.json
       hash: md5
-      md5: 6a5f49039d799a608192bdbccb853a27
-      size: 105
+      md5: 4fc17194f05e281582226f16cc98fbbf
+      size: 112
     - path: metrics/slices.json
       hash: md5
-      md5: 638d4ebe56c881bedc2491b27dbf9aa2
-      size: 4975
+      md5: f8ede8e10552b6e88b2036d03a132570
+      size: 5196
     - path: models/mlflow_run_id.json
       hash: md5
-      md5: c02d26094a2a920c6155ff23f90f7e24
-      size: 82
+      md5: f240099c03d53878cbec1c45820f8e6c
+      size: 86
     - path: src/week_09_serving/baseline.py
       hash: md5
-      md5: 5b9e353b2ce722025c536aa9ec31b8cf
-      size: 5729
+      md5: 72810e8b86bb4e302adfaeb75abbd1dc
+      size: 5865
     - path: src/week_09_serving/gates.py
       hash: md5
-      md5: c31dc20530abd4f6b5661f25c266061f
-      size: 19157
+      md5: f1e105fecdb505e61213b1fecf363f33
+      size: 19643
     - path: src/week_09_serving/pipeline.py
       hash: md5
-      md5: 306280c0c32350a83ec60c1bbb7f1e4a
-      size: 22202
+      md5: 4b1d7db5b85a637afef21ef2ed53d78f
+      size: 22730
     params:
       params.yaml:
         acceptance:
@@ -245,5 +245,5 @@ stages:
     outs:
     - path: reports/gate.json
       hash: md5
-      md5: da3611123490dfb22051cde40a260498
-      size: 4706
+      md5: 340b07a930f75d9bc2a3802661eec082
+      size: 4919
