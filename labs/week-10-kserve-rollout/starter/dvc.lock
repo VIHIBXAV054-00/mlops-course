@@ -17,8 +17,8 @@ stages:
       size: 10115
     - path: src/week_10_kserve_rollout/validation.py
       hash: md5
-      md5: b90095214662bc1ccf381a59df352f9f
-      size: 8984
+      md5: e47660f4a6a75c8cf2949686d03024d6
+      size: 8878
     outs:
     - path: reports/validation.json
       hash: md5
@@ -81,8 +81,8 @@ stages:
       size: 10115
     - path: src/week_10_kserve_rollout/validation.py
       hash: md5
-      md5: b90095214662bc1ccf381a59df352f9f
-      size: 8984
+      md5: e47660f4a6a75c8cf2949686d03024d6
+      size: 8878
     params:
       params.yaml:
         random_seed: 42
@@ -94,11 +94,11 @@ stages:
     outs:
     - path: models/mlflow_run_id.json
       hash: md5
-      md5: 93e9f1491846fc4106f5fcafb273cf0f
-      size: 82
+      md5: d8d778c02be5e47c081a930102210531
+      size: 46
     - path: models/model.pkl
       hash: md5
-      md5: f6f7d2832bfbd795008dfc54b4be0347
+      md5: e5e8069e19bef4cdf44101c133ae93ee
       size: 2273
   evaluate:
     cmd: uv run python src/main.py evaluate
@@ -109,20 +109,20 @@ stages:
       size: 8041
     - path: models/mlflow_run_id.json
       hash: md5
-      md5: 93e9f1491846fc4106f5fcafb273cf0f
-      size: 82
+      md5: d8d778c02be5e47c081a930102210531
+      size: 46
     - path: models/model.pkl
       hash: md5
-      md5: f6f7d2832bfbd795008dfc54b4be0347
+      md5: e5e8069e19bef4cdf44101c133ae93ee
       size: 2273
     - path: src/week_10_kserve_rollout/evaluation.py
       hash: md5
-      md5: 090f6fad923305b11cdec147e33550a1
-      size: 11299
+      md5: 2f3b2d652906fd48d67bdb9a42dfbf25
+      size: 11114
     - path: src/week_10_kserve_rollout/fairness.py
       hash: md5
-      md5: 5bfb805b5113661b7314e3964de9637e
-      size: 9204
+      md5: 70b661f14b99ac29c2b0e85316bbe9f9
+      size: 5261
     - path: src/week_10_kserve_rollout/model.py
       hash: md5
       md5: 11d9da4a55d1c10c194ffc238cc446b8
@@ -137,8 +137,8 @@ stages:
       size: 10115
     - path: src/week_10_kserve_rollout/validation.py
       hash: md5
-      md5: b90095214662bc1ccf381a59df352f9f
-      size: 8984
+      md5: e47660f4a6a75c8cf2949686d03024d6
+      size: 8878
     params:
       params.yaml:
         evaluation:
@@ -203,16 +203,16 @@ stages:
       size: 4975
     - path: models/mlflow_run_id.json
       hash: md5
-      md5: 93e9f1491846fc4106f5fcafb273cf0f
-      size: 82
+      md5: d8d778c02be5e47c081a930102210531
+      size: 46
     - path: src/week_10_kserve_rollout/baseline.py
       hash: md5
-      md5: 2349c347a397b95907e75217802f9951
-      size: 5766
+      md5: 5b9e353b2ce722025c536aa9ec31b8cf
+      size: 5729
     - path: src/week_10_kserve_rollout/gates.py
       hash: md5
-      md5: a9a9858bc53286031ff456740cda9751
-      size: 21641
+      md5: c31dc20530abd4f6b5661f25c266061f
+      size: 19157
     - path: src/week_10_kserve_rollout/pipeline.py
       hash: md5
       md5: 306280c0c32350a83ec60c1bbb7f1e4a
@@ -237,14 +237,13 @@ stages:
             min_f1: 0.5
             max_f1_gap: 0.1
           fairness:
-            axis: insulin_missing
-            max_selection_rate_gap: 0.1
-            max_tpr_gap: 0.2
-            report_only:
-            - age_band
-            - bmi_band
+            insulin_missing:
+              max_selection_rate_gap: 0.1
+              max_tpr_gap: 0.2
+            age_band:
+              max_tpr_gap: 0.25
     outs:
     - path: reports/gate.json
       hash: md5
-      md5: 7a67838b9ad371a6035a614e9ad7a93b
-      size: 4481
+      md5: da3611123490dfb22051cde40a260498
+      size: 4706

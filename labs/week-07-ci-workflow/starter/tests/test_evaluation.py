@@ -14,8 +14,7 @@ from week_07_ci_workflow.evaluation import (
     slice_report,
 )
 
-# TODO(student) Exercise 3: mark this module's layer with `pytestmark`:
-# unit, data, eval or integration.
+pytestmark = pytest.mark.eval
 
 AGE_SPEC = {
     "column": "age",

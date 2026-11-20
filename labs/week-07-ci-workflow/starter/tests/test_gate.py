@@ -15,8 +15,8 @@ from week_07_ci_workflow import pipeline
 from week_07_ci_workflow.pipeline import ValidationFailed
 from week_07_ci_workflow.validation import read_report
 
-# TODO(student) Exercise 3: mark this module's layer with `pytestmark`:
-# unit, data, eval or integration.
+# Data: this module checks that the ingestion contract blocks invalid measurements.
+pytestmark = pytest.mark.data
 
 
 @pytest.fixture

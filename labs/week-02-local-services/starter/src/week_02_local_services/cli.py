@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import json
 
+import mlflow
+import mlflow.sklearn
+
 from .config import load_settings
 from .data import build_dataset, load_dataframe
 from .model import evaluate_model, train_logistic_regression

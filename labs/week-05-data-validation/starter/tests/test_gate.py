@@ -58,7 +58,6 @@ def write_measurements(sandbox, frame: pd.DataFrame) -> None:
 # ── The validate stage (Exercise 4) ──────────────────────────────────────────
 
 
-@pytest.mark.skip(reason="Exercise 4 — write validate, the check in prepare and the validate stage, then delete this skip marker.")
 def test_validate_passes_a_legal_batch_and_writes_the_report(sandbox) -> None:
     write_measurements(sandbox, legal_batch())
     report = pipeline.validate(sandbox)
@@ -69,7 +68,6 @@ def test_validate_passes_a_legal_batch_and_writes_the_report(sandbox) -> None:
     assert "sentinel_zeros" in report, "Add the sentinel counts to the report."
 
 
-@pytest.mark.skip(reason="Exercise 4 — write validate, the check in prepare and the validate stage, then delete this skip marker.")
 def test_validate_writes_the_report_and_then_stops_a_bad_batch(sandbox) -> None:
     frame = legal_batch()
     frame.loc[0, "outcome"] = 2
@@ -83,14 +81,12 @@ def test_validate_writes_the_report_and_then_stops_a_bad_batch(sandbox) -> None:
     assert "isin([0, 1])" in report["by_check"]
 
 
-@pytest.mark.skip(reason="Exercise 4 — write validate, the check in prepare and the validate stage, then delete this skip marker.")
 def test_prepare_refuses_to_run_without_a_report(sandbox) -> None:
     write_measurements(sandbox, legal_batch())
     with pytest.raises(FileNotFoundError, match="validate"):
         pipeline.prepare(sandbox)
 
 
-@pytest.mark.skip(reason="Exercise 4 — write validate, the check in prepare and the validate stage, then delete this skip marker.")
 def test_a_failed_validation_blocks_prepare_and_writes_nothing(sandbox) -> None:
     frame = legal_batch()
     frame.loc[0, "bmi"] = 280.0
@@ -106,7 +102,6 @@ def test_a_failed_validation_blocks_prepare_and_writes_nothing(sandbox) -> None:
 # ── The model input and the imputer (Exercise 5) ─────────────────────────────
 
 
-@pytest.mark.skip(reason="Exercise 5 — write prepare_model_input and the imputer step, then delete this skip marker.")
 def test_prepare_model_input_turns_zeros_into_missing_values() -> None:
     frame = legal_batch()
     frame.loc[0, "glucose"] = 0
@@ -119,7 +114,6 @@ def test_prepare_model_input_turns_zeros_into_missing_values() -> None:
     assert len(labels) == len(frame)
 
 
-@pytest.mark.skip(reason="Exercise 5 — write prepare_model_input and the imputer step, then delete this skip marker.")
 def test_prepare_model_input_stops_a_value_it_cannot_repair() -> None:
     frame = legal_batch()
     frame.loc[0, "bmi"] = 280.0
@@ -127,7 +121,6 @@ def test_prepare_model_input_stops_a_value_it_cannot_repair() -> None:
         pipeline.prepare_model_input(frame)
 
 
-@pytest.mark.skip(reason="Exercise 5 — write prepare_model_input and the imputer step, then delete this skip marker.")
 def test_the_model_carries_an_imputer(sandbox) -> None:
     write_measurements(sandbox, legal_batch(60))
     pipeline.validate(sandbox)
@@ -138,7 +131,6 @@ def test_the_model_carries_an_imputer(sandbox) -> None:
     assert model.named_steps["imputer"].strategy == sandbox.impute_strategy
 
 
-@pytest.mark.skip(reason="Exercise 5 — write prepare_model_input and the imputer step, then delete this skip marker.")
 def test_the_pipeline_reaches_the_week_5_metrics(sandbox, raw_batches) -> None:
     """On the full dataset, the median imputer gives the course's pinned metrics."""
     build_measurements(raw_batches, sandbox.measurements_path)

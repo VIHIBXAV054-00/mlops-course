@@ -11,8 +11,11 @@ stages:
     cmd: uv run python src/main.py prepare
     deps:
       - data/measurements.csv
+      - src/main.py
+      - src/week_04_dvc_introduction/cli.py
       - src/week_04_dvc_introduction/pipeline.py
       - src/week_04_dvc_introduction/data.py
+      - src/week_04_dvc_introduction/config.py
     params:
       - random_seed
       - prepare.test_size
@@ -20,8 +23,42 @@ stages:
       - data/processed/train.csv
       - data/processed/test.csv
 
-  # TODO(student) — Exercise 5: add the stages `train` and `evaluate`, each run as
-  # `uv run python src/main.py <stage>`. Read the stage functions in pipeline.py to
-  # find which files each one reads and writes, and which params it uses. Keep the
-  # small JSON files in Git (`cache: false`); metrics/metrics.json goes under
-  # `metrics:`.
+  train:
+    cmd: uv run python src/main.py train
+    deps:
+      - data/processed/train.csv
+      - src/main.py
+      - src/week_04_dvc_introduction/cli.py
+      - src/week_04_dvc_introduction/pipeline.py
+      - src/week_04_dvc_introduction/model.py
+      - src/week_04_dvc_introduction/data.py
+      - src/week_04_dvc_introduction/config.py
+      - src/week_04_dvc_introduction/dvc_link.py
+      - src/week_04_dvc_introduction/dvc_meta.py
+      - src/week_04_dvc_introduction/tracking.py
+    params:
+      - random_seed
+      - train.family
+      - train.C
+      - train.max_iter
+    outs:
+      - models/model.pkl
+      - models/mlflow_run_id.json:
+          cache: false
+
+  evaluate:
+    cmd: uv run python src/main.py evaluate
+    deps:
+      - models/model.pkl
+      - models/mlflow_run_id.json
+      - data/processed/test.csv
+      - src/main.py
+      - src/week_04_dvc_introduction/cli.py
+      - src/week_04_dvc_introduction/pipeline.py
+      - src/week_04_dvc_introduction/model.py
+      - src/week_04_dvc_introduction/data.py
+      - src/week_04_dvc_introduction/config.py
+      - src/week_04_dvc_introduction/tracking.py
+    metrics:
+      - metrics/metrics.json:
+          cache: false

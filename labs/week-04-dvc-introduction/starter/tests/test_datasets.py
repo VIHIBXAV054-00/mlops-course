@@ -35,7 +35,6 @@ def test_batch_paths_needs_at_least_one_batch(tmp_path) -> None:
         batch_paths(tmp_path)
 
 
-@pytest.mark.skip(reason="Exercise 2 — implement build_measurements(), then delete this skip marker.")
 def test_build_from_the_first_batch(make_raw, tmp_path) -> None:
     out = tmp_path / "measurements.csv"
     rows = build_measurements(make_raw(1), out)
@@ -43,7 +42,6 @@ def test_build_from_the_first_batch(make_raw, tmp_path) -> None:
     assert out.exists(), "build_measurements did not write the output file."
 
 
-@pytest.mark.skip(reason="Exercise 2 — implement build_measurements(), then delete this skip marker.")
 def test_build_is_byte_deterministic(make_raw, tmp_path) -> None:
     """Two builds from the same batches produce identical bytes."""
     raw = make_raw(3)
@@ -55,7 +53,6 @@ def test_build_is_byte_deterministic(make_raw, tmp_path) -> None:
     assert file_md5(first) == file_md5(second), "Two builds wrote different bytes."
 
 
-@pytest.mark.skip(reason="Exercise 2 — implement build_measurements(), then delete this skip marker.")
 def test_build_uses_lf_line_endings(make_raw, tmp_path) -> None:
     """The file uses LF line endings on every platform."""
     out = tmp_path / "measurements.csv"
@@ -66,7 +63,6 @@ def test_build_uses_lf_line_endings(make_raw, tmp_path) -> None:
     )
 
 
-@pytest.mark.skip(reason="Exercise 4 — add versions 2 and 3, then delete this skip marker.")
 def test_build_from_all_batches(make_raw, incoming, tmp_path) -> None:
     """All three batches give 768 rows, with the batch files' columns."""
     out = tmp_path / "measurements.csv"
@@ -79,7 +75,6 @@ def test_build_from_all_batches(make_raw, incoming, tmp_path) -> None:
     )
 
 
-@pytest.mark.skip(reason="Exercise 4 — add versions 2 and 3, then delete this skip marker.")
 def test_committed_pointer_names_all_three_batches(
     make_raw, measurements_pointer, tmp_path
 ) -> None:

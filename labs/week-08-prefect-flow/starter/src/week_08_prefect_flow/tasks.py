@@ -103,14 +103,16 @@ def _run_dvc(settings: Settings, *args: str) -> str:
 # `retry_jitter_factor` here, then decide which tasks below get them.
 # `tests/test_flows.py` asserts your answer — and asserts that the local,
 # deterministic tasks did NOT get them.
+# (a) Retrying `run_pipeline` repeats deterministic local work and delays the useful failure.
+# (b) `register_model` can create a duplicate version if the response is lost; its pre-check narrows but cannot close that race.
 NETWORK_RETRIES = {
-    "retries": 0,
+    "retries": 3,
     # Doubling, so a service that is restarting gets a chance to finish.
-    # "retry_delay_seconds": exponential_backoff(backoff_factor=2),
+    "retry_delay_seconds": exponential_backoff(backoff_factor=2),
     # Jitter matters more than it looks. Without it, every task that failed at
     # the same moment retries at the same moment, and a service that fell over
     # because of load gets hit by the identical burst that felled it.
-    # "retry_jitter_factor": 0.5,
+    "retry_jitter_factor": 0.5,
 }
 
 
@@ -198,11 +200,12 @@ def read_params_used(settings: Settings, stage: str = "train") -> dict:
             params.yaml:
               train.C: 1.0
     """
-    # TODO(student) Exercise 4: read dvc.lock and return the parameters of
     # `stage` as one dictionary of name -> value, for example
     # {"train.C": 1.0, "train.family": "logreg"}. Read the file, not
     # params.yaml: the record must say what the stage used.
-    return {}
+    lock = yaml.safe_load((settings.project_root / "dvc.lock").read_text())
+    recorded = lock["stages"][stage].get("params") or {}
+    return {name: value for values in recorded.values() for name, value in values.items()}
 
 
 # ── Retries: the network edges, and nowhere else ────────────────────────────

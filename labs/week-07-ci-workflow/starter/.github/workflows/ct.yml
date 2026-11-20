@@ -1,32 +1,60 @@
-# TODO(student) Exercise 5: write the model path. tests/test_workflows.py checks it.
-# - Triggers: workflow_dispatch with a required `reason` input, and a schedule with a
-#   cron. Not push.
-# - defaults.run.working-directory: this lab's folder, as in ci.yml.
-# - Call make targets only, never src/main.py. Stop at the gate: no register, promote or
-#   deploy.
-# - One job and its steps:
-#
-#   retrain
-#     check out the code, set up uv, install all groups, then these named steps:
-#     - "Why this run happened": prints the trigger and the reason
-#     - "Rebuild the dataset"
-#     - "retrain and gate": through the Makefile
-#     - "Publish the gate verdict to the job summary": writes `make gate-summary` to
-#       $GITHUB_STEP_SUMMARY, also when an earlier step failed
-#     - "Annotate a NO-GO": an ::error:: line, only when an earlier step failed
-#     - "Upload the evidence": metrics/, reports/ and models/model.pkl, also when an
-#       earlier step failed
-#
-# Reference: https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows
 name: Week 7 CT
 
 on:
+  schedule:
+    - cron: "17 3 * * 1"
   workflow_dispatch:
+    inputs:
+      reason:
+        description: Why are you starting continuous training?
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: labs/week-07-ci-workflow/starter
 
 jobs:
-  todo:
+  retrain:
     runs-on: ubuntu-latest
     steps:
-      - run: |
-          echo "ct.yml is not written yet (Exercise 5)."
-          exit 1
+      - uses: actions/checkout@v7
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v9.0.0
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: uv sync --locked --all-groups
+      - name: Why this run happened
+        env:
+          RUN_REASON: ${{ inputs.reason }}
+        run: |
+          echo "Trigger: $GITHUB_EVENT_NAME"
+          if [ -n "$RUN_REASON" ]; then
+            echo "Reason: $RUN_REASON"
+          else
+            echo "Reason: scheduled run"
+          fi
+      - name: Rebuild the dataset
+        run: make data-v2
+      - name: retrain and gate
+        run: make ct-local
+      - name: Publish the gate verdict to the job summary
+        if: always()
+        run: make gate-summary >> "$GITHUB_STEP_SUMMARY"
+      - name: Annotate a NO-GO
+        if: failure()
+        run: echo "::error title=CT failed::Retraining or the model gate failed. See the job summary and evidence artifact."
+      - name: Upload the evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: week-7-ct-evidence
+          path: |
+            labs/week-07-ci-workflow/starter/metrics/
+            labs/week-07-ci-workflow/starter/reports/
+            labs/week-07-ci-workflow/starter/models/model.pkl
+          if-no-files-found: ignore

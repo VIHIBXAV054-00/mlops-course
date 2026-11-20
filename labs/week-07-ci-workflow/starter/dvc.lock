@@ -94,11 +94,11 @@ stages:
     outs:
     - path: models/mlflow_run_id.json
       hash: md5
-      md5: d8d778c02be5e47c081a930102210531
-      size: 46
+      md5: a88bf85a9ef5d78fc5dfe13dbfb78bb3
+      size: 82
     - path: models/model.pkl
       hash: md5
-      md5: f6f7d2832bfbd795008dfc54b4be0347
+      md5: e1777109016ab4292f95927ed9827194
       size: 2273
   evaluate:
     cmd: uv run python src/main.py evaluate
@@ -109,11 +109,11 @@ stages:
       size: 8041
     - path: models/mlflow_run_id.json
       hash: md5
-      md5: d8d778c02be5e47c081a930102210531
-      size: 46
+      md5: a88bf85a9ef5d78fc5dfe13dbfb78bb3
+      size: 82
     - path: models/model.pkl
       hash: md5
-      md5: f6f7d2832bfbd795008dfc54b4be0347
+      md5: e1777109016ab4292f95927ed9827194
       size: 2273
     - path: src/week_07_ci_workflow/evaluation.py
       hash: md5
@@ -203,8 +203,8 @@ stages:
       size: 4975
     - path: models/mlflow_run_id.json
       hash: md5
-      md5: d8d778c02be5e47c081a930102210531
-      size: 46
+      md5: a88bf85a9ef5d78fc5dfe13dbfb78bb3
+      size: 82
     - path: src/week_07_ci_workflow/baseline.py
       hash: md5
       md5: ab462611567c55570212eadeb34e2403

@@ -70,27 +70,33 @@ def training_flow(
     Measured, on a real scheduled run, while building this lab. A flow
     signature is a public API. Keep it to strings, numbers and booleans.
     """
-    # TODO(student) Exercise 1 — wire the tasks together.
-    #
-    #   settings = load_settings()
-    #   build_dataset(settings)
-    #   verdict = run_pipeline(settings)
-    #   notify(settings, verdict)
-    #
-    # `notify` has to run on the failure path too. Wrap the body in
-    # try/except, notify with the error, and re-raise. A flow that only
-    # reports its successes is the Toy Story 2 backup with extra steps.
-    #
-    # TODO(student) Exercise 4 — record the parameters, and refuse
-    # uncommitted ones when asked.
-    #
-    # Before any work, ask `params_committed` whether params.yaml matches the
-    # last commit. When `require_committed_params` is set and it does not,
-    # raise a RuntimeError that says how to fix it. After the pipeline, read
-    # the values train used with `read_params_used`, and pass them and the
-    # commit state to `notify` (see its signature in tasks.py).
-    print("training_flow is not implemented yet — see the TODO in flows.py (Exercise 1).")
-    return {}
+    settings = load_settings()
+    logger = get_run_logger()
+    verdict: dict = {}
+    try:
+        committed = params_committed(settings)
+        if require_committed_params and not committed:
+            raise RuntimeError(
+                "params.yaml has uncommitted changes. Commit them, or undo them with "
+                "`git restore params.yaml`, before this run trains a model."
+            )
+        build_dataset(settings)
+        verdict = run_pipeline(settings)
+        params = read_params_used(settings)
+
+        if push:
+            push_data(settings)
+        if register_model_version and verdict.get("verdict") == "GO":
+            version = register_model(settings)
+            logger.info("registered version %s", version)
+        elif register_model_version:
+            logger.warning("verdict is %s — not registering", verdict.get("verdict"))
+
+        notify(settings, verdict, params=params, committed=committed)
+        return verdict
+    except Exception as error:
+        notify(settings, verdict, error=str(error)[:300])
+        raise
 
 
 @flow(name="diabetes-training-with-pull", log_prints=True)
@@ -111,13 +117,5 @@ def scheduled_flow() -> dict:
          condition for a release, not a sufficient one. Week 10 decides what
          else is required.
     """
-    # TODO(student) Exercise 5 — what a cron actually runs.
-    #
-    # `pull_data` first: a scheduled run cannot assume the workspace is up to
-    # date, because nobody was here to make it so. Then the training flow,
-    # with the flow parameter that refuses an uncommitted params.yaml.
-    #
-    # Do NOT register or promote here, and be ready to say why in a sentence
-    # that is not about credentials.
-    print("scheduled_flow is not implemented yet — see the TODO in flows.py (Exercise 5).")
-    return {}
+    pull_data(load_settings())
+    return training_flow(require_committed_params=True)

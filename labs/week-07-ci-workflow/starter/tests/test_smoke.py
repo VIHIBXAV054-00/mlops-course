@@ -9,8 +9,8 @@ from week_07_ci_workflow.model import (
     train_logistic_regression,
 )
 
-# TODO(student) Exercise 3: mark this module's layer with `pytestmark`:
-# unit, data, eval or integration.
+# Data: these pinned scores verify the model against the canonical dataset.
+pytestmark = pytest.mark.data
 
 
 def test_dataframe_loads(settings) -> None:

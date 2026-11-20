@@ -64,12 +64,8 @@ def baseline_from_registry(settings: Settings) -> dict:
     version = client.get_model_version_by_alias(name, settings.champion_alias)
 
     mlflow.set_tracking_uri(settings.mlflow_tracking_uri)
-    # TODO(student) Exercise 6: load the champion from the registry by its alias,
-    # with `mlflow.sklearn.load_model` and a `models:/<name>@<alias>` URI. Then
-    # score it on today's test split (`test_path`) with `score_on_test_set` above,
-    # and put the result in `metrics`. An empty `metrics` reads as "no baseline".
-    # Reference: https://mlflow.org/docs/latest/ml/model-registry/workflow/
-    metrics: dict = {}
+    model = mlflow.sklearn.load_model(f"models:/{name}@{settings.champion_alias}")
+    metrics = score_on_test_set(model, test_path)
 
     return {
         "source": f"mlflow://{name}@{settings.champion_alias}",
