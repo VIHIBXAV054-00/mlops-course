@@ -1,6 +1,6 @@
 # What is published
 
-Generated 2026-11-19. Course materials are released week by week —
+Generated 2026-11-25. Course materials are released week by week —
 a week appears here on the morning of its lecture.
 
 Run `git pull upstream main` in your fork to fetch the latest.
@@ -19,7 +19,7 @@ Run `git pull upstream main` in your fork to fetch the latest.
 | 9 | serving | published |
 | 10 | rollout strategies | published |
 | 11 | observability | published |
-| 12 | drift monitoring | arrives 2026-11-23 |
+| 12 | drift monitoring | published |
 | 13 | governance | arrives 2026-11-30 |
 | 14 | summary llmops | arrives 2026-12-07 |
 

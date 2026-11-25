@@ -1,0 +1,19 @@
+# A Service is a stable name and address in front of a changing set of pods.
+#
+# `selector` is the whole mechanism: it matches pod LABELS, not Deployment
+# names. Break it by one character and everything still "works" — the Service
+# exists, `kubectl get svc` looks fine, and `port-forward` connects and hangs,
+# because there are no endpoints behind it. `kubectl get endpoints` is the
+# command that tells you the truth.
+apiVersion: v1
+kind: Service
+metadata:
+  name: diabetes-api
+spec:
+  type: ClusterIP
+  selector:
+    app: diabetes-api
+  ports:
+    - name: http
+      port: 80
+      targetPort: http

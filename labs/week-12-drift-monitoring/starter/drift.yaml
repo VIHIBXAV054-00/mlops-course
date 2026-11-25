@@ -1,0 +1,107 @@
+# The drift policy: what the monitor compares, how, and what each verdict means.
+# Exercises 3 and 4 replace the values marked below. `load_policy` in
+# src/week_12_drift_monitoring/drift_policy.py checks this file on every run.
+service: diabetes-api
+
+# The window the current traffic is compared with, pinned to the dataset version
+# the champion was trained on (the md5 in data/measurements.csv.dvc).
+reference:
+  path: data/processed/train.csv
+  dataset_md5: a8fd7b4f0d6d1bc4e378a8f76c5fff0c
+  description: >-
+    the 75% training split of measurements.csv v2
+
+current:
+  # Exercise 3: below this many rows the verdict is INSUFFICIENT. 30 is just a
+  # textbook rule of thumb; replace it with a value your calibration supports.
+  min_samples: 30
+  # How many recent rows from the prediction log to compare.
+  window_rows: 2000
+
+# One entry per model feature. A gated feature can trigger a DRIFT verdict;
+# the others are reported for context only.
+# Exercise 3: 0.20 is a placeholder; replace the gated threshold with a measured
+# value from your calibration, and decide which features to gate.
+features:
+  - column: glucose
+    method: psi
+    threshold: 0.20
+    gated: true
+  - column: insulin
+    method: psi
+    threshold: 0.20
+    gated: false
+  - column: pregnancies
+    method: psi
+    threshold: 0.20
+    gated: false
+  - column: blood_pressure
+    method: psi
+    threshold: 0.20
+    gated: false
+  - column: skin_thickness
+    method: psi
+    threshold: 0.20
+    gated: false
+  - column: bmi
+    method: psi
+    threshold: 0.20
+    gated: false
+  - column: diabetes_pedigree
+    method: psi
+    threshold: 0.20
+    gated: false
+  - column: age
+    method: psi
+    threshold: 0.20
+    gated: false
+
+# Whether performance fell on labelled windows (`make drift-impact`).
+# Exercise 4: f1 with a 0.01 noise band matches Week 6's release gate.
+# Replace both with values supported by your measurements.
+degradation:
+  primary_metric: f1
+  min_drop: 0.01
+  also_report: [f1, accuracy, precision, recall, selection_rate]
+
+# The share of predicted positives, which needs no labels and no prediction log.
+# PredictionMixShift in prometheus/rules/drift.yml uses these values.
+proxy:
+  reference_positive_rate: 0.2674
+  max_absolute_deviation: 0.10
+  window: 6h
+
+# The share of drifted features is reported next to the verdict, never used as it.
+summary:
+  report_share: true
+  drift_share_threshold: 0.5
+
+# What each verdict means. Drift alone opens a ticket and never pages: at 03:00
+# nobody can change a population. `load_policy` refuses a policy that pages on drift alone.
+actions:
+  insufficient:
+    severity: none
+    action: >-
+      nothing. Fewer than min_samples rows: we could not look. Do not read this as health.
+  no_drift:
+    severity: none
+    action: nothing. The distributions agree, within the threshold we calibrated.
+  drift:
+    severity: ticket
+    action: >-
+      open a ticket. In working hours, check which feature moved, since when, and
+      whether anything upstream changed. All features at once usually means a broken
+      pipeline. Do not retrain automatically.
+  drift_with_degradation:
+    severity: page
+    action: >-
+      page. The inputs moved and the model got worse on labelled data. Roll back to
+      the previous model version (Week 10) first, because that needs no labels; then
+      decide about retraining.
+
+# How old a drift report may be before DriftReportStale fires.
+# The clock alerts in prometheus/rules/drift.yml use these values.
+staleness:
+  expected_every: 24h
+  max_age: 26h
+  severity: ticket

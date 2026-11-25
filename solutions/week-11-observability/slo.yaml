@@ -1,0 +1,142 @@
+# Service Level Objectives — a written promise about the prediction service.
+#
+# WHY THIS IS ITS OWN FILE, next to params.yaml rather than inside it.
+#
+# params.yaml holds pipeline HYPERPARAMETERS, and DVC hashes it: changing a
+# value there invalidates a stage and retrains a model. An SLO is not a
+# hyperparameter. Tightening a latency target must not invalidate the model, and
+# retraining the model must not silently move the promise. Two documents,
+# because they change for two different reasons and are argued about by two
+# different sets of people.
+#
+# It is a DECLARATION, in Git, reviewable in a pull request — the same reason
+# dvc.yaml, the acceptance block in params.yaml and the k8s manifests are files
+# rather than commands. "How fast is fast enough?" is a decision, and a decision
+# that lives only in someone's head cannot be disagreed with.
+#
+# EVERYTHING DOWNSTREAM IS DERIVED FROM THIS FILE:
+#   * src/week_11_observability/slo.py       — budgets, burn rates, the alert table
+#   * prometheus/rules/slo.yml               — the recording and alerting rules
+#   * grafana/dashboards/diabetes-service.json — the budget panel's thresholds
+# and tests/test_prometheus_rules.py asserts the rules cannot drift away from
+# what is written here. Writing a number twice is fine as long as something
+# fails when the two copies disagree.
+
+# The rolling window every objective below is measured over. 30 days is the SRE
+# Workbook's default and it is not arbitrary: it is long enough that one bad
+# afternoon does not blow the budget, and short enough that a team remembers
+# what happened at the start of it.
+window_days: 30
+
+# The service this promise is about. Used in the alert annotations so a firing
+# alert says what it is about without anyone reading the rule.
+service: diabetes-api
+
+objectives:
+
+  # ── SLI 1: availability ───────────────────────────────────────────────────
+  #
+  # The indicator is a RATIO OF GOOD EVENTS TO VALID EVENTS, which is the shape
+  # every SLI in the SRE Workbook takes, and it is worth saying why rather than
+  # measuring "uptime": uptime is a property of a process, and nobody is a user
+  # of a process. A user makes a request and either gets an answer or does not.
+  #
+  # NOTE WHAT COUNTS AS GOOD. 5xx is ours; 4xx is the caller's. A 422 from
+  # Week 5's contract is the service working exactly as designed — refusing a
+  # physiologically impossible patient — and counting it against ourselves would
+  # mean a caller could burn our error budget by sending rubbish. That is a real
+  # decision with a real cost: a spike of 422s is invisible to THIS objective,
+  # which is precisely why model_contract_violations_total gets its own alert.
+  availability:
+    description: >-
+      The fraction of prediction requests that do not fail on our side.
+      Good = any response that is not 5xx. Valid = every request to /predict
+      or the V1 predict route.
+    target: 0.99
+    # 0.99 over 30 days is 7 hours 12 minutes of error budget. That is a
+    # deliberately MODEST target for a teaching lab, and the reason is in the
+    # lecture: every extra nine costs roughly ten times more to hold, and a
+    # target you cannot hold teaches your team to ignore the alert.
+
+  # ── SLI 2: latency ────────────────────────────────────────────────────────
+  #
+  # ALSO A RATIO, not a percentile. "p95 < 250ms" and "95% of requests under
+  # 250ms" sound identical and are not: the first is a statistic you compute
+  # from a window and then have to threshold, the second is a counting question
+  # a histogram answers directly and exactly. Only the second one composes —
+  # you can add up good events across shards, and you cannot average two p95s.
+  #
+  # threshold_seconds MUST BE ONE OF THE HISTOGRAM'S BUCKET BOUNDARIES.
+  # histogram_quantile interpolates linearly inside a bucket, so a threshold
+  # that falls between two boundaries is a number you have estimated rather than
+  # measured. 0.25 is a boundary in metrics.py's LATENCY_BUCKETS, and
+  # tests/test_metrics.py fails if anyone changes one without the other.
+  latency:
+    description: >-
+      The fraction of prediction requests served in under the threshold.
+      Good = requests in the <= threshold_seconds histogram buckets.
+    target: 0.95
+    threshold_seconds: 0.25
+
+# ── Burn-rate alerting ──────────────────────────────────────────────────────
+#
+# CITED, NOT INVENTED. Google SRE Workbook, "Alerting on SLOs", Table 5-8:
+# https://sre.google/workbook/alerting-on-slos/
+#
+# A burn rate of 1 means you are spending the budget exactly as fast as the
+# window allows, and it runs out precisely at the end of the window. 14.4x means
+# a 30-day budget is gone in about 50 hours.
+#
+# `budget_consumed` is what the row detects, and it follows from the other two:
+#
+#     budget_consumed = burn_rate * long_window / window
+#     14.4 * 1h / 720h = 2%
+#
+# THE SHORT WINDOW IS THE POINT OF THE WHOLE TABLE. Both conditions must hold at
+# once. Without it, an alert that fires on a one-hour average stays firing for a
+# further hour after the incident is over, because the average still contains
+# it. The short window asks "and is it STILL happening?" — which is the
+# difference between an alert you trust and an alert you silence.
+#
+# Severity `page` means wake a human; `ticket` means it can wait for a working
+# day. This lab has nowhere to send either (no Alertmanager — that is Week 13),
+# so the severity is a LABEL on the rule and the routing is a conversation. That
+# is the honest order to learn it in: decide what deserves a human first, wire
+# the pager second.
+burn_rate_alerts:
+  - name: fast
+    burn_rate: 14.4
+    long_window: 1h
+    short_window: 5m
+    budget_consumed: 0.02
+    severity: page
+  - name: medium
+    burn_rate: 6
+    long_window: 6h
+    short_window: 30m
+    budget_consumed: 0.05
+    severity: page
+  - name: slow
+    burn_rate: 1
+    long_window: 3d
+    short_window: 6h
+    budget_consumed: 0.10
+    severity: ticket
+
+# ── What we deliberately did NOT promise ────────────────────────────────────
+#
+#   * Correctness. Nothing here says the predictions are any good. A service can
+#     hold 99.99% availability and 100% of its latency budget while returning
+#     the same wrong answer to every patient. Week 6's gate is the check on
+#     that, and it runs before deployment; Week 12 is the check that runs after.
+#   * Throughput. We promise nothing about capacity. A queue that is 3 seconds
+#     deep violates the LATENCY objective, so saturation shows up here — but
+#     indirectly, and "how many requests per second can you take?" is a
+#     different question with a different answer.
+#   * Freshness of the model. "Serving a six-month-old model quickly" satisfies
+#     every objective on this page.
+#   * Anything about the people the model is ABOUT. Our user is the caller of
+#     the API. The patient is not; the patient never sees this endpoint and
+#     cannot file a ticket about it. Do not let an SLO dashboard become an
+#     answer to the question "is this system doing right by the people in it?",
+#     because it is not measuring that and was never designed to.

@@ -1,0 +1,87 @@
+# Drift alerting rules. All of them are tickets: none of them pages.
+# Reference: https://prometheus.io/docs/prometheus/latest/configuration/alerting_rules/
+# The thresholds come from drift.yaml: 93600 s is staleness.max_age (26h), and
+# 0.10 is proxy.max_absolute_deviation. tests/test_drift_policy.py checks both.
+
+groups:
+  - name: drift
+    interval: 15s
+    rules:
+
+      # The drift monitor stopped running. With no report the collector publishes
+      # a timestamp of 0, so a monitor that never ran also fires this alert.
+      - alert: DriftReportStale
+        expr: time() - model_drift_report_timestamp_seconds > 93600
+        for: 10m
+        labels:
+          severity: ticket
+          service: diabetes-api
+          signal: drift
+        annotations:
+          summary: "The drift monitor has not produced a report in over 26 hours"
+          description: >-
+            drift.yaml expects a report every 24h and allows 26h. A stale report
+            means no measurement, not no drift. A timestamp of 0 means no report
+            was ever produced. Run `make drift-report`, then find out why the job
+            stopped.
+
+      # The report is fresh, but the newest row in its window is old: the service
+      # is up and has not been asked to score anybody.
+      - alert: DriftWindowStale
+        expr: model_drift_window_age_seconds > 93600
+        for: 10m
+        labels:
+          severity: ticket
+          service: diabetes-api
+          signal: drift
+        annotations:
+          summary: "The newest row in the drift window is over 26 hours old"
+          description: >-
+            The drift report is fresh, but it describes traffic that stopped. Check
+            `rate(http_requests_total[1h])`, and check whether the prediction log
+            reached PREDICTION_LOG_MAX_ROWS and stopped writing.
+
+      # Counts only the gated features in drift.yaml. `for: 1h` waits for several
+      # windows, because one window of a noisy statistic is not enough evidence.
+      - alert: FeatureDriftDetected
+        expr: model_drift_features_drifted_gated > 0
+        for: 1h
+        labels:
+          severity: ticket
+          service: diabetes-api
+          signal: drift
+        annotations:
+          summary: "A gated feature has drifted against the reference window"
+          description: >-
+            {{ $value }} gated feature(s) crossed the threshold in drift.yaml. Check
+            `model_drift_score` by feature to see which moved and by how much. If
+            all features moved, suspect a broken pipeline. Check
+            `model_contract_violations_total` for a caller who changed. Do not
+            retrain on this signal alone.
+
+      # The proxy: the share of scores at or above 0.5, from the score histogram.
+      # It needs no prediction log and no labels. le="0.5" must be a bucket
+      # boundary in metrics.SCORE_BUCKETS, or the rule selects nothing.
+      - alert: PredictionMixShift
+        expr: >-
+          abs(
+            (
+              1 - (
+                sum(rate(model_prediction_score_bucket{le="0.5",job="diabetes-api"}[1h]))
+                /
+                sum(rate(model_prediction_score_count{job="diabetes-api"}[1h]))
+              )
+            )
+            - model_reference_positive_rate
+          ) > 0.10
+        for: 6h
+        labels:
+          severity: ticket
+          service: diabetes-api
+          signal: proxy
+        annotations:
+          summary: "The share of positive predictions has moved away from the reference"
+          description: >-
+            The share of positive predictions differs from the reference window by
+            more than 0.10. This is a proxy: a change in who calls the service also
+            moves it. Check the traffic mix first, then `model_drift_score`.

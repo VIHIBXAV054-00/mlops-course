@@ -1,0 +1,21 @@
+{
+  "schema": "drift-report/1",
+  "service": "diabetes-api",
+  "computed_at": 0.0,
+  "verdict": "NO_DRIFT",
+  "severity": "none",
+  "action": "nothing. The distributions agree, within the threshold we calibrated.",
+  "reasons": ["no gated feature crossed its threshold (glucose)"],
+  "drifted_count": 0,
+  "drifted_gated_count": 0,
+  "features_total": 1,
+  "n_current": 720,
+  "n_reference": 288,
+  "reference": {"path": "data/processed/train.csv", "dataset_md5": "a8fd7b4f0d6d1bc4e378a8f76c5fff0c", "rows": 288},
+  "current": {"rows": 720, "window_rows": 2000, "age_seconds": 0.0},
+  "proxy": {"reference_positive_rate": 0.2674, "max_absolute_deviation": 0.1, "window": "6h"},
+  "features": [
+    {"column": "glucose", "method": "psi", "method_used": "psi", "threshold": 0.22,
+     "value": 0.0, "drifted": false, "gated": true, "smaller_is_drift": false}
+  ]
+}

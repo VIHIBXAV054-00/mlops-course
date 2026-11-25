@@ -1,0 +1,371 @@
+# Unit tests for the alerting rules. Run with `make alerts-test`.
+# Reference: https://prometheus.io/docs/prometheus/latest/configuration/unit_testing_rules/
+# promtool runs the real rules over synthetic series. It needs no Prometheus server.
+#
+# Two notes on the syntax:
+#   * `rule_files` are resolved relative to this file.
+#   * `0+1x60` is a counter that grows by 1 per interval. `1x60` is the value 1,
+#     sixty times: a flat counter whose rate is 0.
+
+rule_files:
+  - ../rules/service.yml
+  - ../rules/slo.yml
+  - ../rules/drift.yml
+
+# Must match the `interval:` of the rule groups (15s). Otherwise every `for:` is
+# rounded up to the evaluation grid and the eval_time assertions are off.
+evaluation_interval: 15s
+
+tests:
+
+  # ── ServiceDown ───────────────────────────────────────────────────────────
+
+  - name: "a target that stops answering pages after one minute, not before"
+    interval: 15s
+    input_series:
+      # 0 means "the scrape ran and failed". Written out so each sample time is clear:
+      #   t = 0, 15, 30, 45 -> up 1
+      #   t = 60 onwards    -> up 0
+      - series: 'up{job="diabetes-api", instance="api:8000"}'
+        values: "1 1 1 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0"
+    alert_rule_test:
+      # At 1m the alert is pending, so nothing has fired yet.
+      - eval_time: 1m
+        alertname: ServiceDown
+        exp_alerts: []
+      # At 2m the target has been down for the full `for: 1m`.
+      - eval_time: 2m
+        alertname: ServiceDown
+        exp_alerts:
+          - exp_labels:
+              severity: page
+              service: diabetes-api
+              job: diabetes-api
+              instance: api:8000
+            exp_annotations:
+              summary: "diabetes-api is not answering scrapes"
+              description: >-
+                Prometheus has been unable to scrape api:8000 for over a
+                minute. The SLO alerts cannot see this, because a service with no
+                requests has no errors.
+
+  - name: "a healthy target never fires ServiceDown"
+    interval: 15s
+    input_series:
+      - series: 'up{job="diabetes-api", instance="api:8000"}'
+        values: "1x40"
+    alert_rule_test:
+      - eval_time: 9m
+        alertname: ServiceDown
+        exp_alerts: []
+
+  # ── The availability burn-rate alerts ─────────────────────────────────────
+
+  - name: "a hard outage burns the availability budget fast and pages"
+    interval: 1m
+    input_series:
+      # 10 requests per minute, all of them 500. The 1h window is full by 70m.
+      - series: 'http_requests_total{job="diabetes-api", route="/predict", status="500"}'
+        values: "0+10x130"
+    alert_rule_test:
+      - eval_time: 70m
+        alertname: AvailabilityBudgetBurnFast
+        exp_alerts:
+          - exp_labels:
+              severity: page
+              service: diabetes-api
+              objective: availability
+              burn_rate: "14.4"
+            exp_annotations:
+              summary: "Burning the availability budget 14.4x too fast"
+              description: >-
+                Over 14.4% of prediction requests have failed for the last hour and are
+                still failing now. That is 2% of the 30-day error budget spent in one
+                hour; at this rate the whole budget is gone in about two days. Page.
+
+  - name: "a healthy service at full traffic fires nothing at all"
+    interval: 1m
+    input_series:
+      - series: 'http_requests_total{job="diabetes-api", route="/predict", status="200"}'
+        values: "0+60x130"
+    alert_rule_test:
+      - eval_time: 70m
+        alertname: AvailabilityBudgetBurnFast
+        exp_alerts: []
+      - eval_time: 70m
+        alertname: AvailabilityBudgetBurnMedium
+        exp_alerts: []
+      - eval_time: 70m
+        alertname: AvailabilityBudgetBurnSlow
+        exp_alerts: []
+      - eval_time: 70m
+        alertname: LatencyBudgetBurnFast
+        exp_alerts: []
+
+  # A 0.5% error rate spends the budget but stays inside it, so nothing fires.
+  - name: "a small persistent error rate does not page (this is the whole idea)"
+    interval: 1m
+    input_series:
+      # 199 good + 1 bad per minute = 0.5% errors.
+      - series: 'http_requests_total{job="diabetes-api", route="/predict", status="200"}'
+        values: "0+199x200"
+      - series: 'http_requests_total{job="diabetes-api", route="/predict", status="503"}'
+        values: "0+1x200"
+    alert_rule_test:
+      - eval_time: 100m
+        alertname: AvailabilityBudgetBurnFast
+        exp_alerts: []
+      - eval_time: 100m
+        alertname: AvailabilityBudgetBurnMedium
+        exp_alerts: []
+      - eval_time: 100m
+        alertname: AvailabilityBudgetBurnSlow
+        exp_alerts: []
+
+  - name: "a 422 is the contract working and must not touch the availability SLO"
+    interval: 1m
+    input_series:
+      # Every request rejected by the contract.
+      - series: 'http_requests_total{job="diabetes-api", route="/predict", status="422"}'
+        values: "0+30x130"
+    alert_rule_test:
+      - eval_time: 70m
+        alertname: AvailabilityBudgetBurnFast
+        exp_alerts: []
+    promql_expr_test:
+      # No 5xx and some traffic, so the error ratio is exactly 0.
+      - expr: slo:availability:error_ratio_1h
+        eval_time: 70m
+        exp_samples:
+          - labels: "slo:availability:error_ratio_1h"
+            value: 0
+
+  # ── ContractViolationSpike ────────────────────────────────────────────────
+
+  - name: "a caller sending rejected data raises a ticket"
+    interval: 1m
+    input_series:
+      # 60 rejections per minute = 1/s, five times the 0.2/s threshold.
+      - series: 'model_contract_violations_total{job="diabetes-api", check="greater_than(0)"}'
+        values: "0+60x40"
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: ContractViolationSpike
+        exp_alerts:
+          - exp_labels:
+              severity: ticket
+              service: diabetes-api
+            exp_annotations:
+              summary: "Callers are sending data the model-input contract rejects"
+              description: >-
+                More than 0.2 fields per second have failed the input contract for five
+                minutes. The service is working, so this does not use the error budget.
+                A caller has probably changed: check model_contract_violations_total by
+                `check`.
+
+  - name: "one person testing a bad payload by hand does not raise anything"
+    interval: 1m
+    input_series:
+      # Three rejections in total, then nothing.
+      - series: 'model_contract_violations_total{job="diabetes-api", check="greater_than(0)"}'
+        values: "0 1 2 3 3x40"
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: ContractViolationSpike
+        exp_alerts: []
+
+  # ── The latency objective ─────────────────────────────────────────────────
+
+  - name: "a service where nearly everything is slow burns the latency budget"
+    interval: 1m
+    input_series:
+      # 100 requests/min, 10 of them in the <=0.25s bucket: error ratio 0.9 > 0.72.
+      # A histogram's buckets are not derived from its count, so supply both.
+      - series: 'http_request_duration_seconds_bucket{job="diabetes-api", route="/predict", le="0.25"}'
+        values: "0+10x130"
+      - series: 'http_request_duration_seconds_count{job="diabetes-api", route="/predict"}'
+        values: "0+100x130"
+    alert_rule_test:
+      - eval_time: 70m
+        alertname: LatencyBudgetBurnFast
+        exp_alerts:
+          - exp_labels:
+              severity: page
+              service: diabetes-api
+              objective: latency
+              burn_rate: "14.4"
+            exp_annotations:
+              summary: "Burning the latency budget 14.4x too fast"
+              description: >-
+                More than 72% of prediction requests have been slower than 250ms for an
+                hour and still are. The 95%-under-250ms objective allows 5%; this is
+                14.4x that rate, so 2% of the 30-day budget went in the last hour.
+
+  - name: "a service that is 90% fast is inside its 95% target's budget, not paging"
+    interval: 1m
+    input_series:
+      # A 10% miss rate against a 5% budget is a 2x burn. No rule here catches it.
+      - series: 'http_request_duration_seconds_bucket{job="diabetes-api", route="/predict", le="0.25"}'
+        values: "0+90x130"
+      - series: 'http_request_duration_seconds_count{job="diabetes-api", route="/predict"}'
+        values: "0+100x130"
+    alert_rule_test:
+      - eval_time: 70m
+        alertname: LatencyBudgetBurnFast
+        exp_alerts: []
+
+  # ── DriftReportStale ──────────────────────────────────────────────────────
+  # In promtool, time() starts at 0. A timestamp of -93600 is therefore 26 hours
+  # old at t=0, and a timestamp of 0 is a report produced right now.
+
+  - name: "a report that is exactly at the budget does not fire; past it, it does"
+    interval: 15s
+    input_series:
+      # 93500 s old at t=0, just inside the 93600 s budget, and ageing.
+      - series: 'model_drift_report_timestamp_seconds'
+        values: '-93500x80'
+    alert_rule_test:
+      - eval_time: 0m
+        alertname: DriftReportStale
+        exp_alerts: []
+      # Past the budget from t=100s, but still pending inside `for: 10m`.
+      - eval_time: 3m
+        alertname: DriftReportStale
+        exp_alerts: []
+
+  - name: "a monitor that has never run fires — timestamp 0, not a missing series"
+    interval: 15s
+    input_series:
+      # The last report was 100000 s ago.
+      - series: 'model_drift_report_timestamp_seconds'
+        values: '-100000x80'
+    alert_rule_test:
+      - eval_time: 11m
+        alertname: DriftReportStale
+        exp_alerts:
+          - exp_labels:
+              severity: ticket
+              service: diabetes-api
+              signal: drift
+              alertname: DriftReportStale
+            exp_annotations:
+              summary: "The drift monitor has not produced a report in over 26 hours"
+              description: >-
+                drift.yaml expects a report every 24h and allows 26h. A stale report means no measurement, not no drift. A timestamp of 0 means no report was ever produced. Run `make drift-report`, then find out why the job stopped.
+
+  # ── DriftWindowStale ──────────────────────────────────────────────────────
+
+  - name: "a fresh report over a window whose newest row is three days old"
+    interval: 15s
+    input_series:
+      - series: 'model_drift_report_timestamp_seconds'
+        values: '0x80'
+      - series: 'model_drift_window_age_seconds'
+        values: '259200x80'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: DriftWindowStale
+        exp_alerts: []           # still inside `for: 10m`
+      - eval_time: 11m
+        alertname: DriftWindowStale
+        exp_alerts:
+          - exp_labels:
+              severity: ticket
+              service: diabetes-api
+              signal: drift
+              alertname: DriftWindowStale
+            exp_annotations:
+              summary: "The newest row in the drift window is over 26 hours old"
+              description: >-
+                The drift report is fresh, but it describes traffic that stopped. Check `rate(http_requests_total[1h])`, and check whether the prediction log reached PREDICTION_LOG_MAX_ROWS and stopped writing.
+      # The report is fresh, so the stale-report alert must not fire.
+      - eval_time: 11m
+        alertname: DriftReportStale
+        exp_alerts: []
+
+  # ── FeatureDriftDetected ──────────────────────────────────────────────────
+
+  - name: "a gated feature drifting for an hour opens a ticket; for ten minutes it does not"
+    interval: 15s
+    input_series:
+      # Clean for ten minutes (40 samples), then one gated feature over the threshold.
+      - series: 'model_drift_features_drifted_gated'
+        values: '0x40 1x300'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: FeatureDriftDetected
+        exp_alerts: []
+      # Drifting since t=10m, so at t=30m it is still pending inside `for: 1h`.
+      - eval_time: 30m
+        alertname: FeatureDriftDetected
+        exp_alerts: []
+      - eval_time: 71m
+        alertname: FeatureDriftDetected
+        exp_alerts:
+          - exp_labels:
+              severity: ticket
+              service: diabetes-api
+              signal: drift
+              alertname: FeatureDriftDetected
+            exp_annotations:
+              summary: "A gated feature has drifted against the reference window"
+              description: >-
+                1 gated feature(s) crossed the threshold in drift.yaml. Check `model_drift_score` by feature to see which moved and by how much. If all features moved, suspect a broken pipeline. Check `model_contract_violations_total` for a caller who changed. Do not retrain on this signal alone.
+
+  - name: "report-only features drifting never fire the gated alert"
+    interval: 15s
+    input_series:
+      # Seven report-only features over their thresholds, no gated feature.
+      - series: 'model_drift_features_drifted'
+        values: '7x300'
+      - series: 'model_drift_features_drifted_gated'
+        values: '0x300'
+    alert_rule_test:
+      - eval_time: 90m
+        alertname: FeatureDriftDetected
+        exp_alerts: []
+
+  # ── PredictionMixShift ────────────────────────────────────────────────────
+
+  - name: "the positive-prediction share drifting past 0.10 from the reference"
+    interval: 15s
+    input_series:
+      # 20% of scores below 0.5: a positive share of 0.80 against a reference of 0.2674.
+      - series: 'model_prediction_score_bucket{le="0.5", job="diabetes-api"}'
+        values: '0+2x2000'
+      - series: 'model_prediction_score_count{job="diabetes-api"}'
+        values: '0+10x2000'
+      - series: 'model_reference_positive_rate'
+        values: '0.2674x2000'
+    alert_rule_test:
+      # Pending inside `for: 6h`.
+      - eval_time: 1h
+        alertname: PredictionMixShift
+        exp_alerts: []
+      - eval_time: 6h30m
+        alertname: PredictionMixShift
+        exp_alerts:
+          - exp_labels:
+              severity: ticket
+              service: diabetes-api
+              signal: proxy
+              alertname: PredictionMixShift
+            exp_annotations:
+              summary: "The share of positive predictions has moved away from the reference"
+              description: >-
+                The share of positive predictions differs from the reference window by more than 0.10. This is a proxy: a change in who calls the service also moves it. Check the traffic mix first, then `model_drift_score`.
+
+  - name: "a positive share matching the reference stays quiet all day"
+    interval: 15s
+    input_series:
+      # 73.26% of scores below 0.5: a positive share of 0.2674, the reference.
+      - series: 'model_prediction_score_bucket{le="0.5", job="diabetes-api"}'
+        values: '0+7326x2000'
+      - series: 'model_prediction_score_count{job="diabetes-api"}'
+        values: '0+10000x2000'
+      - series: 'model_reference_positive_rate'
+        values: '0.2674x2000'
+    alert_rule_test:
+      - eval_time: 7h
+        alertname: PredictionMixShift
+        exp_alerts: []

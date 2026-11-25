@@ -1,0 +1,28 @@
+# Dashboard provider: "load every dashboard JSON in this directory".
+#
+# Reference: https://grafana.com/docs/grafana/latest/administration/provisioning/
+#
+# The dashboards themselves are in ../../dashboards/, mounted read-only. Grafana
+# rescans on the interval below, so editing the JSON in the repo updates the
+# running dashboard within 10 seconds, without a restart (Exercise 3).
+
+apiVersion: 1
+
+providers:
+  - name: course
+    orgId: 1
+    folder: "MLOps course"
+    type: file
+    # A provisioned dashboard cannot be deleted from the UI. Correct: it is not
+    # Grafana's to delete, it belongs to the repository.
+    disableDeletion: true
+    updateIntervalSeconds: 10
+    # `false` is the important one. With `true`, a UI edit is saved to the
+    # database and then overwritten the next time the file is rescanned - a
+    # change that appears to work and then vanishes, which is the worst way to
+    # find out where the source of truth is. With `false`, Grafana refuses to
+    # save a UI edit and offers the dashboard JSON to copy into the file.
+    allowUiUpdates: false
+    options:
+      path: /etc/grafana/dashboards
+      foldersFromFilesStructure: false

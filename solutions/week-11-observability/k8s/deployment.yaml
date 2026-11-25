@@ -1,0 +1,60 @@
+# The smallest useful Deployment.
+#
+# Everything here is in scope for Week 9. Anything NOT here — Ingress,
+# HorizontalPodAutoscaler, Helm, namespaces, RBAC, resource tuning — is
+# deliberately out of it. Week 10 replaces this whole file with about eight
+# lines of KServe CRD, and that comparison only lands if you wrote these sixty.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: diabetes-api
+  labels:
+    app: diabetes-api
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: diabetes-api          # <- must match the template labels below,
+  template:                      #    AND the Service's selector. A mismatch
+    metadata:                    #    fails SILENTLY: the Service exists, has
+      labels:                    #    zero endpoints, and port-forward hangs.
+        app: diabetes-api
+    spec:
+      containers:
+        - name: api
+          image: diabetes-api:local
+          # IfNotPresent, because the image was side-loaded with
+          # `kind load docker-image` and exists in no registry. Without this,
+          # a `:latest`-style tag makes Kubernetes try to pull from Docker Hub
+          # and sit in ErrImagePull forever.
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+              name: http
+
+          # READINESS — "may this pod receive traffic?"
+          # Failing removes the pod from the Service's endpoints. Traffic goes
+          # to the other replica; the pod is left alone to recover.
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 2
+            periodSeconds: 3
+            failureThreshold: 2
+
+          # LIVENESS — "is this pod broken beyond recovery?"
+          # Failing gets the container KILLED and restarted. Much more violent,
+          # so it is deliberately slower to trigger: a liveness probe that is
+          # too eager turns a slow start into a restart loop.
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 3
+
+          env:
+            - name: MODEL_PATH
+              value: /app/models/model.pkl

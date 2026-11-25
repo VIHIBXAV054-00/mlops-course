@@ -1,0 +1,45 @@
+# Grafana datasource, provisioned from a file.
+#
+# Reference: https://grafana.com/docs/grafana/latest/administration/provisioning/
+#
+# WHY THIS IS A FILE AND NOT A FORM. A datasource added through the UI lives in
+# grafana.db, inside a Docker volume, on one laptop. Delete the volume and the
+# dashboards all break; move to another machine and nothing works; and there is
+# no diff to review when somebody repoints "Prometheus" at a different server.
+# This is the same argument dvc.yaml, params.yaml and the k8s manifests already
+# made, applied to the last place people still click.
+
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    # `proxy` means Grafana's SERVER queries Prometheus, so the URL is resolved
+    # on the Docker network. `direct` would make your BROWSER query it, and
+    # `http://prometheus:9090` means nothing to your browser. This is the single
+    # most common provisioning mistake, and its symptom is panels that fail only
+    # for other people.
+    url: http://prometheus:9090
+    isDefault: true
+
+    # PINNED, and not decoration.
+    #
+    # Every panel in grafana/dashboards/*.json names this uid. Let Grafana
+    # generate one and the dashboard JSON in Git points at a uid that exists on
+    # the machine it was exported from and nowhere else - so every panel comes
+    # up empty, with no error, which looks exactly like "no traffic".
+    # tests/test_dashboard.py asserts the two agree.
+    uid: prometheus
+
+    # Read-only in the UI. Someone editing this in the browser would produce a
+    # change that survives until the next container restart and then silently
+    # reverts - which is worse than not being able to edit it at all.
+    editable: false
+
+    jsonData:
+      # Matches prometheus.yml's global scrape_interval. Grafana uses it to
+      # choose a sensible minimum step, so a graph does not ask for more
+      # resolution than the data has.
+      timeInterval: 15s
+      httpMethod: POST

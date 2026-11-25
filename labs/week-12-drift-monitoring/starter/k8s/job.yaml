@@ -1,0 +1,32 @@
+# A Job template for the in-cluster measurements; `make _job` fills in __NAME__ and
+# __ARGS__. It runs inside the cluster from the service image, so the requests take
+# the same route as real traffic.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: __NAME__
+spec:
+  # no retries: a failed measurement is a result
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 300
+  template:
+    metadata:
+      annotations:
+        # no Istio sidecar in the measuring pod: it would add its own latency
+        sidecar.istio.io/inject: "false"
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: measure
+          image: diabetes-api:local
+          imagePullPolicy: IfNotPresent
+          # --no-sync: the image already has the locked environment
+          command: ["uv", "run", "--no-dev", "--no-sync", "python", "src/main.py"]
+          args: [__ARGS__]
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi

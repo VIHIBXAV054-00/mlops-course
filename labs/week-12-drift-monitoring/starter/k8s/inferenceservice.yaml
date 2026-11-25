@@ -1,0 +1,39 @@
+# The running version: our image, serving model v1 from the model store.
+# Apply with `make isvc-deploy`. Re-applying it is also a way to roll back.
+apiVersion: serving.kserve.io/v1beta1
+kind: InferenceService
+metadata:
+  name: diabetes
+  annotations:
+    # gives each revision its own address (latest-..., prev-...) next to its percentage of traffic
+    serving.kserve.io/enable-tag-routing: "true"
+spec:
+  predictor:
+    minReplicas: 1  # keeps one pod running, so a measurement never waits for a cold start
+    containers:
+      - name: kserve-container  # KServe mounts the model only into a container with this name
+        image: diabetes-api:local
+        imagePullPolicy: IfNotPresent
+        ports:
+          - containerPort: 8000
+            protocol: TCP
+        env:
+          # KServe copies this store version to /mnt/models before the container starts
+          - name: STORAGE_URI
+            value: pvc://diabetes-models/v1
+          - name: MODEL_PATH
+            value: /mnt/models/model.pkl
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 2
+          periodSeconds: 3
+          failureThreshold: 3
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: "1"
+            memory: 1Gi

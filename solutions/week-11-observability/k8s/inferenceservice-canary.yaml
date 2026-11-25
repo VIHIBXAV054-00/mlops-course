@@ -1,0 +1,101 @@
+# The canary. Two lines differ from k8s/inferenceservice.yaml, and they are the
+# whole of a gradual rollout:
+#
+#   1. `canaryTrafficPercent: 10`      <- 10% of requests to the new revision
+#   2. `STORAGE_URI: pvc://.../v2`     <- which model that revision serves
+#
+# Everything else is byte-identical, INCLUDING THE IMAGE. That is the property
+# Week 9 could not have: its rollout mechanism replaced an image, so a new model
+# meant a new build, and there was no object anywhere in the cluster that knew
+# what a model version was. `tests/test_isvc_manifests.py` asserts that these
+# two files differ in exactly these two places, because a canary that also
+# quietly changed the image would be testing two things and learning neither.
+#
+# WHAT KSERVE DOES WITH THIS. It creates a second revision, waits for it to
+# become Ready, and then splits the route: 90% to the last revision that rolled
+# out successfully, 10% to this one. Both are live. Both are addressable. The
+# split is recorded in `kubectl get isvc` and in
+# `.status.components.predictor.traffic`, which is the difference between a
+# rollout you can watch and a deploy you can only hope about.
+#
+#   promote  : remove `canaryTrafficPercent` -> the new revision takes 100%
+#   roll back: set it to 0                   -> the OLD revision takes 100%,
+#                                               the new one stays up, at zero
+#                                               traffic, still reachable by tag
+#
+# `canaryTrafficPercent` only works in Knative (serverless) mode. In KServe's
+# standard mode the field is accepted and SILENTLY IGNORED, and you find out by
+# noticing that 100% of traffic went to the new model.
+apiVersion: serving.kserve.io/v1beta1
+kind: InferenceService
+metadata:
+  name: diabetes
+  annotations:
+    # Tag routing, and it is not decoration: it gives every revision its own
+    # stable hostname (`latest-…`, `prev-…`) IN ADDITION to its share of the
+    # main URL. That is blue/green — two versions live, addressable, with
+    # traffic switched between them — and it is also how you smoke-test a canary
+    # directly instead of firing requests at the split and hoping.
+    serving.kserve.io/enable-tag-routing: "true"
+spec:
+  predictor:
+    # THE FIELD THIS WEEK IS ABOUT. 10% of traffic to the new revision, 90% to
+    # the one that last rolled out successfully. Set it to 0 to roll back;
+    # delete it to promote.
+    canaryTrafficPercent: 10
+    # Scale-to-zero is Knative's default and it is a good default. It is
+    # switched off here for ONE reason: this lab measures a traffic split and a
+    # latency distribution, and a revision that scaled to zero between two
+    # measurements adds a cold start to one of them. Keeping a replica warm is a
+    # measurement decision, not an autoscaling lesson — autoscaling is not this
+    # course's subject.
+    minReplicas: 1
+    containers:
+      # The name is REQUIRED to be `kserve-container`. KServe finds the user
+      # container by name to inject the storage initializer, the model mount and
+      # the queue-proxy wiring; call it `api` (as Week 9 did) and the manifest is
+      # accepted, the pod starts, and nothing is mounted.
+      - name: kserve-container
+        # The SAME image Week 9 built. Not a variant, not a rebuild — the
+        # `/health` endpoint reports which of the two model sources it used, so
+        # you can prove it.
+        image: diabetes-api:local
+        imagePullPolicy: IfNotPresent
+        ports:
+          # Knative allows exactly one user port. Week 9's image serves 8000, so
+          # 8000 is what is declared; KServe's own runtimes use 8080 and this is
+          # the one place the difference shows.
+          - containerPort: 8000
+            protocol: TCP
+        env:
+          # THE FETCH. KServe reads STORAGE_URI from a custom container (the
+          # `storageUri` FIELD is for its built-in model runtimes), adds an init
+          # container, and downloads the model into /mnt/models before this
+          # container starts. `v1` is a directory in the store, so promoting a
+          # new model is a one-word edit.
+          - name: STORAGE_URI
+            value: pvc://diabetes-models/v2
+          - name: MODEL_PATH
+            value: /mnt/models/model.pkl
+        readinessProbe:
+          # Week 9's probes, unchanged and still doing their job. Note what they
+          # can and cannot see: this proves the model DESERIALISED. It cannot
+          # prove the model is the one you meant, or that its predictions are
+          # sane — that is what `make smoke` is for, and Exercise 4 is the proof
+          # that the distinction is not academic.
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 2
+          periodSeconds: 3
+          failureThreshold: 3
+        resources:
+          # Modest and explicit, because this cluster is already running
+          # cert-manager, Istio, Knative and KServe on a laptop. Two revisions
+          # coexist during a canary, so these numbers are paid twice.
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: "1"
+            memory: 1Gi

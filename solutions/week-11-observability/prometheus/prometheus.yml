@@ -1,0 +1,92 @@
+# Prometheus configuration.
+#
+# Canonical tutorial: https://prometheus.io/docs/prometheus/latest/getting_started/
+# Reference:          https://prometheus.io/docs/prometheus/latest/configuration/configuration/
+#
+# Deviation from the getting-started guide, in one line: the guide scrapes three
+# demo node exporters, and we scrape Prometheus itself (exactly as the guide
+# does) plus our own application — because the point of this week is that YOU
+# decide what a model service reports about itself.
+
+global:
+  # How often every target is polled. 15s is the community default and it is a
+  # real trade-off, not a magic number: it sets the finest event you can ever
+  # see (a 5-second outage between two scrapes is invisible), and it multiplies
+  # your storage. Halving it doubles the disk for the whole retention period.
+  scrape_interval: 15s
+
+  # How often the rules below are evaluated. Deliberately EQUAL to the scrape
+  # interval here. Evaluating faster than you scrape just re-reads the same
+  # samples; evaluating much slower delays every alert by up to one interval,
+  # which is the difference between an alert arriving in 15 seconds and in a
+  # minute — and it is the first thing to check when a rule "did not fire".
+  evaluation_interval: 15s
+
+  # Attached to every series and every alert this server produces. In a real
+  # deployment this is how you tell staging's alerts from production's after
+  # they have been federated into one place; here it is one line that makes the
+  # `external_labels` concept concrete.
+  external_labels:
+    environment: lab
+    course: mlops-week11
+
+# Rule files, resolved relative to this file's directory inside the container.
+#
+# These are mounted READ-ONLY from ./prometheus/rules. Rules are code: they are
+# reviewed in a pull request, they have unit tests (prometheus/tests/alerts_test.yml,
+# run by `make alerts-test`), and a structural test in pytest asserts every
+# threshold in them is derived from slo.yaml.
+rule_files:
+  - /etc/prometheus/rules/*.yml
+
+# NO `alerting:` BLOCK. Alertmanager is deliberately not installed.
+#
+# Prometheus evaluates the rules and shows pending/firing on its own /alerts
+# page, which is everything needed to watch the machinery work. What Alertmanager
+# adds — routing, grouping, deduplication, silences, on-call rotation — is about
+# what happens to a human AFTER the alert fires, and that is Week 13's subject
+# (incident management). Decide what deserves a human first; wire the pager
+# second.
+
+scrape_configs:
+
+  # ── Prometheus scraping itself ───────────────────────────────────────────
+  #
+  # Straight from the getting-started guide, and it earns its place beyond
+  # imitation: it means there is always a live target to query while you are
+  # learning PromQL, and it makes the point that a monitoring system is just
+  # another service that exposes /metrics. It also gives you somewhere to look
+  # when the answer to "why is my graph empty" is "the collector is unwell".
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  # ── The service under observation ────────────────────────────────────────
+  #
+  # `api:8000` is a DOCKER COMPOSE DNS NAME, and the fact that it resolves is
+  # the whole shape of this lab. Prometheus PULLS: nothing is sent to it, so it
+  # must be able to reach you. That is why the service being observed is a
+  # container on this network rather than a process on your laptop, and it is
+  # why the first troubleshooting question is always a networking one.
+  #
+  # THE TARGET IS DOWN WHEN YOU FIRST START THE STACK, ON PURPOSE. The `api`
+  # service sits behind a Compose profile and does not start with `make up`. So
+  # `up{job="diabetes-api"}` is 0 before you have instrumented anything, and
+  # ServiceDown starts counting. `up` is the metric you get for free from the
+  # act of scraping — and it is the one that catches the case a ratio-based SLI
+  # structurally cannot: a service with no traffic at all has a perfect error
+  # ratio.
+  - job_name: diabetes-api
+    # Faster than the global default, and stated rather than inherited: this is
+    # the target the lab actually watches, and a 5s interval makes the DOWN -> UP
+    # transition in Exercise 2 something you can see happen rather than something
+    # you refresh and hope for.
+    scrape_interval: 5s
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["api:8000"]
+        labels:
+          # A label WE attach, not one the service reports. It ends up on every
+          # series from this job, which is how a query can say "the prediction
+          # service" without naming a container.
+          service: diabetes-api

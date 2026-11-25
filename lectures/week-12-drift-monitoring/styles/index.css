@@ -1,0 +1,31 @@
+/* Deck-wide styles. Shared rules live in lectures/_shared/slides.css;
+   add deck-specific rules below the import. */
+@import '../../_shared/slides.css';
+
+/* A small paired histogram: two bars per band, reference (sky) and current (amber).
+ * <div class="hist"><div class="band"><div class="pair">
+ *   <div class="bar ref" style="height:6.5rem"></div><div class="bar cur" style="height:0.25rem"></div>
+ * </div><small>&lt;80</small></div>…</div>
+ * Heights are set inline: 0.25rem per percentage point of the window. */
+.hist { display: flex; align-items: flex-end; justify-content: center; gap: 0.9rem; margin: 0.5rem 0; }
+.hist .band { display: flex; flex-direction: column; align-items: center; gap: 0.2rem; }
+.hist .pair { display: flex; align-items: flex-end; gap: 3px; height: 7.8rem; border-bottom: 2px solid #94a3b8; }
+.hist .bar { width: 1.3rem; border-radius: 2px 2px 0 0; }
+.hist .bar.ref { background: #0284c7; }
+.hist .bar.cur { background: #d97706; }
+.hist small { font-size: 0.75rem; opacity: 0.8; }
+.legend { display: flex; justify-content: center; gap: 1.5rem; font-size: 0.85rem; }
+.legend .key { display: inline-block; width: 0.9rem; height: 0.9rem; border-radius: 2px; vertical-align: middle; margin-right: 0.3rem; }
+
+/* Ranges of a statistic over several seeds, on one axis from 0 to the track's maximum.
+ * <div class="ranges"><div class="rrow"><b>n = 200</b><div class="track">
+ *   <div class="seg good" style="left:12%;width:52%"></div><div class="seg bad" style="left:52%;width:41%"></div>
+ * </div></div></div>
+ * left and width are percentages of the axis. */
+.ranges { display: grid; gap: 0.6rem; margin: 1rem auto; max-width: 44rem; }
+.ranges .rrow { display: grid; grid-template-columns: 8rem 1fr; align-items: center; gap: 0.8rem; }
+.ranges .track { position: relative; height: 2.2rem; border-left: 2px solid #94a3b8; border-bottom: 2px solid #94a3b8; }
+.ranges .seg { position: absolute; height: 0.7rem; border-radius: 0.35rem; }
+.ranges .seg.good { top: 0.25rem; background: #16a34a; }
+.ranges .seg.bad { top: 1.15rem; background: #e11d48; }
+.ranges .axis { display: flex; justify-content: space-between; margin-left: 8.8rem; font-size: 0.75rem; opacity: 0.75; }
