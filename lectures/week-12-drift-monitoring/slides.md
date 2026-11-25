@@ -180,7 +180,7 @@ layout: section
 
 # 1 · Drifting apart
 
-<ImageSlot id="w12-drifting-apart" text="Meme: two cars drive side by side, then split at a fork; one car is labelled 'the world', the other 'our model'" height="220px" />
+<img src="/drifting-apart.jpeg" alt="Meme: two cars drive side by side, then split at a fork; one car is labelled 'the world', the other 'our model'" style="height:220px; margin:0.5rem auto; display:block; border-radius:0.5rem" />
 
 <!--
 About 15 minutes: where we are, models that met a changed world, then one case. Option B (the Epic Sepsis Model during COVID-19) is hidden after the Google Flu Trends slides.
