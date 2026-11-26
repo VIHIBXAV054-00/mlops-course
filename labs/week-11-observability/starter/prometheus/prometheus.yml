@@ -1,0 +1,30 @@
+# Prometheus configuration: what to scrape and which rule files to load.
+# Tutorial:  https://prometheus.io/docs/prometheus/latest/getting_started/
+# Reference: https://prometheus.io/docs/prometheus/latest/configuration/configuration/
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  # Added to every series and alert from this server.
+  external_labels:
+    environment: lab
+    course: mlops-week11
+
+rule_files:
+  - /etc/prometheus/rules/*.yml
+
+# No `alerting:` block: there is no Alertmanager. Firing alerts show on the /alerts page.
+
+scrape_configs:
+
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  # TODO(student) Exercise 2: add a job named `diabetes-api` that scrapes the API container.
+  #   * target: the Compose service name and port, `api:8000`. `localhost` here is the
+  #     Prometheus container itself, so the target would stay down.
+  #   * `metrics_path: /metrics` and a `scrape_interval` of 5s, so you can watch the
+  #     target go from down to up.
+  #   * a target label `service: diabetes-api`.
+  # The target is down until `make api-up` starts the API container.

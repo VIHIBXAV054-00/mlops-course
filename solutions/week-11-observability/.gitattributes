@@ -1,0 +1,4 @@
+# Check out CSV files with LF line endings on every platform. DVC 3 hashes the
+# raw bytes, so a CRLF checkout on Windows would change every md5 in the .dvc
+# pointers and in dvc.lock. See https://doc.dvc.org/user-guide/upgrade
+*.csv text eol=lf

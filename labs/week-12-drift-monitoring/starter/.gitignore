@@ -1,0 +1,42 @@
+# Files Git must not track: secrets, caches, build outputs and generated data.
+.env
+
+# Python virtual environment and caches
+.venv/
+__pycache__/
+.pytest_cache/
+*.pyc
+*.pyo
+*.egg-info/
+
+# Docker Compose volumes directory (if using bind mounts)
+volumes/
+
+# Build artifacts
+build/
+dist/
+
+# DVC machine-local state. Commit .dvc/config, which defines the shared remote.
+.dvc/cache/
+.dvc/tmp/
+.dvc/config.local
+
+# The KServe installer downloaded by `make kserve-install`, and the model store.
+# model-store/.gitkeep stays, because kind needs the mount directory to exist.
+.kserve/
+model-store/*/
+
+# Backup made by `make alerts-test-fail`.
+.service.yml.bak
+
+# The prediction log holds patient data, so never commit it.
+# predictions/.gitkeep stays, because compose.yaml mounts the directory.
+predictions/*
+!predictions/.gitkeep
+
+# The HTML drift report is large and can be regenerated. Commit reports/drift.json.
+reports/drift.html
+
+# Backups made by `make drift-stale` and `make drift-alerts-test-fail`.
+.drift.json.bak
+.drift.yml.bak

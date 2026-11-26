@@ -1,0 +1,33 @@
+# Rollout plan: what the ML engineer hands to the platform team before a rollout.
+# Check it with `make release-check`.
+
+model:
+  candidate: v2   # the store version to release
+  replaces: v1    # the store version that serves now
+
+strategy: canary  # chosen in the lecture: the lab's platform cannot store shadow answers
+
+canary:
+  percent: 10     # the canary percentage: the percentage of requests the candidate gets
+
+smoke:
+  # the smoke test's behaviour check: how far apart the probabilities for the clearly
+  # ill and the healthy test patient must be
+  min_probability_spread: 0.1
+
+load:
+  expected_rps: 20      # requests per second you expect at the busiest hour
+  max_p95_ms: 300       # the p95 latency the service must stay under at that load
+  max_error_rate: 0.01  # the share of failed requests you accept
+
+promote:
+  when:
+    - the smoke test passed before the canary got any traffic
+    - 24 hours at canary.percent with the error rate under max_error_rate
+    - the share of positive predictions within 5 points of the old model's
+
+rollback:
+  when:
+    - any smoke check fails on the candidate
+    - the error rate stays above max_error_rate for 5 minutes
+    - the share of positive predictions moves more than 10 points from the old model's

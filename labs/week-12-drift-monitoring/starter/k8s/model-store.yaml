@@ -1,0 +1,33 @@
+# The model store: a volume over ./model-store, which kind-cluster.yaml mounts
+# into the node at /var/lib/model-store. Each model version is a directory.
+# hostPath is safe here only because the node is a local container.
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: diabetes-models
+  labels:
+    store: diabetes-models
+spec:
+  capacity:
+    storage: 256Mi
+  accessModes:
+    - ReadOnlyMany
+  # Deleting the claim does not delete the models.
+  persistentVolumeReclaimPolicy: Retain
+  # Empty, not omitted: otherwise kind's default StorageClass creates an empty volume.
+  storageClassName: ""
+  hostPath:
+    path: /var/lib/model-store
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: diabetes-models
+spec:
+  accessModes:
+    - ReadOnlyMany
+  storageClassName: ""
+  volumeName: diabetes-models
+  resources:
+    requests:
+      storage: 256Mi

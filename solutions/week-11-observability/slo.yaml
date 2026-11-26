@@ -1,0 +1,63 @@
+# Service Level Objectives: a written promise about the prediction service.
+# It is separate from params.yaml, so changing a target does not retrain the model.
+# prometheus/rules/slo.yml and the dashboard's budget panel are derived from this
+# file, and tests/test_prometheus_rules.py checks that they agree.
+
+# The rolling window every objective is measured over.
+window_days: 30
+
+service: diabetes-api
+
+objectives:
+
+  # ── SLI 1: availability ───────────────────────────────────────────────────
+  # A 422 is the caller's error, so it counts as good. ContractViolationSpike watches it.
+  availability:
+    description: >-
+      The fraction of prediction requests that do not fail on our side.
+      Good = any response that is not 5xx. Valid = every request to /predict
+      or the V1 predict route.
+    target: 0.99
+    # 0.99 over 30 days is 7 hours 12 minutes of error budget.
+
+  # ── SLI 2: latency ────────────────────────────────────────────────────────
+  # A ratio of fast requests, not a percentile. threshold_seconds must be a bucket
+  # boundary in metrics.py's LATENCY_BUCKETS.
+  latency:
+    description: >-
+      The fraction of prediction requests served in under the threshold.
+      Good = requests in the <= threshold_seconds histogram buckets.
+    target: 0.95
+    threshold_seconds: 0.25
+
+# ── Burn-rate alerting ──────────────────────────────────────────────────────
+# Google SRE Workbook, "Alerting on SLOs", Table 5-8:
+# https://sre.google/workbook/alerting-on-slos/
+# A burn rate of 1 spends the budget exactly by the end of the window.
+#     budget_consumed = burn_rate * long_window / window   (14.4 * 1h / 720h = 2%)
+# Both windows must breach at once. `page` wakes a person, `ticket` waits for a working day.
+burn_rate_alerts:
+  - name: fast
+    burn_rate: 14.4
+    long_window: 1h
+    short_window: 5m
+    budget_consumed: 0.02
+    severity: page
+  - name: medium
+    burn_rate: 6
+    long_window: 6h
+    short_window: 30m
+    budget_consumed: 0.05
+    severity: page
+  - name: slow
+    burn_rate: 1
+    long_window: 3d
+    short_window: 6h
+    budget_consumed: 0.10
+    severity: ticket
+
+# ── Not promised ────────────────────────────────────────────────────────────
+#   * Correctness: a fast, available service can return wrong predictions.
+#   * Throughput: overload shows up only indirectly, as latency.
+#   * Model freshness: an old model served quickly meets every objective.
+#   * Anything about the patients: the user of this API is the caller.

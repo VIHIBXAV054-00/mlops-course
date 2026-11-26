@@ -1,0 +1,18 @@
+# Dashboard provider: loads every dashboard JSON file in /etc/grafana/dashboards.
+# Reference: https://grafana.com/docs/grafana/latest/administration/provisioning/
+# Grafana rescans the files every 10 seconds, so an edit to the JSON needs no restart.
+
+apiVersion: 1
+
+providers:
+  - name: course
+    orgId: 1
+    folder: "MLOps course"
+    type: file
+    disableDeletion: true
+    updateIntervalSeconds: 10
+    # Grafana refuses to save a UI edit and offers the dashboard JSON to copy into the file.
+    allowUiUpdates: false
+    options:
+      path: /etc/grafana/dashboards
+      foldersFromFilesStructure: false

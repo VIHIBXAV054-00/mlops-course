@@ -1,0 +1,97 @@
+# The training pipeline, as a DVC graph:
+#   validate -> prepare -> train -> evaluate -> gate
+# `prepare` depends on reports/validation.json, so failing data stops the pipeline.
+# `gate` writes a verdict, and `register` and `promote` refuse without a GO.
+# Every file a stage reads is listed in its `deps`.
+#
+# See the graph:  make dag      (or: dvc dag --mermaid)
+# Run it:         make repro
+
+stages:
+
+  validate:
+    cmd: uv run python src/main.py validate
+    deps:
+      - data/measurements.csv
+      - src/week_11_observability/schemas.py
+      - src/week_11_observability/validation.py
+      - src/week_11_observability/pipeline.py
+    outs:
+      # cache: false keeps the file in Git instead of the DVC cache.
+      - reports/validation.json:
+          cache: false
+
+  prepare:
+    cmd: uv run python src/main.py prepare
+    deps:
+      - data/measurements.csv
+      # The data gate: this dependency stops the pipeline on invalid data.
+      - reports/validation.json
+      - src/week_11_observability/pipeline.py
+      - src/week_11_observability/data.py
+    params:
+      - random_seed
+      - prepare.test_size
+    outs:
+      - data/processed/train.csv
+      - data/processed/test.csv
+
+  train:
+    cmd: uv run python src/main.py train
+    deps:
+      - data/processed/train.csv
+      - src/week_11_observability/pipeline.py
+      - src/week_11_observability/model.py
+      - src/week_11_observability/schemas.py
+      - src/week_11_observability/validation.py
+      - src/week_11_observability/dvc_link.py
+    params:
+      - random_seed
+      - train.family
+      - train.C
+      - train.max_iter
+      - train.impute_strategy
+      - train.n_estimators
+    outs:
+      - models/model.pkl
+      - models/mlflow_run_id.json:
+          cache: false
+
+  evaluate:
+    cmd: uv run python src/main.py evaluate
+    deps:
+      - models/model.pkl
+      - models/mlflow_run_id.json
+      - data/processed/test.csv
+      - src/week_11_observability/pipeline.py
+      - src/week_11_observability/model.py
+      - src/week_11_observability/schemas.py
+      - src/week_11_observability/validation.py
+      - src/week_11_observability/evaluation.py
+      - src/week_11_observability/fairness.py
+    params:
+      - random_seed
+      - evaluation
+    metrics:
+      - metrics/metrics.json:
+          cache: false
+      - metrics/slices.json:
+          cache: false
+
+  gate:
+    cmd: uv run python src/main.py gate
+    deps:
+      - metrics/metrics.json
+      # `gate` writes its verdict to the MLflow run named in this file.
+      - models/mlflow_run_id.json
+      - metrics/slices.json
+      # The current champion, written by `make baseline-sync`.
+      - metrics/baseline.json
+      - src/week_11_observability/gates.py
+      - src/week_11_observability/baseline.py
+      - src/week_11_observability/pipeline.py
+    params:
+      - acceptance
+    outs:
+      - reports/gate.json:
+          cache: false

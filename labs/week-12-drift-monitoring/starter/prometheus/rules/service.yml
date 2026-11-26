@@ -1,0 +1,41 @@
+# Service alerting rules that are not about the SLO.
+# Reference: https://prometheus.io/docs/prometheus/latest/configuration/alerting_rules/
+
+groups:
+  - name: service
+    interval: 15s
+    rules:
+
+      # `up` is 0 when a scrape fails. The SLO ratios cannot see a dead service,
+      # because with no requests there are no errors.
+      - alert: ServiceDown
+        expr: up{job="diabetes-api"} == 0
+        for: 1m
+        labels:
+          severity: page
+          service: diabetes-api
+        annotations:
+          summary: "diabetes-api is not answering scrapes"
+          description: >-
+            Prometheus has been unable to scrape {{ $labels.instance }} for over a
+            minute. The SLO alerts cannot see this, because a service with no
+            requests has no errors.
+
+      # A 422 is not a 5xx, so contract rejections do not touch the error budget.
+      # A rate, not a count, so one bad test request does not fire it.
+      - alert: ContractViolationSpike
+        expr: sum(rate(model_contract_violations_total{job="diabetes-api"}[5m])) > 0.2
+        for: 5m
+        labels:
+          severity: ticket
+          service: diabetes-api
+        annotations:
+          summary: "Callers are sending data the model-input contract rejects"
+          description: >-
+            More than 0.2 fields per second have failed the input contract for five
+            minutes. The service is working, so this does not use the error budget.
+            A caller has probably changed: check model_contract_violations_total by
+            `check`.
+
+# Not alerted on: CPU, memory, disk and restarts (causes, not symptoms), single
+# slow requests (the SLO covers them) and accuracy (no labels at serving time).

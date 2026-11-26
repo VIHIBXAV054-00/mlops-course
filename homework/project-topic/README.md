@@ -7,8 +7,8 @@
 
 ## Objective
 
-Choose a dataset and prediction task that you will carry through **all five homework assignments** (HW1–HW5) this semester.
-The same project will grow from a tracked experiment in HW1 to a monitored production service in HW5 — so choose something you can work with for the entire semester.
+Choose a dataset and prediction task that you will carry through **all four homework assignments** (HW1–HW4) this semester.
+The same project will grow from a tracked experiment in HW1 to a monitored production service in HW4 — so choose something you can work with for the entire semester.
 
 Write a ~1-page proposal. Add images or tables if they help explain your dataset or task. Submit it as `docs/proposal.md` in **your project repo**.
 
@@ -36,7 +36,7 @@ Your chosen project must satisfy all of the following:
 ## What to submit
 
 First, create **your project repository** from the **project template** ("Use this
-template" → a new **private** repo). This is the repo you grow across HW1–HW5 — it
+template" → a new **private** repo). This is the repo you grow across HW1–HW4 — it
 is separate from the course materials. Then write your proposal as `docs/proposal.md`
 inside it, roughly one page (300–500 words), with the sections below. (Add your
 dataset under `data/` and fill in `docs/DATA_DICTIONARY.md` while you're there.)

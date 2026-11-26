@@ -1,0 +1,34 @@
+# Files Docker does not send to the build. Without this file the build context
+# is about 783 MB, almost all of it `.venv/`, which the image rebuilds anyway.
+# Check with:  du -sh .    then    docker build --progress=plain . 2>&1 | head -3
+
+# The virtualenv. The image runs its own `uv sync --locked`.
+.venv/
+
+# DVC's local cache and machine-local state. Data, not source.
+.dvc/cache/
+.dvc/tmp/
+.dvc/config.local
+
+# Tool caches.
+.pytest_cache/
+.ruff_cache/
+__pycache__/
+*.pyc
+
+# Secrets and local state. `.env` must never reach an image layer.
+.env
+answers.md
+
+# Build outputs and the downloaded KServe installer.
+.kserve/
+build/
+dist/
+*.egg-info/
+
+# The model store. The image bakes models/model.pkl; other versions are fetched at runtime.
+model-store/
+
+# Mounted into the Prometheus and Grafana containers, not baked into the API image.
+prometheus/
+grafana/

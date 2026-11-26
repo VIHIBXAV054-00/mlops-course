@@ -1,0 +1,21 @@
+/* Deck-wide styles. Shared rules live in lectures/_shared/slides.css;
+   add deck-specific rules below the import. */
+@import '../../_shared/slides.css';
+
+/* A 24-hour day drawn as a bar: each alert is a tick, an incident is a block.
+ * Place a tick with style="left:41.67%" (minute of the day / 1440). */
+.day { position: relative; height: 2.2rem; border: 2px solid #94a3b8; border-radius: 0.4rem; background: #f8fafc; }
+.day .tick { position: absolute; top: 0.2rem; bottom: 0.2rem; width: 3px; margin-left: -1.5px; background: #dc2626; }
+.day .tick.burn { background: #0284c7; width: 6px; margin-left: -3px; }
+.day .incident { position: absolute; top: 0; bottom: 0; background: rgba(217, 119, 6, 0.35); }
+.day-row { display: grid; grid-template-columns: 10rem 1fr 7rem; align-items: center; gap: 0.75rem; margin: 0.5rem 0; }
+.day-row .count { font-size: 1.6rem; font-weight: 700; }
+.hours { display: flex; justify-content: space-between; font-size: 0.7rem; color: #64748b; }
+
+/* A horizontal bar whose width is a share of a whole (budget left, a time window). */
+.bar-row { display: grid; grid-template-columns: 6rem 1fr 8rem; align-items: center; gap: 0.75rem; margin: 0.45rem 0; }
+.bar-track { position: relative; height: 1.5rem; border-radius: 0.3rem; background: #f1f5f9; border: 1px solid #cbd5e1; }
+.bar-fill { position: absolute; top: 0; bottom: 0; border-radius: 0.3rem; background: #e11d48; }
+.bar-fill.amber { background: #d97706; }
+.bar-fill.sky { background: #0284c7; }
+.bar-fill.green { background: #16a34a; }

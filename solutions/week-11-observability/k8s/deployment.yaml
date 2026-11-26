@@ -1,0 +1,47 @@
+# A Deployment that runs two replicas of the serving image on the kind cluster.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: diabetes-api
+  labels:
+    app: diabetes-api
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: diabetes-api          # must match the template labels and the Service's selector
+  template:
+    metadata:
+      labels:
+        app: diabetes-api
+    spec:
+      containers:
+        - name: api
+          image: diabetes-api:local
+          # The image was loaded with `kind load docker-image` and is in no registry.
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+              name: http
+
+          # Readiness: a failing pod gets no traffic but keeps running.
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 2
+            periodSeconds: 3
+            failureThreshold: 2
+
+          # Liveness: a failing container is restarted, so this probe triggers more slowly.
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 3
+
+          env:
+            - name: MODEL_PATH
+              value: /app/models/model.pkl

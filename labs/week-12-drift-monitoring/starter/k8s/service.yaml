@@ -1,0 +1,14 @@
+# A Service: a stable address in front of the pods whose labels match `selector`.
+# If nothing answers, `kubectl get endpoints` shows whether any pod matched.
+apiVersion: v1
+kind: Service
+metadata:
+  name: diabetes-api
+spec:
+  type: ClusterIP
+  selector:
+    app: diabetes-api
+  ports:
+    - name: http
+      port: 80
+      targetPort: http

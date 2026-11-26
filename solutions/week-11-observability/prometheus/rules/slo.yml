@@ -1,0 +1,149 @@
+# SLO recording rules and burn-rate alerts.
+# Every threshold is derived from ../../slo.yaml, and tests/test_prometheus_rules.py checks it.
+#   availability  target 0.99  -> error budget 0.01
+#   latency       target 0.95  -> error budget 0.05, good = faster than 0.25s
+# Burn-rate table: https://sre.google/workbook/alerting-on-slos/ (Table 5-8)
+# Naming convention (level:metric:operation): https://prometheus.io/docs/practices/rules/
+
+groups:
+
+  # ── Availability SLI ──────────────────────────────────────────────────────
+  # Good = not 5xx. A 422 counts as valid and good: the contract is working.
+  # `or vector(0)` turns "no 5xx at all" into 0 instead of an empty result.
+  - name: slo_availability_sli
+    interval: 15s
+    rules:
+      - record: slo:availability:error_ratio_5m
+        expr: |
+          (sum(rate(http_requests_total{job="diabetes-api",route=~"/predict|/v1/.*",status=~"5.."}[5m])) or vector(0))
+          /
+          sum(rate(http_requests_total{job="diabetes-api",route=~"/predict|/v1/.*"}[5m]))
+
+      - record: slo:availability:error_ratio_30m
+        expr: |
+          (sum(rate(http_requests_total{job="diabetes-api",route=~"/predict|/v1/.*",status=~"5.."}[30m])) or vector(0))
+          /
+          sum(rate(http_requests_total{job="diabetes-api",route=~"/predict|/v1/.*"}[30m]))
+
+      - record: slo:availability:error_ratio_1h
+        expr: |
+          (sum(rate(http_requests_total{job="diabetes-api",route=~"/predict|/v1/.*",status=~"5.."}[1h])) or vector(0))
+          /
+          sum(rate(http_requests_total{job="diabetes-api",route=~"/predict|/v1/.*"}[1h]))
+
+      - record: slo:availability:error_ratio_6h
+        expr: |
+          (sum(rate(http_requests_total{job="diabetes-api",route=~"/predict|/v1/.*",status=~"5.."}[6h])) or vector(0))
+          /
+          sum(rate(http_requests_total{job="diabetes-api",route=~"/predict|/v1/.*"}[6h]))
+
+      - record: slo:availability:error_ratio_3d
+        expr: |
+          (sum(rate(http_requests_total{job="diabetes-api",route=~"/predict|/v1/.*",status=~"5.."}[3d])) or vector(0))
+          /
+          sum(rate(http_requests_total{job="diabetes-api",route=~"/predict|/v1/.*"}[3d]))
+
+  # ── Latency SLI ───────────────────────────────────────────────────────────
+  # The share of requests slower than 0.25 s. le="0.25" must be a bucket
+  # boundary in metrics.py, and buckets are cumulative.
+  - name: slo_latency_sli
+    interval: 15s
+    rules:
+      - record: slo:latency:error_ratio_5m
+        expr: |
+          1 - (
+            sum(rate(http_request_duration_seconds_bucket{job="diabetes-api",route=~"/predict|/v1/.*",le="0.25"}[5m]))
+            /
+            sum(rate(http_request_duration_seconds_count{job="diabetes-api",route=~"/predict|/v1/.*"}[5m]))
+          )
+
+      - record: slo:latency:error_ratio_1h
+        expr: |
+          1 - (
+            sum(rate(http_request_duration_seconds_bucket{job="diabetes-api",route=~"/predict|/v1/.*",le="0.25"}[1h]))
+            /
+            sum(rate(http_request_duration_seconds_count{job="diabetes-api",route=~"/predict|/v1/.*"}[1h]))
+          )
+
+  # ── The alerts ────────────────────────────────────────────────────────────
+  # Each alert needs a long window (it burned fast) and a short window (it is
+  # still burning), so it stops soon after the incident ends.
+  - name: slo_burn_rate
+    interval: 15s
+    rules:
+
+      # 14.4x for 1h = 2% of a 30-day budget. Threshold: 14.4 * 0.01.
+      - alert: AvailabilityBudgetBurnFast
+        expr: |
+          slo:availability:error_ratio_1h > 0.144
+          and
+          slo:availability:error_ratio_5m > 0.144
+        for: 2m
+        labels:
+          severity: page
+          service: diabetes-api
+          objective: availability
+          burn_rate: "14.4"
+        annotations:
+          summary: "Burning the availability budget 14.4x too fast"
+          description: >-
+            Over 14.4% of prediction requests have failed for the last hour and are
+            still failing now. That is 2% of the 30-day error budget spent in one
+            hour; at this rate the whole budget is gone in about two days. Page.
+
+      # 6x for 6h = 5% of the budget. Threshold: 6 * 0.01.
+      - alert: AvailabilityBudgetBurnMedium
+        expr: |
+          slo:availability:error_ratio_6h > 0.06
+          and
+          slo:availability:error_ratio_30m > 0.06
+        for: 5m
+        labels:
+          severity: page
+          service: diabetes-api
+          objective: availability
+          burn_rate: "6"
+        annotations:
+          summary: "Burning the availability budget 6x too fast"
+          description: >-
+            Over 6% of prediction requests have failed for six hours and are still
+            failing. 5% of the month's budget is gone. Slower than the fast burn, and
+            it will still exhaust the budget in five days if nobody looks.
+
+      # 1x for 3d = 10% of the budget. Threshold: 1 * 0.01. A ticket, not a page.
+      - alert: AvailabilityBudgetBurnSlow
+        expr: |
+          slo:availability:error_ratio_3d > 0.01
+          and
+          slo:availability:error_ratio_6h > 0.01
+        for: 30m
+        labels:
+          severity: ticket
+          service: diabetes-api
+          objective: availability
+          burn_rate: "1"
+        annotations:
+          summary: "Availability budget will not last the window"
+          description: >-
+            The error ratio has exceeded the 1% budget over three days. Nothing is on
+            fire, and the budget will be gone before the window resets. File it, do
+            not page for it.
+
+      # Latency, fast burn only. Threshold: 14.4 * 0.05 = 0.72.
+      - alert: LatencyBudgetBurnFast
+        expr: |
+          slo:latency:error_ratio_1h > 0.72
+          and
+          slo:latency:error_ratio_5m > 0.72
+        for: 2m
+        labels:
+          severity: page
+          service: diabetes-api
+          objective: latency
+          burn_rate: "14.4"
+        annotations:
+          summary: "Burning the latency budget 14.4x too fast"
+          description: >-
+            More than 72% of prediction requests have been slower than 250ms for an
+            hour and still are. The 95%-under-250ms objective allows 5%; this is
+            14.4x that rate, so 2% of the 30-day budget went in the last hour.

@@ -1,0 +1,61 @@
+# The model store, as the cluster sees it.
+#
+# Week 9's model travelled INSIDE the image. This week it travels separately, so
+# the cluster needs somewhere to read it from — and `storageUri` is how KServe
+# is told where that is. Three schemes are common in production (`s3://`,
+# `gs://`, `pvc://`); this lab uses the third, for reasons worth stating:
+#
+#   * it needs no object store, so the whole Kubernetes half of this lab runs
+#     with the Compose stack DOWN. That is not tidiness — a kind cluster running
+#     Istio, Knative and KServe plus five Compose services does not fit on a
+#     16 GB laptop.
+#   * a model version becomes a DIRECTORY, which makes "one image, many models"
+#     something you can see with `ls`.
+#   * PersistentVolume / PersistentVolumeClaim is core Kubernetes vocabulary and
+#     costs one slide.
+#
+# A real deployment would point `storageUri` at object storage and attach
+# credentials to a ServiceAccount. Week 4 already built that bucket in Silo;
+# swapping this for `s3://dvc-storage/models/v2` is a URI change and a secret,
+# not a redesign.
+#
+# WHY hostPath, AND WHY IT IS SAFE HERE: the node is a container, and
+# `k8s/kind-cluster.yaml` bind-mounts this lab's ./model-store into it at
+# /var/lib/model-store. So the path below is the lab directory, seen from inside
+# the node. `hostPath` in a real cluster is a security problem (a pod reading
+# the node's filesystem) and is used here precisely because the "node" is a
+# throwaway container on your laptop.
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: diabetes-models
+  labels:
+    store: diabetes-models
+spec:
+  capacity:
+    storage: 256Mi
+  accessModes:
+    - ReadOnlyMany
+  # Retain, so deleting the claim never deletes your models. The bytes live in
+  # the lab directory; Kubernetes is only borrowing them.
+  persistentVolumeReclaimPolicy: Retain
+  # Empty string, NOT omitted. Omitting it lets kind's default `standard`
+  # StorageClass dynamically provision an empty volume instead, and the pod then
+  # starts, finds no model, and reports itself unready — a confusing failure with
+  # a one-character cause.
+  storageClassName: ""
+  hostPath:
+    path: /var/lib/model-store
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: diabetes-models
+spec:
+  accessModes:
+    - ReadOnlyMany
+  storageClassName: ""
+  volumeName: diabetes-models
+  resources:
+    requests:
+      storage: 256Mi

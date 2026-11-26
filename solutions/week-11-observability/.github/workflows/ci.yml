@@ -1,0 +1,97 @@
+# CI: checks every change to the code with lint, tests and the pipeline.
+# GitHub runs workflows only from .github/workflows/ at the repository root,
+# so `make install-ci` copies this file there.
+name: Week 11 CI
+
+on:
+  push:
+    # Run only when this lab or this workflow changes.
+    paths:
+      - 'labs/week-11-observability/solution/**'
+      - '.github/workflows/week11-ci.yml'
+  pull_request:
+    paths:
+      - 'labs/week-11-observability/solution/**'
+      - '.github/workflows/week11-ci.yml'
+  workflow_dispatch:
+
+defaults:
+  run:
+    working-directory: labs/week-11-observability/solution
+
+# A new push to the same branch cancels the run still in progress.
+concurrency:
+  group: week11-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ── Lint: a fast job of its own ────────────────────────────────────────────
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v9.0.0
+        with:
+          enable-cache: true
+      - run: uv sync --locked --group lint
+      - run: make lint
+
+  # ── Layers 1-3: the test pyramid, one job each ─────────────────────────────
+  # One job per layer, so a failed job names the layer that broke.
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        layer: [unit, data, eval]
+    name: test (${{ matrix.layer }})
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v9.0.0
+        with:
+          enable-cache: true
+      - run: uv sync --locked --all-groups
+      - run: make test-${{ matrix.layer }}
+
+  # ── The pipeline: runs only after lint and tests pass ──────────────────────
+  # It needs no services, no secrets and no `dvc pull`.
+  pipeline:
+    needs: [lint, test]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v9.0.0
+        with:
+          enable-cache: true
+      - run: uv sync --locked --all-groups
+
+      # Rebuild the DVC-tracked dataset from the committed raw batches.
+      - name: Rebuild the dataset
+        run: make data-v2
+
+      - name: validate -> prepare -> train -> evaluate -> gate
+        id: pipeline
+        run: make ci
+
+      # `always()` keeps the evidence after a NO-GO too.
+      - name: Publish the gate verdict to the job summary
+        if: always()
+        run: make gate-summary >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Annotate a NO-GO
+        if: failure()
+        run: |
+          echo "::error title=Gate refused this model::See the job summary and the gate-report artifact."
+
+      - name: Upload the evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: gate-evidence
+          if-no-files-found: warn
+          path: |
+            labs/week-11-observability/solution/metrics/
+            labs/week-11-observability/solution/reports/
+            labs/week-11-observability/solution/models/model.pkl
+
+  # CI stops here: `register` and `promote` need the MLflow server.

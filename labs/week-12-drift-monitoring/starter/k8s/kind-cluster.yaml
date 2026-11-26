@@ -1,0 +1,14 @@
+# The kind cluster. It mounts ./model-store into the node as the model store,
+# and publishes the ingress port to the host. Create it from this lab's root.
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: mlops
+nodes:
+  - role: control-plane
+    extraMounts:
+      - hostPath: ./model-store
+        containerPath: /var/lib/model-store
+    extraPortMappings:
+      - containerPort: 30080
+        hostPort: 5550
+        protocol: TCP

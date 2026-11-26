@@ -1,6 +1,6 @@
 # Dataset Catalogue (for your course project)
 
-A short, curated list of tabular datasets you may use for the **course project** (the "Define Project Topic" milestone in Week 2, carried through HW1–HW5). Each was picked to show a **different flavour of real-world messiness** — because the point of this course is the lifecycle, not the modelling, and lifecycle tools only earn their keep when the data is imperfect.
+A short, curated list of tabular datasets you may use for the **course project** (the "Define Project Topic" milestone in Week 2, carried through HW1–HW4). Each was picked to show a **different flavour of real-world messiness** — because the point of this course is the lifecycle, not the modelling, and lifecycle tools only earn their keep when the data is imperfect.
 
 > Two ground rules. (1) The **labs always use the Pima diabetes dataset** — the single running example — so everyone follows the same steps; these alternatives are for *your own project*. (2) Whatever you pick, you must **document it like a domain expert would**: see `./diabetes-pima.md` for the expected depth (what each field means, its unit, a plausible range, and where the data is untrustworthy). You will rarely be the expert on your data; part of the job is finding and writing down that knowledge.
 
@@ -35,6 +35,6 @@ A worked example for the running dataset lives in [`batches/`](./batches/), with
 
 ## Choosing well
 
-Pick something you can live with for the whole semester (HW1→HW5 build on it): tabular, supervised, small enough to train in seconds on a 16 GB laptop with scikit-learn, with a clear single target and a usable licence. Then document it to the standard of `./diabetes-pima.md` before you start — your future self (and your grader) will thank you.
+Pick something you can live with for the whole semester (HW1→HW4 build on it): tabular, supervised, small enough to train in seconds on a 16 GB laptop with scikit-learn, with a clear single target and a usable licence. Then document it to the standard of `./diabetes-pima.md` before you start — your future self (and your grader) will thank you.
 
 _Last updated: 2026-06. Verify each dataset's current source and licence before use; terms change._

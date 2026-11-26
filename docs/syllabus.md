@@ -45,10 +45,10 @@ The following table details the theoretical lectures, practical laboratory exerc
 | **Week 8** | **Orchestration:** Operational ML workflows. Scheduling, retries, parameterization, and pipeline-level observability. | **Prefect Flow:** End-to-end training chain (prepare, validate, train, evaluate, register) with parameters and retry policies. | **HW1 due** |
 | **Week 9** | **Model Serving & Deployment:** Batch vs. online inference, latency/throughput, containerization patterns, and an introduction to Kubernetes concepts. | **Containerized Serving:** Serving the registered model as a REST API (FastAPI / `mlflow models serve`) in Docker. Local Kubernetes cluster setup from provided templates. | **HW3 out** |
 | **Week 10** | **Rollout Strategies:** Declarative deployment with KServe. Canary/blue-green deployments, gradual rollouts, rollbacks, smoke testing, and basic load testing. | **KServe InferenceService:** First KServe model deployment, managing multiple model revisions, traffic splitting (e.g., 90/10), and endpoint testing. | **HW2 due** |
-| **Week 11** | **Observability:** Metrics, SLI, SLO, and alerting. Differences between logs/metrics/traces. Avoiding alert fatigue. | **Prometheus & Grafana:** Metric collection, dashboard creation (latency, RPS, error rate), and basic alerting rules. | **HW4 out** |
+| **Week 11** | **Observability:** Metrics, SLI, SLO, and alerting. Differences between logs/metrics/traces. Avoiding alert fatigue. | **Prometheus & Grafana:** Metric collection, dashboard creation (latency, RPS, error rate), and basic alerting rules. | **HW4 out** (the last homework) |
 | **Week 12** | **Drift & Degradation:** Data drift vs. concept drift. Monitoring strategies, proxy metrics, and reaction protocols (retraining triggers, rollbacks). | **Drift Reporting:** Evidently (or custom stats), documenting drift signals, adding drift alerts, and optional retraining triggers. | **HW3 due** |
-| **Week 13** | **Governance & Responsible AI:** Auditability, evidence requirements, Model Cards, incident management, postmortems, and kill-switches. | **Model Cards & Incidents:** Filling out a Model Card template. Simulating an incident (drifting metric) and the resulting decision process. | **HW5 out** · **HW4 due** |
-| **Week 14** | **Course Summary & LLMOps:** The whole lifecycle in one picture; refusals vs. records; cloud alternatives (e.g., Azure ML) and what they cannot decide for you; an outlook on operating LLM-based systems — which of the thirteen mechanisms survive when the model is somebody else's. | **Spare Session:** Buffer for delayed labs or exam preparation. **No new lab.** | **HW5 due** · **ZH (written test)** |
+| **Week 13** | **Governance & Responsible AI:** Auditability, evidence requirements, Model Cards, incident management, postmortems, and kill-switches. A short revision for the ZH. | **Model Cards & Incidents:** Filling out a Model Card template. Simulating an incident (drifting metric) and the resulting decision process. A short lab done at home, due Sunday 13 December. | **ZH (written test):** Wed 2 Dec, 12:15, IL108, in the lab slot |
+| **Week 14** | **Course Summary & LLMOps:** The whole lifecycle in one picture; refusals vs. records; cloud alternatives (e.g., Azure ML) and what they cannot decide for you; an outlook on operating LLM-based systems — which of the thirteen mechanisms survive when the model is somebody else's. | **No lab.** Online week. | **HW4 due** |
 
 ---
 
@@ -61,23 +61,23 @@ This is a **mid-semester-grade** subject.
 All three must be met — they are thresholds, not weights, and failing any one of them fails the semester:
 
 1. **Labs — 70% completed.** Of the 13 laboratory exercises, at least **10** must be completed successfully. If exercises are cancelled because of a mid-week public holiday or teaching break, the threshold moves with the count: **12 labs → 9**, **11 labs → 8**.
-2. **Homework — at least 4 of the 5** small assignments at a satisfactory level, each individually scoring **at least 50%** of its available points.
+2. **Homework — at least 3 of the 4** small assignments at a satisfactory level, each individually scoring **at least 50%** of its available points.
 3. **Written test (ZH) — at least 50%** of the available points.
 
 ### Grade
 
 With all three met, the mid-semester grade is:
 
-> **Grade = 0.6 × (HF1 + HF2 + HF3 + HF4 + HF5) / 5 + 0.4 × ZH**
+> **Grade = 0.6 × (HF1 + HF2 + HF3 + HF4) / 4 + 0.4 × ZH**
 
-The homework mean includes **all five** assignments, including any that were not submitted — only four have to *pass*, but a missing fifth still enters the average as a zero.
+The homework mean includes **all four** assignments, including any that were not submitted — only three have to *pass*, but a missing fourth still enters the average as a zero.
 
 ### Retakes
 
 | Component | Repeatable? |
 | :--- | :--- |
 | A missed or failed **laboratory exercise** | **No** |
-| **Homework** | **One** of the five, during the retake week. |
+| **Homework** | **One** of the four, during the retake week. |
 | **ZH** | Once, during the retake week. |
 
 ### Delivery
@@ -88,11 +88,11 @@ The homework mean includes **all five** assignments, including any that were not
 
 ### Project work
 
-All five homework assignments build incrementally on a single project. The project topic (dataset + prediction task) is chosen and approved in Week 3; the canonical course dataset may be used as a fallback. See [`datasets/README.md`](../datasets/README.md) for the topic catalogue.
+All four homework assignments build incrementally on a single project. The project topic (dataset + prediction task) is chosen and approved in Week 3; the canonical course dataset may be used as a fallback. See [`datasets/README.md`](../datasets/README.md) for the topic catalogue.
 
 ### Written test (ZH)
 
-Held in the last weeks and covering lecture material from all previous weeks. The revision guide — what is examinable per week, the recurring question shapes, and worked answers — is [`docs/exam-revision.md`](exam-revision.md).
+Wednesday 2 December 2026, 12:15, room IL108, in the Week 13 lab slot. On paper, closed book, 60 minutes. It covers the lecture material and notes of Weeks 1–12; Weeks 13 and 14 are not examined. The revision guide — what is examinable per week, the recurring question shapes, and worked answers — is [`docs/exam-revision.md`](exam-revision.md).
 
 ### Grade boundaries
 
@@ -114,7 +114,7 @@ Use of AI assistants is permitted — this is an industry reality the course emb
 
 ## Assignment Deadlines Summary
 
-**Each assignment is released on the odd (in-person) week whose lab it depends on, and is due three to four weeks later** (the last two windows are shorter, because the semester ends).
+**Each assignment is released on the odd (in-person) week whose lab it depends on, and is due three to four weeks later.**
 
 *Submissions are due by 23:59 (Budapest) on the Sunday closing the deadline week, via the student's own project repository. Students submit the URL of the graded commit in Moodle. Lab work is also submitted in Moodle; Microsoft Teams is used for announcements and questions only.*
 
@@ -124,7 +124,6 @@ Use of AI assistants is permitted — this is an industry reality the course emb
 | **HW 1** | Week 5 (5 Oct) | **Week 8** (Sun 1 Nov) | 4 weeks | Basic MLOps project with data versioning, experiment tracking, and model management. — [brief](../homework/hw-01-data-versioning-and-tracking/README.md) |
 | **HW 2** | Week 7 (19 Oct) | **Week 10** (Sun 15 Nov) | 4 weeks | Automated data validation, evaluation, and documented quality thresholds ("go/no-go"). — [brief](../homework/hw-02-validation-and-evaluation-gates/README.md) |
 | **HW 3** | Week 9 (2 Nov) | **Week 12** (Sun 29 Nov) | 4 weeks | End-to-end Prefect flow with parameterization and retry handling. — [brief](../homework/hw-03-orchestration/README.md) |
-| **HW 4** | Week 11 (16 Nov) | **Week 13** (Sun 6 Dec) | 3 weeks | Model serving via KServe with version handling, documented rollouts, and smoke tests. — [brief](../homework/hw-04-serving-and-rollout/README.md) |
-| **HW 5** | Week 13 (30 Nov) | **Week 14** (Sun 13 Dec) | 2 weeks | Observability setup (Grafana + alerts) and drift analysis with intervention strategies. — [brief](../homework/hw-05-observability-and-drift/README.md) |
+| **HW 4** | Week 11 (16 Nov) | **Week 14** (Sun 13 Dec) | 4 weeks | Model serving via KServe with version handling, documented rollouts, and smoke tests, plus a small observability and drift part. — [brief](../homework/hw-04-serving-and-rollout/README.md) |
 
-*Dates assume Week 1 begins Monday 7 September 2026; adjust with the academic calendar. HW 5 has the shortest window because the semester ends — its scope is correspondingly smaller, and it is due in the same week as the written test (ZH). One homework may be repeated in the retake week (see Assessment).*
+*Dates assume Week 1 begins Monday 7 September 2026; adjust with the academic calendar. There are four homeworks: HW 4 is the last one, and no HW 5 is released. The written test (ZH) is on Wednesday 2 December, in Week 13. One homework may be repeated in the retake week (see Assessment).*
