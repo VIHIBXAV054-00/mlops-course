@@ -107,7 +107,7 @@ services:
       AWS_SECRET_ACCESS_KEY: ${S3_SECRET_KEY}
     command:
       - --backend-store-uri
-      - postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      - postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       - --artifacts-destination
       - s3://${MLFLOW_BUCKET}
       - --host

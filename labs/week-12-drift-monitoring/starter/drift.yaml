@@ -14,7 +14,7 @@ reference:
 current:
   # Exercise 3: below this many rows the verdict is INSUFFICIENT. 30 is just a
   # textbook rule of thumb; replace it with a value your calibration supports.
-  min_samples: 30
+  min_samples: 500
   # How many recent rows from the prediction log to compare.
   window_rows: 2000
 
@@ -25,7 +25,7 @@ current:
 features:
   - column: glucose
     method: psi
-    threshold: 0.20
+    threshold: 0.235
     gated: true
   - column: insulin
     method: psi
@@ -60,8 +60,8 @@ features:
 # Exercise 4: f1 with a 0.01 noise band matches Week 6's release gate.
 # Replace both with values supported by your measurements.
 degradation:
-  primary_metric: f1
-  min_drop: 0.01
+  primary_metric: roc_auc
+  min_drop: 0.03
   also_report: [f1, accuracy, precision, recall, selection_rate]
 
 # The share of predicted positives, which needs no labels and no prediction log.
