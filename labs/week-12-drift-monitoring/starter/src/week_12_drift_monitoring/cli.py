@@ -582,16 +582,48 @@ def _smoke_client(args):
 
 def cmd_smoke(settings: Settings, args) -> None:
     """Run the smoke test against the endpoint. Exits 1 unless it passes."""
-    from .smoke import format_smoke, run_smoke
+    from .smoke import DEFAULT_MIN_SPREAD, format_smoke, run_smoke
 
     client, where = _smoke_client(args)
+    min_spread = args.min_spread if args.min_spread is not None else DEFAULT_MIN_SPREAD
     print()
     print(f"  target: {where}")
-    report = run_smoke(client, expect_version=args.store_version)
+    report = run_smoke(client, expect_version=args.store_version, min_spread=min_spread)
     print(format_smoke(report))
     print()
     if report["verdict"] != "PASS":
         raise SystemExit(1)
+
+
+def cmd_release_check(settings: Settings, args) -> None:
+    """Is release.yaml complete?"""
+    from .release import load_release, problems, release_path
+
+    path = release_path(settings.project_root.resolve())
+    release = load_release(path)
+    found = problems(release)
+    candidate = (release.get("model") or {}).get("candidate")
+    provenance = settings.project_root / "model-store" / str(candidate) / "provenance.json"
+    if not found and provenance.exists():
+        verdict = json.loads(provenance.read_text()).get("gate_verdict")
+        if verdict != "GO":
+            found.append(f"`model.candidate` {candidate} has the gate verdict {verdict!r} in the store")
+    print()
+    if found:
+        print(f"  {path.name} is not ready:")
+        for problem in found:
+            print(f"    - {problem}")
+        print()
+        raise SystemExit(1)
+    print(f"  {path.name} is complete.")
+    print()
+
+
+def cmd_release_value(settings: Settings, args) -> None:
+    """Print one value from release.yaml, for the Makefile."""
+    from .release import load_release, release_path, value
+
+    print(value(load_release(release_path(settings.project_root.resolve())), args.key))
 
 
 def cmd_split_measure(settings: Settings, args) -> None:
@@ -611,7 +643,7 @@ def cmd_split_measure(settings: Settings, args) -> None:
 
 def cmd_loadtest(settings: Settings, args) -> None:
     """Send the same requests to the endpoint at rising concurrency."""
-    from .loadtest import format_load_table, format_split, run_load, summarise
+    from .loadtest import format_against_release, format_load_table, format_split, run_load, summarise
 
     url = args.url or "http://127.0.0.1:5541"
     levels = [int(c) for c in (args.concurrency_levels or "1,4,16,64").split(",")]
@@ -624,6 +656,8 @@ def cmd_loadtest(settings: Settings, args) -> None:
     print(f"  target: {url}   {requests} requests per level")
     print(format_load_table(rows))
     print()
+    if args.max_p95_ms is not None and args.max_error_rate is not None:
+        print(format_against_release(rows, args.max_p95_ms, args.max_error_rate))
     print(format_split(last))
     print()
 
@@ -1203,6 +1237,8 @@ COMMANDS = {
     "model-publish": cmd_model_publish,
     "store-list": cmd_store_list,
     "smoke": cmd_smoke,
+    "release-check": cmd_release_check,
+    "release-value": cmd_release_value,
     "split-measure": cmd_split_measure,
     "loadtest": cmd_loadtest,
     "metrics-show": cmd_metrics_show,
@@ -1274,6 +1310,14 @@ def main() -> None:
                         help="loadtest: comma-separated levels (default 1,4,16,64)")
     parser.add_argument("--declared", type=int, default=None,
                         help="split-measure: the canaryTrafficPercent you asked for")
+    parser.add_argument("--key", default=None,
+                        help="release-value: a dotted key, e.g. canary.percent")
+    parser.add_argument("--min-spread", type=float, default=None, dest="min_spread",
+                        help="smoke: smoke.min_probability_spread from release.yaml")
+    parser.add_argument("--max-p95-ms", type=float, default=None, dest="max_p95_ms",
+                        help="loadtest: load.max_p95_ms from release.yaml")
+    parser.add_argument("--max-error-rate", type=float, default=None, dest="max_error_rate",
+                        help="loadtest: load.max_error_rate from release.yaml")
     parser.add_argument("--filter", default=None,
                         help="metrics-show: regex of exposition lines to print")
     parser.add_argument("--mix", default=None,

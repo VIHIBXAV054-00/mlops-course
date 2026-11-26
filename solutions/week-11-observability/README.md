@@ -463,8 +463,8 @@ Deliberately out of scope, each with its home:
 
 ## Tests
 
-**358 collected, 350 passed, 8 skipped** (the skips need the live stack). Layers: unit **175**,
-data **90**, eval **85**, integration **8**; **unmarked: 0**.
+**375 collected, 367 passed, 8 skipped** (the skips need the live stack). Layers: unit **186**,
+data **90**, eval **91**, integration **8**; **unmarked: 0**.
 
 New this week, all offline:
 

@@ -1,13 +1,7 @@
-"""The gate as a pipeline stage, and as the thing register/promote consult.
+"""The model gate as a pipeline stage, and the verdict that register and promote check.
 
-Week 5's `tests/test_gate.py` defends the DATA gate: nothing downstream runs.
-This file defends the MODEL gate, whose contract is different in exactly one
-important way — **the model survives.** A failing data gate means no processed
-data was written. A failing model gate means a release was refused and the
-artifact is still there to be debugged.
-
-Every test builds a project directory in `tmp_path`, so nothing here needs
-Docker, Silo, DVC or the tracked dataset.
+A failing model gate refuses the release but keeps the model, so you can debug it.
+Every test builds its project directory in `tmp_path`.
 """
 
 from __future__ import annotations
@@ -65,7 +59,7 @@ def sandbox(settings, tmp_path):
         gate_report_path=tmp_path / "reports" / "gate.json",
         models_dir=tmp_path / "models",
         run_id_path=tmp_path / "models" / "mlflow_run_id.json",
-        mlflow_tracking_uri="http://127.0.0.1:1",  # unreachable on purpose
+        mlflow_tracking_uri="http://127.0.0.1:1",  # unreachable, so no test touches a server
         acceptance={
             "criteria_version": "test-1",
             "minimum": {"accuracy": 0.70, "f1": 0.55, "roc_auc": 0.75},
@@ -98,7 +92,7 @@ def test_a_passing_gate_writes_its_verdict_and_returns_it(sandbox):
 
 
 def test_a_failing_gate_raises_but_writes_the_report_first(sandbox):
-    """A gate that blocks a release and leaves no evidence is untriageable."""
+    """A blocked release still leaves a report to debug from."""
     seed(sandbox, metrics=dict(GOOD_METRICS, f1=0.20))
     with pytest.raises(GateFailed, match="NO-GO"):
         pipeline.gate(sandbox)
@@ -108,11 +102,7 @@ def test_a_failing_gate_raises_but_writes_the_report_first(sandbox):
 
 
 def test_a_failing_gate_does_not_delete_the_model(sandbox):
-    """The load-bearing difference from Week 5's data gate.
-
-    You need the artifact to work out why it failed. A gate that destroyed its
-    own evidence would make every NO-GO a mystery.
-    """
+    """You need the model to find out why it failed."""
     seed(sandbox, metrics=dict(GOOD_METRICS, f1=0.20))
     model = sandbox.models_dir / "model.pkl"
     before = model.read_bytes()
@@ -132,7 +122,7 @@ def test_the_gate_report_is_byte_identical_across_runs(sandbox):
 
 
 def test_the_slice_report_the_gate_reads_is_the_one_evaluate_wrote(sandbox):
-    """`read_slices` does not recompute. Two copies of a number always diverge."""
+    """`read_slices` reads the file and does not compute the slices again."""
     seed(sandbox)
     assert pipeline.read_slices(sandbox) == SLICES
 
@@ -154,7 +144,7 @@ def test_an_absent_baseline_skips_the_regression_check_and_still_gates(sandbox):
     assert read_baseline(sandbox.baseline_path) == {}
 
 
-# ── require_go: the teeth ─────────────────────────────────────────────────────
+# ── require_go ────────────────────────────────────────────────────────────────
 
 
 def test_require_go_refuses_when_the_gate_has_never_run(sandbox):
@@ -178,13 +168,9 @@ def test_require_go_accepts_a_recorded_go(sandbox):
 
 
 def test_a_stale_go_is_still_a_go_and_that_is_the_dangerous_part(sandbox):
-    """An honest test of a real limitation, not a defect being papered over.
+    """A known limit: `require_go` reads a file and cannot tell which model the verdict was about.
 
-    `require_go` reads a FILE. Nothing in it knows whether the model on disk is
-    the one that verdict was about. DVC's dependency graph is what keeps the two
-    aligned during `dvc repro` — and a human running `make register` after
-    hand-editing a model has stepped outside it. Worth knowing where the
-    guarantee comes from, because it does not come from this function.
+    During `dvc repro`, DVC's dependency graph keeps the two in step.
     """
     seed(sandbox)
     pipeline.gate(sandbox)
@@ -203,7 +189,7 @@ def test_the_baseline_file_has_no_timestamp(sandbox):
 
 
 def test_the_baseline_is_written_with_stable_key_order(sandbox):
-    """A committed file whose bytes depend on dict order produces empty diffs."""
+    """Sorted keys, so the same baseline always gives the same bytes."""
     write_baseline({"metrics": {"roc_auc": 0.8, "f1": 0.6}, "source": "a"},
                    sandbox.baseline_path)
     first = sandbox.baseline_path.read_bytes()
@@ -213,7 +199,7 @@ def test_the_baseline_is_written_with_stable_key_order(sandbox):
 
 
 def test_a_baseline_without_metrics_reads_as_no_baseline(sandbox):
-    """An empty shell must not be mistaken for a recorded champion of zero."""
+    """A file without metrics is not a champion with zero scores."""
     sandbox.baseline_path.parent.mkdir(parents=True, exist_ok=True)
     sandbox.baseline_path.write_text('{"source": "nothing yet"}')
     assert read_baseline(sandbox.baseline_path) == {}

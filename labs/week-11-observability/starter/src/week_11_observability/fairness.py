@@ -1,8 +1,6 @@
 """Group-fairness metrics with fairlearn: rates per group, and the gaps between groups.
 
-Rates per group: selection rate, TPR and FPR. Gaps (the largest rate minus the
-smallest): demographic parity (selection rate), equal opportunity (TPR) and
-equalized odds (the larger of the TPR and FPR gaps).
+Gaps: demographic parity (selection rate), equal opportunity (TPR), equalized odds (TPR and FPR).
 Reference: https://fairlearn.org/main/user_guide/assessment/common_fairness_metrics.html
 """
 

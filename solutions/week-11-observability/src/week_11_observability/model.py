@@ -1,3 +1,5 @@
+"""Build, train and evaluate the scikit-learn pipelines."""
+
 from __future__ import annotations
 
 from sklearn.ensemble import RandomForestClassifier
@@ -15,23 +17,13 @@ from sklearn.preprocessing import StandardScaler
 
 from .config import IMPUTE_STRATEGIES, Settings
 
-# The ML stays trivial — Week 3's complexity budget goes to MLflow, not modelling.
-# What is new here is `build_model`, which lets one sweep compare several
-# hyperparameter settings (and two model families) through one identical
-# Pipeline shape. Comparable runs require a comparable pipeline.
-
 MODEL_FAMILIES = ("logreg", "rf")
 
 
 def train_logistic_regression(x_train, y_train, settings: Settings) -> Pipeline:
     """Train a scaled logistic regression model.
 
-    Unchanged from Weeks 1-2 — this function anchors the course's regression
-    lock (seed 42 => F1 0.5785, accuracy 0.7344). Do not retune it.
-
-    Follows the standard Scikit-learn pattern: a Pipeline that chains
-    preprocessing (StandardScaler) with an estimator, so the exact same
-    transformation is applied at training and prediction time.
+    Keeps the course's pinned metrics (seed 42: F1 0.5785, accuracy 0.7344).
     https://scikit-learn.org/stable/getting_started.html
     """
     model = Pipeline(
@@ -56,33 +48,10 @@ def build_model(
     settings: Settings,
     impute: str | None = None,
 ) -> Pipeline:
-    """Build one UNFITTED pipeline for a single sweep cell.
+    """Build one unfitted pipeline: optional imputer, scaler, then the estimator.
 
-    Scaling is harmless for a random forest and required for logistic
-    regression, so both families share the same Pipeline shape. That is what
-    makes the sweep runs genuinely comparable rather than merely adjacent.
-
-    With sklearn's defaults (`C=1.0` for logreg, `n_estimators=100` for the
-    forest) and `impute=None` this reproduces the Week 1/2 baselines exactly.
-
-    NEW IN WEEK 5 — the `impute` argument, and WHERE it takes effect.
-
-    Once `validation.to_nullable` has turned the sentinel zeros into real nulls,
-    something has to decide what to do about not knowing a value. That decision
-    is a MODELLING choice, so it belongs to the model — and putting it here, as
-    the Pipeline's first step, has a consequence that is the whole point of the
-    week: the imputer is fitted on the training data, serialised with the model,
-    and therefore applied identically at inference time. The medians the model
-    predicts with are the medians it was trained with.
-
-    Impute in a notebook instead, or in the `prepare` stage, and the model is
-    handed already-filled numbers at training time and raw nulls at serving
-    time. That gap is training-serving skew, and nothing in the metrics will
-    ever show it to you.
-
-    `impute=None` keeps the Weeks 1-4 behaviour, which is what lets
-    tests/test_smoke.py still assert the course's pinned baseline against the
-    untouched data/diabetes.csv.
+    The imputer is part of the pipeline, so it is saved with the model and applied the same way
+    at prediction time. `impute=None` leaves it out.
     """
     if family == "logreg":
         estimator = LogisticRegression(
@@ -107,9 +76,7 @@ def build_model(
                 f"Unknown impute strategy {impute!r}; expected one of "
                 f"{IMPUTE_STRATEGIES} (set train.impute_strategy in params.yaml)."
             )
-        # First step, before the scaler: StandardScaler cannot handle nulls, and
-        # more importantly the mean and standard deviation it learns should be
-        # computed over the filled values the model will actually see.
+        # before the scaler, which cannot handle nulls
         steps.append(("imputer", SimpleImputer(strategy=impute)))
     steps.append(("scaler", StandardScaler()))
     steps.append(("classifier", estimator))
@@ -118,15 +85,7 @@ def build_model(
 
 
 def evaluate_model(model, x_test, y_test) -> dict:
-    """Compute standard binary classification metrics on the test set.
-
-    New in Week 3: `roc_auc`. It is threshold-independent, so it ranks models
-    differently from F1 — which is the point of Exercise 4. It requires a
-    classifier exposing `predict_proba`; both families above do.
-
-    Values are rounded to 4 decimals, which is what keeps the course's pinned
-    reference metrics stable across machines.
-    """
+    """Standard binary classification metrics on the test set, rounded to 4 decimals."""
     predictions = model.predict(x_test)
     probabilities = model.predict_proba(x_test)[:, 1]
     return {

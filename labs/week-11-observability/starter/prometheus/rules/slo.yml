@@ -1,53 +1,15 @@
 # SLO recording rules and burn-rate alerts.
-#
-# EVERY NUMBER IN THIS FILE IS DERIVED FROM ../../slo.yaml. It is written twice
-# on purpose — a rule engine cannot read a YAML document that is not a rule file
-# — and `tests/test_prometheus_rules.py` recomputes each threshold from slo.yaml
-# and fails if the two copies disagree. Duplication you cannot detect is a bug;
-# duplication a test watches is a translation.
-#
+# Every threshold is derived from ../../slo.yaml, and tests/test_prometheus_rules.py checks it.
 #   availability  target 0.99  -> error budget 0.01
 #   latency       target 0.95  -> error budget 0.05, good = faster than 0.25s
-#
-# Burn-rate table: Google SRE Workbook, "Alerting on SLOs", Table 5-8.
-# https://sre.google/workbook/alerting-on-slos/
-#
-# RECORDING RULES COME FIRST, and they are not an optimisation here so much as a
-# naming discipline. `slo:availability:error_ratio_1h` is a sentence; the
-# expression it stands for is nine lines of label matching that would otherwise
-# be copy-pasted into six alert rules and be subtly different in two of them.
-# The `level:metric:operation` naming convention is Prometheus's own
-# (https://prometheus.io/docs/practices/rules/): the prefix says what the series
-# is ABOUT, not what produced it.
+# Burn-rate table: https://sre.google/workbook/alerting-on-slos/ (Table 5-8)
+# Naming convention (level:metric:operation): https://prometheus.io/docs/practices/rules/
 
 groups:
 
-  # ── Availability SLI, one recording rule per window the alerts need ───────
-  #
-  # Good = not 5xx. Valid = every request to a prediction route.
-  #
-  # NOTE THE 4xx: a 422 from Week 5's contract is EXCLUDED from `bad` and
-  # INCLUDED in `valid`, which is a real decision with a real consequence. The
-  # service refusing an impossible patient is the service working, so it must
-  # not consume our budget - otherwise any caller could exhaust it by sending
-  # rubbish. The cost is that a flood of 422s is invisible here, which is
-  # exactly why ContractViolationSpike exists in service.yml.
-  #
-  # `or vector(0)` ON THE NUMERATOR IS NOT DECORATION, and promtool is what
-  # found it. `sum()` over a selector that matches NO series returns an EMPTY
-  # vector, not 0 — so on a perfectly healthy service with zero 5xx, the whole
-  # division is empty and this recording rule produces NOTHING. The alert still
-  # behaves (a comparison against an absent series is false), but a dashboard
-  # panel reads "No data" instead of "0%", which is indistinguishable from a
-  # broken panel. `or vector(0)` supplies the zero.
-  #
-  # Note it is on the NUMERATOR only. If the DENOMINATOR is empty there really
-  # is no traffic, and the honest answer to "what fraction failed" is nothing at
-  # all rather than a reassuring zero. That gap is what `ServiceDown` covers.
-  #
-  # The `route` matcher deliberately avoids the literal route template
-  # `/v1/models/{model_name}:predict`, whose braces would have to be escaped
-  # inside a PromQL regex. `/v1/.*` says the same thing and stays readable.
+  # ── Availability SLI ──────────────────────────────────────────────────────
+  # Good = not 5xx. A 422 counts as valid and good: the contract is working.
+  # `or vector(0)` turns "no 5xx at all" into 0 instead of an empty result.
   - name: slo_availability_sli
     interval: 15s
     rules:
@@ -82,23 +44,8 @@ groups:
           sum(rate(http_requests_total{job="diabetes-api",route=~"/predict|/v1/.*"}[3d]))
 
   # ── Latency SLI ───────────────────────────────────────────────────────────
-  #
-  # A RATIO, NOT A PERCENTILE, and the difference is the reason histograms
-  # exist. "95% of requests under 250 ms" is a counting question that the
-  # `le="0.25"` bucket answers exactly; "p95 below 250 ms" is a statistic you
-  # estimate by interpolating inside whichever bucket the 95th percentile falls
-  # in, and then threshold. Only the first one composes: bucket counts add
-  # across replicas, percentiles do not.
-  #
-  # `le="0.25"` MUST MATCH A BUCKET BOUNDARY in metrics.py's LATENCY_BUCKETS.
-  # If it does not, this expression silently selects NO series, the ratio is
-  # empty, and the alert never fires - a rule that is wrong in the safest-looking
-  # direction. tests/test_metrics.py and tests/test_prometheus_rules.py both
-  # check it, from opposite ends.
-  #
-  # Bucket counts are CUMULATIVE, so `le="0.25"` already counts everything
-  # faster than 250 ms and no summation over lower buckets is needed - a
-  # detail that costs an afternoon the first time it is missed.
+  # The share of requests slower than 0.25 s. le="0.25" must be a bucket
+  # boundary in metrics.py, and buckets are cumulative.
   - name: slo_latency_sli
     interval: 15s
     rules:
@@ -119,29 +66,13 @@ groups:
           )
 
   # ── The alerts ────────────────────────────────────────────────────────────
-  #
-  # THREE FOR AVAILABILITY, ONE FOR LATENCY, and that asymmetry is deliberate:
-  # not every objective deserves every window. Latency degradation that is slow
-  # enough to need a 3-day window is a capacity-planning conversation, not an
-  # alert.
-  #
-  # TWO CONDITIONS, ANDed, in every single one. The long window is the claim
-  # ("we have burned budget fast for an hour"); the short window is the check
-  # ("and it is STILL happening"). Without the short window, an alert that
-  # fires on a 1-hour average stays firing for a further hour after the
-  # incident ends, because the average still contains it - which is how a team
-  # learns that this alert means "something happened at some point recently"
-  # and stops reading it.
-  #
-  # `for:` is short here (2m, 5m, 30m) because the WINDOWS already provide the
-  # patience. A 1-hour window with a further 1-hour `for:` would take two hours
-  # to tell you about an outage that started in minute one.
+  # Each alert needs a long window (it burned fast) and a short window (it is
+  # still burning), so it stops soon after the incident ends.
   - name: slo_burn_rate
     interval: 15s
     rules:
 
-      # 14.4x for 1h = 2% of a 30-day budget, gone. Threshold: 14.4 * 0.01.
-      # At this rate the entire month's budget is spent in about 50 hours.
+      # 14.4x for 1h = 2% of a 30-day budget. Threshold: 14.4 * 0.01.
       - alert: AvailabilityBudgetBurnFast
         expr: |
           slo:availability:error_ratio_1h > 0.144
@@ -179,11 +110,7 @@ groups:
             failing. 5% of the month's budget is gone. Slower than the fast burn, and
             it will still exhaust the budget in five days if nobody looks.
 
-      # 1x for 3d = 10% of the budget. Threshold: 1 * 0.01.
-      # TICKET, NOT PAGE: at this rate the budget lasts the full 30 days, so
-      # nothing is on fire. It is a real problem and it can wait for Tuesday -
-      # and saying so in a label is how an alerting system stops waking people
-      # for things that do not need them.
+      # 1x for 3d = 10% of the budget. Threshold: 1 * 0.01. A ticket, not a page.
       - alert: AvailabilityBudgetBurnSlow
         expr: |
           slo:availability:error_ratio_3d > 0.01
@@ -203,12 +130,6 @@ groups:
             not page for it.
 
       # Latency, fast burn only. Threshold: 14.4 * 0.05 = 0.72.
-      #
-      # Note how much LARGER that threshold is than the availability one. A 95%
-      # target has five times the budget of a 99% target, so it takes five times
-      # as much badness to burn it at the same rate. That is the arithmetic
-      # doing what it should: the alert thresholds follow from the promise
-      # rather than from somebody's taste.
       - alert: LatencyBudgetBurnFast
         expr: |
           slo:latency:error_ratio_1h > 0.72

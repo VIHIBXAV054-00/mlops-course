@@ -1,8 +1,6 @@
-"""The state DVC creates (Exercises 1, 2, 5).
+"""The files DVC creates, checked by reading them: no `dvc` command, no network.
 
-Pure file inspection — no `dvc` subprocess, no network — so these are fast and
-work offline. Every test is guarded by a fixture that skips when the student has
-not reached the relevant exercise yet.
+Each test skips until the file it needs exists.
 """
 
 import configparser
@@ -21,14 +19,7 @@ def test_dvc_dir_and_dvcignore_exist(dvc_repo) -> None:
 
 
 def test_dvc_local_state_is_git_ignored(dvc_repo) -> None:
-    """The cache, tmp and config.local must never reach Git.
-
-    Asserted as behaviour (`git check-ignore`) rather than by reading
-    .dvc/.gitignore literally, because DVC omits an entry it can see is already
-    covered by an ancestor .gitignore — and this repository's root .gitignore
-    covers `**/.dvc/config.local`. Either way the file is ignored, which is the
-    property that actually matters.
-    """
+    """The cache, tmp and config.local are git-ignored, by whichever .gitignore."""
     import subprocess
 
     for relative in (".dvc/cache", ".dvc/tmp", ".dvc/config.local"):
@@ -44,8 +35,7 @@ def test_dvc_config_declares_default_storage_remote(dvc_repo, settings) -> None:
     parser = configparser.ConfigParser()
     parser.read(dvc_repo / ".dvc" / "config")
     assert parser["core"]["remote"] == settings.dvc_remote_name
-    # DVC writes the header as ['remote "storage"'], so the section name that
-    # configparser sees keeps the single quotes.
+    # DVC writes ['remote "storage"'], and configparser keeps the single quotes.
     section = f"'remote \"{settings.dvc_remote_name}\"'"
     assert parser[section]["url"] == (
         f"s3://{settings.dvc_bucket}/{settings.dvc_remote_path}"
@@ -54,19 +44,14 @@ def test_dvc_config_declares_default_storage_remote(dvc_repo, settings) -> None:
 
 
 def test_dvc_config_contains_no_credentials(dvc_repo) -> None:
-    """The committed config must never carry keys.
-
-    Credentials belong in the environment or in .dvc/config.local, which DVC
-    git-ignores. This is the assertion form of that rule; the student bundle's
-    leak scan enforces the same thing at publish time.
-    """
+    """Credentials belong in the environment or in the git-ignored .dvc/config.local."""
     text = (dvc_repo / ".dvc" / "config").read_text()
     assert "access_key_id" not in text
     assert "secret_access_key" not in text
 
 
 def test_pointer_file_schema(measurements_pointer) -> None:
-    """A DVC 3 pointer has exactly four fields — the docs' examples are stale."""
+    """A DVC 3 pointer has exactly four fields."""
     document = yaml.safe_load(measurements_pointer.read_text())
     assert set(document) == {"outs"}
     out = document["outs"][0]
@@ -77,15 +62,7 @@ def test_pointer_file_schema(measurements_pointer) -> None:
 
 
 def test_data_gitignore_hides_the_tracked_file(dvc_repo, measurements_pointer) -> None:
-    """The tracked data file must be git-ignored, and `dvc add` is what did it.
-
-    Asserting the BEHAVIOUR rather than the literal contents of
-    `data/.gitignore`, for the same reason as the test above: DVC omits an entry
-    it can see an ancestor .gitignore already covers, so the rule may legitimately
-    live somewhere else. What must be true either way is that Git will not stage
-    the data — and that `dvc add` wrote its ignore file in the DATA directory
-    rather than at the repo root, which is the detail worth remembering.
-    """
+    """`dvc add` writes data/.gitignore, and Git will not stage the data file."""
     import subprocess
 
     assert (dvc_repo / "data" / ".gitignore").is_file(), (
@@ -111,12 +88,7 @@ def test_pointer_md5_matches_the_workspace_file(dvc_repo, measurements_pointer) 
 
 
 def test_dvc_lock_dep_matches_pointer_md5(dvc_lock, measurements_pointer) -> None:
-    """The join point of the whole week, guarded.
-
-    dvc.lock records what `prepare` actually consumed. That md5 must be the same
-    one the .dvc pointer publishes — otherwise the pipeline and the data version
-    are telling different stories.
-    """
+    """The data `prepare` consumed is the version the .dvc pointer names."""
     lock = yaml.safe_load(dvc_lock.read_text())
     assert lock["schema"] == "2.0"
 
@@ -126,7 +98,7 @@ def test_dvc_lock_dep_matches_pointer_md5(dvc_lock, measurements_pointer) -> Non
 
 
 def test_dvc_lock_records_param_values(dvc_lock, params) -> None:
-    """The lock stores param VALUES, which is how `repro` knows train is stale."""
+    """The lock stores param values, which is how `repro` knows a stage is stale."""
     lock = yaml.safe_load(dvc_lock.read_text())
     recorded = lock["stages"]["prepare"]["params"]["params.yaml"]
     assert recorded["random_seed"] == params["random_seed"]

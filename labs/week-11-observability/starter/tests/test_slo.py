@@ -1,14 +1,4 @@
-"""The SLO arithmetic, against numbers computed by hand.
-
-Every value asserted here was worked out on paper first. That is the only way
-to test arithmetic: a test that recomputes the implementation's own formula
-asserts that the code equals itself, which it always does, including when it is
-wrong.
-
-The burn-rate table is checked against the published source rather than against
-our implementation, because the whole authority of the table is that it is
-Google's and not ours. If someone "tidies" 14.4 to 14, this goes red.
-"""
+"""Tests for the SLO arithmetic, against numbers worked out by hand and the published table."""
 
 from __future__ import annotations
 
@@ -46,22 +36,13 @@ def test_slo_yaml_declares_both_objectives(doc):
 
 
 def test_no_objective_promises_perfection(doc):
-    """A 100% target is not ambitious, it is incoherent: it forbids deploying.
-
-    `load_slo` refuses it, and this asserts the refusal applies to what we
-    actually shipped rather than only to a hypothetical bad document.
-    """
+    """A 100% target forbids every deploy, so no shipped objective has one."""
     for objective in doc.objectives.values():
         assert 0.0 < objective.target < 1.0
 
 
 def test_every_burn_alert_has_a_shorter_short_window(doc):
-    """The short window exists to ask 'is this STILL happening?'.
-
-    One that is not shorter asks nothing, and the alert reverts to the
-    single-window behaviour the whole table exists to avoid: firing for an hour
-    after the incident ended, because the average still contains it.
-    """
+    """The short window checks that the problem is still happening."""
     for alert in doc.burn_alerts:
         assert parse_duration(alert.short_window) < parse_duration(alert.long_window)
 
@@ -70,12 +51,7 @@ def test_every_burn_alert_has_a_shorter_short_window(doc):
 
 
 def test_a_99_percent_target_is_seven_hours_twelve_minutes_a_month():
-    """0.01 * 30 days = 0.3 days = 7.2 hours = 7h 12m. Worked out on paper.
-
-    This is the number that makes an SLO a conversation rather than a slogan.
-    "We aim to be reliable" is unarguable; "we may be down for seven hours this
-    month" is something a product owner has an opinion about.
-    """
+    """0.01 * 30 days = 0.3 days = 7.2 hours = 7h 12m."""
     objective = Objective("availability", "", target=0.99, window_days=30)
     assert objective.error_budget == pytest.approx(0.01)
     assert objective.budget_seconds == pytest.approx(0.01 * 30 * SECONDS_PER_DAY)
@@ -84,7 +60,6 @@ def test_a_99_percent_target_is_seven_hours_twelve_minutes_a_month():
 
 
 def test_each_extra_nine_costs_a_factor_of_ten():
-    """The reason "just make it 99.99%" is not a free request."""
     minutes = []
     for target in (0.99, 0.999, 0.9999):
         objective = Objective("a", "", target=target, window_days=30)
@@ -103,13 +78,7 @@ def test_burn_rate_is_a_multiple_of_on_plan():
 
 
 def test_no_traffic_burns_nothing_and_that_is_a_real_hole():
-    """Zero events is not a violation — and a dead service has zero events.
-
-    This is deliberately asserted rather than merely handled, because it is the
-    gap `ServiceDown` (`up == 0`) exists to cover. An availability SLO on its own
-    cannot tell a healthy quiet night from a service that is not running, and a
-    team that believes otherwise has a blind spot with a dashboard over it.
-    """
+    """Zero events burn nothing, so a dead service looks healthy here. `ServiceDown` covers it."""
     objective = Objective("availability", "", target=0.99, window_days=30)
     assert burn_rate(0, 0, objective) == 0.0
     assert budget_remaining(0, 0, objective) == 1.0
@@ -120,7 +89,7 @@ def test_budget_remaining_is_clamped_not_negative():
     # Exactly on budget: 1 bad in 100 allowed at 99%.
     assert budget_remaining(1, 100, objective) == pytest.approx(0.0)
     assert budget_remaining(0.5, 100, objective) == pytest.approx(0.5)
-    # Well over. "You are at -400%" is a number people argue about; spent is spent.
+    # well over budget: clamped to 0, not negative
     assert budget_remaining(5, 100, objective) == 0.0
 
 
@@ -139,12 +108,7 @@ def test_time_to_exhaustion():
 
 
 def test_the_burn_rate_table_matches_the_sre_workbook(doc):
-    """Google SRE Workbook, "Alerting on SLOs", Table 5-8.
-
-    Asserted against the SOURCE, not against our arithmetic. The authority of
-    these numbers is that somebody else published them after operating large
-    systems, so a local "simplification" of 14.4 to 14 is a change of claim.
-    """
+    """Google SRE Workbook, "Alerting on SLOs", Table 5-8, checked against the source."""
     expected = {
         "fast": (14.4, "1h", "5m", 0.02, "page"),
         "medium": (6.0, "6h", "30m", 0.05, "page"),
@@ -161,11 +125,7 @@ def test_the_burn_rate_table_matches_the_sre_workbook(doc):
 
 
 def test_the_declared_budget_consumption_follows_from_the_arithmetic(doc):
-    """`burn_rate * long_window / window` must reproduce the published column.
-
-    This is the test that makes the table comprehensible rather than magic:
-    14.4x for one hour is not "very bad", it is exactly 2% of a 30-day budget.
-    """
+    """`burn_rate * long_window / window` gives the published column: 14.4x for 1h is 2%."""
     for alert in doc.burn_alerts:
         computed = alert.consumed_by_end_of_long_window(doc.window_days)
         assert computed == pytest.approx(alert.budget_consumed, rel=0.02), (
@@ -176,12 +136,7 @@ def test_the_declared_budget_consumption_follows_from_the_arithmetic(doc):
 
 
 def test_alert_thresholds_scale_with_the_budget(doc):
-    """A looser target has a bigger budget, so it takes more badness to burn it.
-
-    The latency objective (95%) has five times the budget of availability (99%),
-    so the same 14.4x burn rate is a five-times-larger error ratio. Thresholds
-    follow from the promise; they are not somebody's taste.
-    """
+    """Latency (95%) has five times the budget of availability (99%), so 5x the threshold."""
     availability = doc.objective("availability")
     latency = doc.objective("latency")
     fast = next(alert for alert in doc.burn_alerts if alert.name == "fast")
@@ -192,7 +147,6 @@ def test_alert_thresholds_scale_with_the_budget(doc):
 
 
 def test_fast_burn_exhausts_a_month_in_about_two_days(doc):
-    """The sentence that justifies paging for the fast burn."""
     availability = doc.objective("availability")
     fast = next(alert for alert in doc.burn_alerts if alert.name == "fast")
     hours = fast.time_to_exhaustion(availability) / 3600
@@ -212,17 +166,12 @@ def test_durations_parse(text, seconds):
 
 @pytest.mark.parametrize("bad", ["5min", "h", "", "-1h", "0m", "1w", "five minutes"])
 def test_a_duration_we_do_not_understand_is_refused_not_guessed(bad):
-    """`"5min"` silently becoming 5 seconds would produce an alerting rule that
-    is wrong in a direction nobody would ever look at again."""
+    """`"5min"` must not silently become 5 seconds."""
     with pytest.raises(ValueError):
         parse_duration(bad)
 
 
-# ── The validator refuses documents that would produce a useless rule ────────
-#
-# `load_slo` is the last place a typo can be caught cheaply. After this, the
-# number is in a PromQL expression, and a wrong threshold there is an alert that
-# quietly never fires.
+# ── The validator ────────────────────────────────────────────────────────────
 
 
 def write_slo(tmp_path, **overrides):

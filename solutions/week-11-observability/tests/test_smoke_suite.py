@@ -1,22 +1,7 @@
-"""The smoke suite, tested — including the case where it must FAIL.
+"""The smoke suite, in-process: it passes on the shipped model and fails on the C=0.001 model.
 
-A check that has never failed is not known to work. Week 4 shipped a
-`check_locks.sh` that exited 0 having checked nothing; Week 7 shipped a
-`ci-fail` target that reported success while planting no fault. Both were
-believed for a while. A smoke test is the same shape of risk with higher stakes,
-because it is the last thing between a bad model and real traffic.
-
-So this file does two things:
-
-  * asserts the suite PASSES against the shipped logistic regression;
-  * asserts it FAILS against the `C: 0.001` model — the one Week 6 built to
-    break the gate, which predicts the negative class for **all 192** test
-    patients and still scores ROC-AUC 0.8407, higher than the model we ship.
-    That model loads fine, answers `/health` with a 200, and passes every probe
-    Week 9 wrote.
-
-Both run in-process against a `TestClient`. No cluster, no Docker, no server, no
-network — so the autograder runs them, and so does a student on a train.
+The C=0.001 model loads, answers /health with 200 and passes every probe, yet flags none of
+the 192 test patients.
 """
 
 from __future__ import annotations
@@ -33,10 +18,12 @@ from week_11_observability.config import load_settings
 from week_11_observability.data import build_dataset
 from week_11_observability.model import build_model
 from week_11_observability.pipeline import _hyperparams
+from week_11_observability.release import load_release, problems
 from week_11_observability.smoke import (
     check_behaviour,
     check_contract,
     check_identity,
+    check_protocol,
     run_smoke,
 )
 
@@ -44,13 +31,7 @@ pytestmark = pytest.mark.eval
 
 
 def _published_client(tmp_path, *, C: float, verdict: str, version: str) -> TestClient:
-    """A store version, on disk, served by the app — the deployed shape.
-
-    Writing `provenance.json` beside the model is not test scaffolding; it is
-    exactly what `make model-publish` does, and it is what lets `/health` report
-    an identity at all. The app is then pointed at that directory, which is what
-    KServe's mount does in the cluster.
-    """
+    """A store version on disk (model.pkl and provenance.json), served by the app."""
     settings = load_settings()
     hyperparams = {**_hyperparams(settings), "C": C}
     x_train, _, y_train, _ = build_dataset(settings)
@@ -91,50 +72,16 @@ def good_client(tmp_path_factory) -> TestClient:
 
 @pytest.fixture(scope="module")
 def broken_client(tmp_path_factory) -> TestClient:
-    """Week 6's exhibit: over-regularised until it flags nobody."""
+    """The C=0.001 model, published by force with its NO-GO."""
     return _published_client(
         tmp_path_factory.mktemp("store-bad"), C=0.001, verdict="NO-GO", version="v3"
     )
 
 
-def test_the_suite_passes_against_the_model_we_actually_ship(good_client):
-    report = run_smoke(good_client, expect_version="v1")
-    assert report["verdict"] == "PASS", report["checks"]
-    assert report["failed"] == 0
+# ── Shipped checks: identity, contract, protocol ─────────────────────────────
 
 
-def test_the_suite_fails_against_a_healthy_pod_serving_a_broken_model(broken_client):
-    """**The most important test in the lab.**
-
-    Everything the platform can see is fine: the model deserialised, `/health`
-    returns 200, the readiness probe passes, every request gets an HTTP 200. A
-    rollout that watched only the platform would promote this.
-
-    What fails is behaviour — the model says "no diabetes" to a patient with a
-    glucose of 183 and a BMI of 40.5 — and identity, because the gate refused it
-    and `provenance.json` says so.
-    """
-    report = run_smoke(broken_client, expect_version="v3")
-    failed = {check["name"] for check in report["checks"] if not check["passed"]}
-
-    assert report["verdict"] == "FAIL"
-    assert failed == {"behaviour.positive_is_positive", "identity.gate"}, failed
-
-    # Read that set carefully, because it is the honest result rather than the
-    # tidy one. TWO checks caught this model: the golden positive came back
-    # negative, and the recorded gate verdict was a NO-GO. The probability
-    # SPREAD check did not catch it (measured: 0.1754, above the 0.10 floor), and
-    # neither did the contract, the protocol or `/health`. Every check catches a
-    # different failure; a suite is a set of partial checks, and the ones that
-    # passed here are exactly why you need more than one.
-
-
-def test_the_health_check_alone_cannot_tell_the_two_apart(good_client, broken_client):
-    """Week 9's honest limitation, as an assertion.
-
-    Both endpoints answer `/health` with a 200 and a loaded model. That is the
-    entire basis on which Kubernetes decides to send them traffic.
-    """
+def test_the_health_check_alone_cannot_tell_the_two_models_apart(good_client, broken_client):
     for client in (good_client, broken_client):
         response = client.get("/health")
         assert response.status_code == 200
@@ -142,22 +89,75 @@ def test_the_health_check_alone_cannot_tell_the_two_apart(good_client, broken_cl
 
 
 def test_identity_checks_the_version_the_rollout_meant_to_deploy(good_client):
-    """"Something is serving" is a ping. "v1 is serving" is a test."""
     checks = {c.name: c for c in check_identity(good_client, expect_version="v2")}
     assert not checks["identity.version"].passed
     assert "serving v1" in checks["identity.version"].detail
 
 
+def test_identity_fails_a_model_the_gate_refused(broken_client):
+    checks = {c.name: c for c in check_identity(broken_client)}
+    assert not checks["identity.gate"].passed
+
+
 def test_the_contract_check_names_the_failing_rule(good_client):
     (check,) = check_contract(good_client)
     assert check.passed
-    assert "greater_than" in check.detail, (
-        "a 422 that does not name the check teaches a caller nothing"
-    )
+    assert "greater_than" in check.detail
+
+
+def test_both_routes_agree(good_client):
+    (check,) = check_protocol(good_client)
+    assert check.passed, check.detail
+
+
+# ── The behaviour check ───────────────────────────────────────────────────────
+
+
+def test_the_behaviour_check_returns_three_named_checks(good_client):
+    names = [check.name for check in check_behaviour(good_client)]
+    assert names == [
+        "behaviour.positive_is_positive",
+        "behaviour.negative_is_negative",
+        "behaviour.not_a_constant",
+    ]
 
 
 def test_the_behaviour_check_reports_the_probabilities_it_saw(good_client):
-    """A check that only says pass/fail is hard to act on at 3 a.m."""
     details = " ".join(check.detail for check in check_behaviour(good_client))
     assert "p=" in details
     assert "spread" in details
+
+
+def test_the_shipped_model_behaves(good_client):
+    assert all(check.passed for check in check_behaviour(good_client, min_spread=0.1))
+
+
+def test_the_spread_check_uses_the_threshold_it_is_given(good_client):
+    """A spread can never reach 1.0, so this threshold must fail."""
+    checks = {c.name: c for c in check_behaviour(good_client, min_spread=1.0)}
+    assert not checks["behaviour.not_a_constant"].passed
+
+
+def test_the_suite_passes_against_the_model_we_ship(good_client):
+    report = run_smoke(good_client, expect_version="v1", min_spread=0.1)
+    assert report["verdict"] == "PASS", report["checks"]
+
+
+def test_the_suite_fails_against_a_healthy_pod_serving_a_broken_model(broken_client):
+    """The platform sees nothing wrong; the smoke test must."""
+    report = run_smoke(broken_client, expect_version="v3", min_spread=0.1)
+    failed = {check["name"] for check in report["checks"] if not check["passed"]}
+    assert report["verdict"] == "FAIL"
+    assert {"behaviour.positive_is_positive", "identity.gate"} <= failed, failed
+
+
+def test_your_release_spread_passes_the_shipped_model(good_client):
+    """The threshold in release.yaml must not fail the model you ship today."""
+    release = load_release()
+    if problems(release):
+        pytest.skip("release.yaml is not complete")
+    spread = release["smoke"]["min_probability_spread"]
+    checks = {c.name: c for c in check_behaviour(good_client, min_spread=spread)}
+    assert checks["behaviour.not_a_constant"].passed, (
+        f"min_probability_spread {spread} fails the model you ship: {checks['behaviour.not_a_constant'].detail}"
+    )

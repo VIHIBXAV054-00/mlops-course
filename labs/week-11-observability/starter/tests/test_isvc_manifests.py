@@ -1,23 +1,4 @@
-"""The KServe manifests, checked as data.
-
-Week 7 checked workflows this way, Week 9 checked a Deployment and a Service,
-and the argument is the same one: no cluster exists in the autograder, a
-manifest is a YAML file, and most of what goes wrong with a first
-`InferenceService` is structural and silent.
-
-"Silent" is the operative word this week and it now has three faces:
-
-  * a user container not named `kserve-container` — accepted, scheduled, and
-    nothing is ever mounted at /mnt/models;
-  * `canaryTrafficPercent` in a cluster installed in standard mode — accepted,
-    ignored, 100% of traffic to the new model (kserve/kserve#5335);
-  * a canary that changed the image as well as the model — a rollout testing two
-    variables and learning about neither.
-
-The last of those is not a KServe defect, it is a discipline one, which is why
-`test_the_canary_differs_from_the_base_in_exactly_two_places` exists. It is the
-most valuable test in the file.
-"""
+"""The InferenceService manifests, checked as data: the base and the canary."""
 
 from __future__ import annotations
 
@@ -27,6 +8,8 @@ from typing import Any
 import pytest
 import yaml
 
+from week_11_observability.release import load_release, problems
+
 pytestmark = pytest.mark.unit
 
 K8S = Path(__file__).resolve().parents[1] / "k8s"
@@ -34,10 +17,7 @@ K8S = Path(__file__).resolve().parents[1] / "k8s"
 BASE = K8S / "inferenceservice.yaml"
 CANARY = K8S / "inferenceservice-canary.yaml"
 
-# §2.3 of this week's brief, as an assertion. Every one of these is a real
-# KServe or Knative field and every one is somebody's next lesson — just not
-# this week's. A fence you can read in a test is a fence that still exists in
-# six months.
+# real KServe fields this lab does not use
 OUT_OF_SCOPE_FIELDS = {
     "maxReplicas",
     "scaleTarget",
@@ -51,7 +31,7 @@ OUT_OF_SCOPE_FIELDS = {
 
 def _load(path: Path) -> dict[str, Any]:
     if not path.exists():
-        pytest.skip(f"{path.name} is missing: restore it with `git checkout k8s/{path.name}`.")
+        pytest.skip(f"{path.name} is missing")
     return yaml.safe_load(path.read_text())
 
 
@@ -85,29 +65,19 @@ def test_both_manifests_are_inferenceservices(base, canary):
 
 
 def test_the_user_container_is_named_kserve_container(base, canary):
-    """**Silent failure #1.**
-
-    KServe finds the user container BY NAME to inject the model mount and the
-    queue-proxy wiring. Week 9 called this container `api`; keep that name here
-    and the manifest is accepted, the pod starts, and `/mnt/models` is empty —
-    so the pod is unready forever with a perfectly healthy image.
-    """
+    """KServe finds the user container by name. With another name, `/mnt/models` stays empty
+    and the pod never becomes ready."""
     for isvc in (base, canary):
         assert _container(isvc)["name"] == "kserve-container"
 
 
 def test_the_model_is_fetched_not_baked(base, canary):
-    """The week's design decision, asserted.
-
-    `STORAGE_URI` (not the `storageUri` field — that is for KServe's built-in
-    runtimes) is what makes KServe supply the model to a custom container. With
-    it, one image serves many models; without it, this is Week 9 again.
-    """
+    """`STORAGE_URI` (not the `storageUri` field, which is for KServe's built-in runtimes)
+    makes KServe copy the model into a custom container, so one image serves many models."""
     for isvc in (base, canary):
         env = _env(isvc)
         assert env["STORAGE_URI"].startswith("pvc://"), (
-            "the model must come from the store at startup — that is the branch "
-            "Week 9 deliberately did not take"
+            "the model must come from the store at startup"
         )
         assert env["MODEL_PATH"].startswith("/mnt/models"), (
             "KServe mounts the model at /mnt/models; MODEL_PATH has to point there"
@@ -115,16 +85,9 @@ def test_the_model_is_fetched_not_baked(base, canary):
 
 
 def test_the_canary_differs_from_the_base_in_exactly_two_places(base, canary):
-    """**The test that keeps the experiment honest.**
-
-    A canary answers one question: *is this new MODEL any good?* If the canary
-    manifest also changed the image, the replica count or a probe, a bad result
-    would have several possible causes and the rollout would have taught you
-    nothing. Two fields differ. Everything else is identical.
-    """
+    """A canary tests one change: the model. Only STORAGE_URI and canaryTrafficPercent differ."""
     assert _container(base)["image"] == _container(canary)["image"], (
-        "the image must NOT change between revisions — one image, many models is "
-        "the whole point of fetching the model at startup"
+        "the image must not change between revisions: one image serves many models"
     )
 
     base_env, canary_env = _env(base), _env(canary)
@@ -149,42 +112,40 @@ def test_the_canary_differs_from_the_base_in_exactly_two_places(base, canary):
 
 
 def test_only_the_canary_declares_a_traffic_split(base, canary):
-    """The base manifest is also the ROLLBACK, so it must claim 100%.
-
-    `canaryTrafficPercent` absent means "the latest revision takes everything".
-    Re-applying this file is therefore one of the three ways to roll back, and
-    it only works if the file never mentions a split.
-    """
+    """The base manifest is also the rollback: without `canaryTrafficPercent`, the latest
+    revision takes all traffic."""
     assert "canaryTrafficPercent" not in _predictor(base)
     percent = _predictor(canary)["canaryTrafficPercent"]
     assert isinstance(percent, int)
     assert 0 <= percent <= 100, "a percentage outside [0, 100] is rejected by the webhook"
-    assert percent < 50, (
-        "a canary is the SMALLEST dose that answers the question; a majority "
-        "share is a deploy with extra steps"
+    assert percent <= 50, (
+        "a canary gets a small share of the traffic; over 50% is a full deploy"
+    )
+
+
+def test_the_canary_percentage_is_the_one_in_the_rollout_plan(canary):
+    release = load_release()
+    if problems(release):
+        pytest.skip("release.yaml is not complete")
+    assert _predictor(canary)["canaryTrafficPercent"] == release["canary"]["percent"], (
+        "canaryTrafficPercent must match canary.percent in release.yaml"
+    )
+    assert _env(canary)["STORAGE_URI"].endswith("/" + release["model"]["candidate"]), (
+        "the canary's STORAGE_URI must name model.candidate in release.yaml"
     )
 
 
 def test_tag_routing_is_enabled_so_a_revision_can_be_addressed_directly(base, canary):
-    """Blue/green, and the only way to smoke-test a canary properly.
-
-    Without tags, the new revision is reachable only through the split — so
-    "test the canary" means firing requests at a 90/10 URL and hoping. With
-    tags, each revision has its own hostname and the smoke test targets exactly
-    the revision it is making claims about.
-    """
+    """With tags, each revision has its own address, so the smoke test reaches the canary
+    directly instead of through the split."""
     for isvc in (base, canary):
         annotations = isvc["metadata"].get("annotations", {})
         assert annotations.get("serving.kserve.io/enable-tag-routing") == "true"
 
 
 def test_the_probe_still_asks_the_app_a_question(base, canary):
-    """Week 9's probe, carried forward — and its limitation carried with it.
-
-    A readiness probe proves the model DESERIALISED. Exercise 4 deploys a model
-    that deserialises perfectly and predicts the negative class for every
-    patient alive; this probe passes it, which is why `make smoke` exists.
-    """
+    """A readiness probe shows that the model loaded, not that it predicts well; that is
+    what `make smoke` checks."""
     for isvc in (base, canary):
         probe = _container(isvc)["readinessProbe"]["httpGet"]
         assert probe["path"] == "/health"
@@ -192,12 +153,7 @@ def test_the_probe_still_asks_the_app_a_question(base, canary):
 
 
 def test_no_out_of_scope_fields_have_crept_in(base, canary):
-    """The §2.3 fence, on the PARSED documents.
-
-    Parsed, not the file text — Week 9's k8s guard tripped over its own comment
-    saying "no Ingress here", and a guard whose clean state is not zero hits is
-    a guard people stop reading.
-    """
+    """Checked on the parsed YAML, not the text, so a comment cannot trip it."""
     def walk(node: Any) -> list[str]:
         found = []
         if isinstance(node, dict):

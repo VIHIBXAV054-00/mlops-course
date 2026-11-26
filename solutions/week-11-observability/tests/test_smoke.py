@@ -1,10 +1,4 @@
-"""Regression lock for the canonical Week 1-3 dataset.
-
-These tests operate on `data/diabetes.csv`, NOT on the DVC-tracked dataset, and
-they are unchanged in substance from Week 3. Their job is to prove that adding
-data versioning did not disturb the baseline the course has been quoting since
-Week 1. Nothing here needs Docker, Silo or DVC.
-"""
+"""The baseline on the committed `data/diabetes.csv` still reproduces."""
 
 import pytest
 
@@ -45,7 +39,7 @@ def test_evaluate_model_keys(settings) -> None:
 
 
 def test_seed_42_metrics(settings) -> None:
-    """Seed 42 on diabetes.csv still reproduces the Week 1 baseline."""
+    """Seed 42 on diabetes.csv reproduces the baseline metrics."""
     x_train, x_test, y_train, y_test = build_dataset(settings)
     model = train_logistic_regression(x_train, y_train, settings)
     metrics = evaluate_model(model, x_test, y_test)
@@ -54,7 +48,7 @@ def test_seed_42_metrics(settings) -> None:
 
 
 def test_build_model_reproduces_pinned_baselines(settings) -> None:
-    """build_model at sklearn's defaults reproduces both locked baselines."""
+    """build_model at sklearn's defaults reproduces both baselines."""
     x_train, x_test, y_train, y_test = build_dataset(settings)
 
     logreg = build_model("logreg", {"C": 1.0}, settings)

@@ -1,16 +1,5 @@
-# The cluster Week 10 runs on. Two differences from Week 9's bare
-# `kind create cluster`:
-#
-#   1. `extraMounts` bind-mounts this lab's ./model-store directory into the
-#      node. That directory is the cluster's model store: KServe fetches a
-#      model from it at pod startup (`storageUri: pvc://...`) instead of the
-#      model being baked into the image, which is the branch Week 9 did not
-#      take. A relative hostPath is resolved against the directory you run
-#      `kind create cluster` from — always this lab's root.
-#   2. Ports 80/443 on the node are published to the host, so the Istio
-#      ingress gateway KServe routes through is reachable without a
-#      port-forward. Week 9 taught why port-forward is the wrong instrument
-#      once traffic is being split.
+# The kind cluster. It mounts ./model-store into the node as the model store,
+# and publishes the ingress port to the host. Create it from this lab's root.
 kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
 name: mlops

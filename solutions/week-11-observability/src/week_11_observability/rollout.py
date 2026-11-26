@@ -1,29 +1,12 @@
-"""The model store: publishing a model version for a cluster to fetch.
-
-Week 9 shipped a model by BUILDING AN IMAGE around it. This week the image
-never changes and the model is published into a store the cluster reads at pod
-startup (`storageUri: pvc://diabetes-models/v2`). So "release a model" stops
-being "run docker build" and becomes "put a directory here" — which is faster,
-and which is exactly why it needs a gate.
+"""The model store: publish a model version for the cluster to fetch.
 
     model-store/
-      v1/  model.pkl  provenance.json      <- logistic regression, GO
-      v2/  model.pkl  provenance.json      <- random forest, GO
-      v3/  model.pkl  provenance.json      <- C=0.005, NO-GO (published on purpose)
+      v1/  model.pkl  provenance.json   logistic regression, GO
+      v2/  model.pkl  provenance.json   random forest, GO
+      v3/  model.pkl  provenance.json   C=0.001, NO-GO, published with FORCE=1
 
-THE FOURTH DOOR. Week 6 gave the gate teeth at `register`; Week 9 gave it teeth
-at `make image`, calling a container "a third door into production". A model
-store is the fourth, and it is the easiest one to walk through: copying a file
-needs no build, no registry and no credentials. `publish_version` therefore
-refuses a non-GO verdict unless it is forced — and when it is forced it records
-the real verdict in `provenance.json`, so the pod can be asked and will tell
-the truth. That is Exercise 4: a NO-GO model, serving happily, every probe
-green, caught by a smoke test rather than by the platform.
-
-PROVENANCE TRAVELS WITH THE MODEL. Week 9's provenance lived in the image
-(`models/baked.json`), because one image meant one model. One image serving
-three models needs the identity to sit beside the weights, or `/health` cannot
-tell you which of the three you are talking to.
+Publishing is a file copy, so it is a fourth way into production after `register`, `promote`
+and `docker build`, and it asks the gate first.
 """
 
 from __future__ import annotations
@@ -37,10 +20,7 @@ from typing import Any
 
 from .config import Settings, load_settings
 
-# What a store version must contain to be deployable. The manifest names
-# model.pkl explicitly (MODEL_PATH=/mnt/models/model.pkl), so a version missing
-# it produces a pod that starts, fails to load, and is held out of the Service
-# by its readiness probe — a slow way to learn a fast fact.
+# the files of a store version; the manifest reads MODEL_PATH=/mnt/models/model.pkl
 MODEL_FILE = "model.pkl"
 PROVENANCE_FILE = "provenance.json"
 
@@ -54,15 +34,7 @@ class PublishResult:
 
 
 def store_dir(settings: Settings) -> Path:
-    """Where published model versions live.
-
-    A plain directory in the lab, bind-mounted into the kind node by
-    `k8s/kind-cluster.yaml` and exposed to pods as a PersistentVolume. A real
-    deployment would use object storage — `s3://`, `gs://` — and the only thing
-    that changes is the `storageUri` scheme. Week 4 already built the Silo
-    bucket that would serve; it is deliberately not used here so that the whole
-    Kubernetes half of this lab runs with the Compose stack DOWN.
-    """
+    """Where published versions live: a folder the kind node mounts as a PersistentVolume."""
     return settings.project_root / "model-store"
 
 
@@ -85,18 +57,9 @@ def _read_json(path: Path) -> dict[str, Any]:
 
 
 def build_provenance(settings: Settings, version: str) -> dict[str, Any]:
-    """Everything a running pod should be able to say about itself.
+    """What a running pod can say about its model, read from what the pipeline wrote.
 
-    Read from what the pipeline already wrote — the gate report, the metrics,
-    the MLflow run id, the DVC pointer — and NOT from the registry at pod
-    startup, because a published model must be identifiable by a pod that has
-    no network. Same rule as Week 9's `/health`, one indirection further out:
-    the lookup happens once, here, at publish time, by a human with a stack.
-
-    The registry version is best-effort for exactly that reason. With the stack
-    down it is recorded as `null` rather than guessed, and `/health` then says
-    so — Week 9's rule that a container never claims a provenance it does not
-    have.
+    The registry version is looked up once, here; with the stack down it is null.
     """
     from . import pipeline
 
@@ -123,23 +86,9 @@ def build_provenance(settings: Settings, version: str) -> dict[str, Any]:
 
 
 def _registry_version(settings: Settings, run_id: str | None) -> str | None:
-    """The registry version produced by THIS run, if there is one.
+    """The registry version made from this run, or None when there is no registry or no version.
 
-    Not the champion's version, and the difference is a provenance bug waiting
-    to happen: a canary is by definition not the champion, so stamping the
-    champion's number on it would make `/health` lie about exactly the model a
-    rollout is asking questions about. The join key is the MLflow run id, which
-    the train stage already wrote to disk.
-
-    `mlflow_available` is checked first, and the two-second probe is not
-    politeness: the MLflow client's own retry policy takes over a minute to give
-    up on a closed port, and this lab is designed to run with the stack DOWN.
-    A publish step that hangs for a minute is a publish step nobody runs.
-
-    Returns None when there is no registry, no run, or no registered version for
-    that run — all three are ordinary, and a null is honest where a guess is
-    not. A store version whose `model_version` is null is a model the registry
-    never accepted, which for Exercise 4's exhibit is precisely the truth.
+    Not the champion's version: a canary is not the champion.
     """
     from . import tracking
 
@@ -152,7 +101,7 @@ def _registry_version(settings: Settings, run_id: str | None) -> str | None:
         versions = client.search_model_versions(
             f"name='{settings.registered_model_name}' and run_id='{run_id}'"
         )
-    except Exception:  # noqa: BLE001 -- the stack being down is an ordinary state
+    except Exception:  # noqa: BLE001 -- the stack may be down
         return None
     return str(versions[0].version) if versions else None
 
@@ -173,30 +122,24 @@ def publish_version(
     settings: Settings | None = None,
     force: bool = False,
 ) -> PublishResult:
-    """Copy the current model into the store as `version`.
+    """Copy the current model into the store as `version`, with its provenance.
 
-    Refuses unless `reports/gate.json` records a GO. `force=True` publishes
-    anyway and records the real verdict — that is not a loophole, it is the
-    exhibit for Exercise 4, and the honesty of the recorded verdict is what
-    makes the exhibit teachable rather than merely broken.
+    Refuses unless `reports/gate.json` records a GO. `force=True` publishes anyway and records
+    the real verdict, so the pod still reports it.
     """
     settings = settings or load_settings()
     model = settings.models_dir / MODEL_FILE
     if not model.exists():
         raise FileNotFoundError(
-            f"{model} does not exist. Run `make repro` first — publishing a model "
-            "the pipeline never produced is not a thing this store can do."
+            f"{model} does not exist. Run `make repro` first."
         )
 
     provenance = build_provenance(settings, version)
     verdict = provenance.get("gate_verdict")
     if verdict != "GO" and not force:
         raise SystemExit(
-            f"REFUSING to publish {version}: the recorded gate verdict is {verdict!r}.\n"
-            "A model store is the FOURTH door into production (after register, promote\n"
-            "and docker build), and it is the widest one — publishing is a file copy.\n"
-            "Week 6 said only a GO model may be released, so the gate applies here too.\n"
-            "Pass FORCE=1 if you are deliberately staging the Exercise 4 exhibit."
+            f"REFUSING to publish {version}: the recorded gate verdict is {verdict!r}. "
+            "Only a GO model may be published; FORCE=1 publishes it anyway."
         )
 
     target = store_dir(settings) / version

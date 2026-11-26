@@ -46,7 +46,7 @@ A full-marks answer has these parts:
   example or consequence. Three to five sentences.
 - **Scenario question:** your decision in the first sentence. Then the practice you use and why it fits
   this situation, what it costs, and what it still does not catch. More than one decision can earn full
-  marks if the justification is sound. About half a page.
+  marks if the justification is sound. Six to ten sentences.
 - **Drawing task:** the parts in the right order, each part labelled, and the failure each check stops.
   Boxes and arrows are enough.
 

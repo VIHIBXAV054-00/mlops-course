@@ -9,7 +9,7 @@ metadata:
     serving.kserve.io/enable-tag-routing: "true"
 spec:
   predictor:
-    canaryTrafficPercent: 10  # 0 rolls back, removing the line promotes
+    canaryTrafficPercent: 10  # canary.percent in release.yaml; 0 rolls back, removing it promotes
     minReplicas: 1  # keeps one pod running, so a measurement never waits for a cold start
     containers:
       - name: kserve-container  # KServe mounts the model only into a container with this name

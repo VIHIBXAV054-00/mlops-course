@@ -64,7 +64,7 @@ def _one_feature(policy, column="glucose", method="psi", threshold=0.22):
 # ── The argument-order trap ──────────────────────────────────────────────────
 
 
-def test_psi_is_symmetric_so_a_swapped_argument_order_is_INVISIBLE(
+def test_psi_is_symmetric_so_a_swapped_argument_order_is_invisible(
     policy, reference, cohorts
 ):
     """`Report.run()` takes (current, reference), and psi gives the same number either way.

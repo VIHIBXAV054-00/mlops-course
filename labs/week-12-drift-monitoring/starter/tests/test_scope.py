@@ -207,7 +207,7 @@ def test_fastapi_was_already_installed_before_this_week_declared_it():
     assert importlib.util.find_spec("fastapi") is not None
 
 
-def test_evidently_is_declared_in_a_GROUP_and_not_in_the_runtime_dependencies():
+def test_evidently_is_declared_in_a_group_and_not_in_the_runtime_dependencies():
     """The serving-path guard relies on `evidently` staying out of the runtime dependencies."""
     import tomllib
 

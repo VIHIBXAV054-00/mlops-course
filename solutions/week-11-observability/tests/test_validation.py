@@ -1,8 +1,4 @@
-"""The report, the sentinel conversion, and the corrupted-batch exhibit.
-
-The corrupted batch is git-committed, so these tests are real tests everywhere,
-including in the autograder with Docker stopped.
-"""
+"""The validation report, the sentinel conversion and the committed corrupted batch."""
 
 from __future__ import annotations
 
@@ -23,7 +19,7 @@ from week_11_observability.validation import (
 
 pytestmark = pytest.mark.data
 
-# Measured on datasets/quality/broken_batch.csv (60 rows, 4 faults).
+# datasets/quality/broken_batch.csv: 60 rows, 4 faults.
 EXPECTED_FAILURE_CASES = 7
 
 EXPECTED_BY_CHECK = {
@@ -56,13 +52,7 @@ def test_every_injected_fault_is_caught_at_the_documented_row(broken_batch):
 
 
 def test_one_bad_cell_can_produce_several_failure_cases(broken_batch):
-    """Worth knowing before you count rows in a report.
-
-    `glucose` carries ONE edit and produces FOUR cases: coercion failed, the
-    dtype check failed, and then the two range checks were attempted on text and
-    raised TypeError. The lesson for reading a report: fix dtype errors first,
-    because everything downstream of them is noise.
-    """
+    """One bad glucose cell gives four cases (coercion, dtype, two range checks), so fix dtype errors first."""
     report = validate_frame(read_raw(broken_batch), RawMeasurements, broken_batch.name)
     assert report["by_column"]["glucose"] == 4
 
@@ -77,7 +67,7 @@ def test_a_dtype_error_is_reported_with_the_offending_value(broken_batch):
 
 
 def test_sentinel_counts_match_the_canonical_dataset(settings):
-    """The zeros that have been in this dataset since Week 1, finally counted."""
+    """The sentinel zeros in the canonical dataset, per column."""
     frame = pd.read_csv(settings.data_path)
     assert sentinel_counts(frame) == {
         "glucose": 5,
@@ -117,12 +107,7 @@ def test_to_nullable_does_not_mutate_its_input():
 
 
 def test_to_nullable_fills_nothing_in():
-    """The conversion states a fact; it does not guess a value.
-
-    Imputation is a modelling decision and lives in the sklearn Pipeline, so
-    that it travels with the model to serving. If this test ever fails because
-    someone "helpfully" imputed here, the skew is back.
-    """
+    """Imputation belongs in the sklearn Pipeline, so it travels with the model."""
     converted = to_nullable(pd.DataFrame({"glucose": [0, 148, 0]}))
     assert converted["glucose"].isna().sum() == 2
 
@@ -140,11 +125,7 @@ def test_report_round_trips_through_json(tmp_path):
 
 
 def test_report_is_json_serialisable_with_no_pandas_objects(broken_batch):
-    """It goes into Git, into an MLflow artifact and into an assertion.
-
-    None of those want a numpy int64 masquerading as an int, which is why the
-    report is built out of plain primitives.
-    """
+    """The report holds plain Python values, not numpy types."""
     report = validate_frame(read_raw(broken_batch), RawMeasurements, broken_batch.name)
     round_tripped = json.loads(json.dumps(report))
     assert round_tripped == report
@@ -155,7 +136,7 @@ def test_read_report_returns_empty_when_absent(tmp_path):
 
 
 def test_report_records_the_true_count_even_when_truncated(settings):
-    """No silent caps. `n_failure_cases` is the real number, always."""
+    """`n_failure_cases` is the real count, even when the list is truncated."""
     from week_11_observability.schemas import MODEL_INPUT_COLUMNS, ModelInput
     from week_11_observability.validation import MAX_REPORTED_CASES
 

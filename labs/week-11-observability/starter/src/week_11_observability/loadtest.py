@@ -1,52 +1,23 @@
-"""Load testing, and measuring a traffic split.
+"""Load testing, and counting a traffic split.
 
-Two questions, one instrument, because they are the same measurement read two
-ways:
-
-  * **Where does the traffic go?** Send N requests and tally which revision
-    answered. A `canaryTrafficPercent: 10` you cannot count is a comment.
-  * **What does it do under concurrency?** Send N requests C at a time and
-    report throughput, error rate and p50/p95/p99. Week 9 measured one request
-    at a time and deliberately stopped there; concurrency is where a service
-    finds out what it actually promised.
-
-WHY NOT `hey`, `k6` OR `locust`. KServe's own docs reach for `hey`, and in
-production you should too — they are better tools than this file. Three reasons
-to write ~100 lines instead, and the third is the important one:
-
-  1. No new host tool. The course already installed `kind` and `kubectl` this
-     term, and `httpx` has been in the lock since Week 8.
-  2. **It runs INSIDE the cluster, as a Job.** Week 9's most expensive lesson
-     was that `kubectl port-forward` is not a load balancer — it forwards to one
-     pod and holds a connection to it, so measuring a rollout through it
-     measures the forward. Every number in this module is taken from a pod, over
-     the cluster-local address, through the same route real traffic uses.
-  3. **It attributes every response to a revision.** A generic load generator
-     reports "200 OK" 500 times; this one reports which model version produced
-     each of them, which is what makes a canary observable rather than
-     declared.
-
-ON THE ARITHMETIC. `percentile` is a pure function over a list, so the maths is
-unit-tested offline against known inputs (`tests/test_loadtest.py`) rather than
-trusted because the output looked plausible. Percentiles, never a mean: Week 9's
-note holds, and it holds harder under concurrency, where the tail is the part
-that moves.
+`split-measure` sends requests and counts which store version and revision answered each one.
+`loadtest` sends them at rising concurrency and reports throughput, error rate and
+p50/p95/p99. Both run inside the cluster as a Job, so the requests take the same route as real
+traffic.
 """
 
 from __future__ import annotations
 
 import asyncio
-import math
 import time
 from collections import Counter
 from dataclasses import dataclass, field
 from typing import Any
 
 import httpx
+import numpy as np
 
-# The one patient every request in a load test sends. Deliberately a legal,
-# unremarkable row: a load test measures the SERVICE, so the payload must not
-# be the interesting variable. Contract rejection is the smoke test's job.
+# A legal, ordinary patient: a load test measures the service, not the model.
 PROBE_PATIENT = {
     "pregnancies": 6.0,
     "glucose": 148.0,
@@ -66,7 +37,7 @@ class LoadResult:
     wall_seconds: float
     latencies_ms: list[float] = field(default_factory=list)
     statuses: Counter = field(default_factory=Counter)
-    # (store_version, revision) -> count. The canary tally.
+    # (store_version, revision) -> count
     served_by: Counter = field(default_factory=Counter)
 
     @property
@@ -79,20 +50,10 @@ class LoadResult:
 
 
 def percentile(values: list[float], p: float) -> float:
-    """The p-th percentile by nearest-rank, on a copy, sorted.
-
-    Nearest-rank rather than interpolation: with a few hundred samples the
-    difference is noise, and a percentile that is an ACTUAL OBSERVED REQUEST is
-    easier to defend in a conversation than an interpolated one that nobody
-    experienced. Say which definition you used — there are nine in common use.
-    """
+    """The p-th percentile by nearest rank: always a latency some request really had."""
     if not values:
         return 0.0
-    ordered = sorted(values)
-    # Nearest-rank: the smallest value at or above which p% of the samples lie.
-    rank = math.ceil(p / 100.0 * len(ordered))
-    rank = min(max(rank, 1), len(ordered))
-    return ordered[rank - 1]
+    return float(np.percentile(values, p, method="inverted_cdf"))
 
 
 async def _one_request(client: httpx.AsyncClient, result: LoadResult) -> None:
@@ -104,9 +65,7 @@ async def _one_request(client: httpx.AsyncClient, result: LoadResult) -> None:
             body = response.json()
             result.served_by[(body.get("store_version"), body.get("revision"))] += 1
     except httpx.HTTPError:
-        # A connection refused during a rollout IS the measurement. Recording it
-        # as status 0 keeps it in the error rate instead of crashing the run and
-        # losing every sample taken so far.
+        # a refused connection counts as an error (status 0) instead of stopping the run
         status = 0
     result.latencies_ms.append((time.perf_counter() - started) * 1000)
     result.statuses[status] += 1
@@ -178,26 +137,34 @@ def format_load_table(rows: list[dict[str, Any]]) -> str:
 
 
 def format_split(summary: dict[str, Any], declared: int | None = None) -> str:
-    """The measured split, beside the declared one.
-
-    Prints the arithmetic rather than a verdict, because the honest reading of a
-    small sample is a range and not a number.
-    """
+    """The measured split, beside the declared one and its sampling spread."""
     total = sum(summary["served_by"].values()) or 1
     lines = ["", f"  {total} responses, by store version / revision:", ""]
     for key, count in sorted(summary["served_by"].items(), key=lambda kv: -kv[1]):
         share = 100.0 * count / total
         lines.append(f"    {key:44} {count:>5}  {share:5.1f}%")
     if declared is not None:
-        # Standard error of a proportion: sqrt(p(1-p)/n). Quoted so the "why is
-        # it not exactly 10%" conversation has a number in it.
+        # standard error of a proportion: sqrt(p(1-p)/n)
         p = declared / 100.0
         se = (p * (1 - p) / total) ** 0.5 * 100
         lines += [
             "",
-            f"  declared canary share: {declared}%   "
+            f"  declared canary percentage: {declared}%   "
             f"expected sampling spread at n={total}: ±{se:.1f}% (1 s.e.)",
         ]
     if summary["errors"]:
         lines.append(f"  errors: {summary['errors']} of {summary['requests']}")
+    return "\n".join(lines)
+
+
+def format_against_release(rows: list[dict[str, Any]], max_p95_ms: float, max_error_rate: float) -> str:
+    """Each concurrency level against the limits in release.yaml."""
+    lines = ["", f"  against release.yaml: p95 under {max_p95_ms:g} ms, error rate at most {max_error_rate:g}"]
+    for row in rows:
+        ok = row["p95_ms"] <= max_p95_ms and row["error_rate"] <= max_error_rate
+        lines.append(
+            f"    concurrency {row['concurrency']:>3}: {row['throughput_rps']:>7.1f} rps, "
+            f"p95 {row['p95_ms']:>8.2f} ms, errors {row['error_rate']:.2%}  "
+            f"{'within' if ok else 'OVER'}"
+        )
     return "\n".join(lines)

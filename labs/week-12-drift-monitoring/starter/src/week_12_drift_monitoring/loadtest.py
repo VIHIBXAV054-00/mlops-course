@@ -9,13 +9,13 @@ traffic.
 from __future__ import annotations
 
 import asyncio
-import math
 import time
 from collections import Counter
 from dataclasses import dataclass, field
 from typing import Any
 
 import httpx
+import numpy as np
 
 # A legal, ordinary patient: a load test measures the service, not the model.
 PROBE_PATIENT = {
@@ -53,10 +53,7 @@ def percentile(values: list[float], p: float) -> float:
     """The p-th percentile by nearest rank: always a latency some request really had."""
     if not values:
         return 0.0
-    ordered = sorted(values)
-    rank = math.ceil(p / 100.0 * len(ordered))
-    rank = min(max(rank, 1), len(ordered))
-    return ordered[rank - 1]
+    return float(np.percentile(values, p, method="inverted_cdf"))
 
 
 async def _one_request(client: httpx.AsyncClient, result: LoadResult) -> None:
@@ -152,9 +149,22 @@ def format_split(summary: dict[str, Any], declared: int | None = None) -> str:
         se = (p * (1 - p) / total) ** 0.5 * 100
         lines += [
             "",
-            f"  declared canary share: {declared}%   "
+            f"  declared canary percentage: {declared}%   "
             f"expected sampling spread at n={total}: ±{se:.1f}% (1 s.e.)",
         ]
     if summary["errors"]:
         lines.append(f"  errors: {summary['errors']} of {summary['requests']}")
+    return "\n".join(lines)
+
+
+def format_against_release(rows: list[dict[str, Any]], max_p95_ms: float, max_error_rate: float) -> str:
+    """Each concurrency level against the limits in release.yaml."""
+    lines = ["", f"  against release.yaml: p95 under {max_p95_ms:g} ms, error rate at most {max_error_rate:g}"]
+    for row in rows:
+        ok = row["p95_ms"] <= max_p95_ms and row["error_rate"] <= max_error_rate
+        lines.append(
+            f"    concurrency {row['concurrency']:>3}: {row['throughput_rps']:>7.1f} rps, "
+            f"p95 {row['p95_ms']:>8.2f} ms, errors {row['error_rate']:.2%}  "
+            f"{'within' if ok else 'OVER'}"
+        )
     return "\n".join(lines)

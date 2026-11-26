@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
-# Run this once after cloning to generate uv.lock (requires Python 3.12+)
-# After the initial run the lock file is committed and students just run
-# "uv sync --all-groups" without needing this script.
+# Regenerates uv.lock and installs the dependencies (needs Python 3.12+).
+# You do not need it: uv.lock is committed, so `uv sync --all-groups` is enough.
 set -e
 uv lock
 uv sync --all-groups

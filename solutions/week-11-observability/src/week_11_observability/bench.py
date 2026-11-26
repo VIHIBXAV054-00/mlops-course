@@ -1,14 +1,6 @@
-"""Batch versus online, measured.
+"""Batch versus online scoring, measured with a timed loop over the test set.
 
-No load-testing tool. A `for` loop over the test set, timed, reporting p50 and
-p95 — which is all Exercise 3 needs and all Week 9 is allowed. Load profiles,
-saturation curves and concurrency are Week 10.
-
-One statistics note worth more than it looks: **the mean is the wrong summary
-for latency.** Latency distributions have a long right tail, so the average is
-dragged around by outliers and describes nobody's experience. Percentiles say
-something a user would recognise: half of requests were faster than p50, and
-one in twenty was slower than p95.
+Latency is reported as p50 and p95, not a mean, because a few slow requests drag the mean.
 """
 
 from __future__ import annotations
@@ -46,8 +38,7 @@ def batch_score(model: Any, frame: pd.DataFrame) -> dict:
 def online_score(client: Any, frame: pd.DataFrame, url: str = "/predict") -> dict:
     """One HTTP request per row, timed individually.
 
-    `client` is anything with a `.post(url, json=...)` — httpx, requests, or
-    FastAPI's TestClient, which is what makes this runnable with no server.
+    `client` is anything with `.post(url, json=...)`, such as httpx or FastAPI's TestClient.
     """
     payloads = frame[list(FEATURE_COLUMNS)].to_dict(orient="records")
     latencies: list[float] = []
@@ -82,11 +73,6 @@ def format_comparison(batch: dict, online: dict) -> str:
             f"{online['rows_per_second']:>10} {online['p50_ms']:>8.2f}ms {online['p95_ms']:>8.2f}ms",
             "",
             f"  Online took {ratio:.0f}x the wall clock for the same {batch['rows']} rows.",
-            "",
-            "  That is not overhead you can optimise away — it is the cost of asking",
-            "  the question one row at a time, over a protocol, with validation on",
-            "  every request. You buy it deliberately: batch cannot answer a question",
-            "  nobody has asked yet, and online can.",
         ]
     )
 

@@ -1,36 +1,13 @@
-# Service-level alerting rules — the ones that are not about the SLO.
-#
+# Service alerting rules that are not about the SLO.
 # Reference: https://prometheus.io/docs/prometheus/latest/configuration/alerting_rules/
-#
-# Two alerts. An alert is an interrupt aimed at a person, so each one must have
-# somebody who acts on it.
 
 groups:
   - name: service
-    # How often this group is evaluated. Inherits `evaluation_interval` from
-    # prometheus.yml when omitted; stated here because a rule's `for:` duration
-    # is only meaningful in multiples of it.
     interval: 15s
     rules:
 
-      # ── The alert you get without instrumenting anything ──────────────────
-      #
-      # `up` is synthesised by Prometheus for every target on every scrape: 1 if
-      # the scrape succeeded, 0 if it did not. It exists because a pull system
-      # can tell the difference between "the service reported no errors" and
-      # "the service did not answer" — and a ratio-based SLI structurally
-      # cannot. A dead service has a perfect error ratio, because
-      # zero-divided-by-zero is not a failure, it is silence.
-      #
-      # `for: 1m` — four consecutive failed scrapes at this job's 5s interval,
-      # or one missed scrape plus a bit at the global 15s. WITHOUT IT, a single
-      # container restart, a rolling deploy, or a two-second network hiccup
-      # pages somebody at 3 a.m. for a service that was already back before
-      # they picked up the phone. `for:` is the single most effective
-      # anti-fatigue control in Prometheus and it costs one line.
-      #
-      # Measured in the lab: after `make api-down`, the alert appears as PENDING
-      # within about one scrape interval and turns FIRING one minute later.
+      # `up` is 0 when a scrape fails. The SLO ratios cannot see a dead service,
+      # because with no requests there are no errors.
       - alert: ServiceDown
         expr: up{job="diabetes-api"} == 0
         for: 1m
@@ -41,28 +18,11 @@ groups:
           summary: "diabetes-api is not answering scrapes"
           description: >-
             Prometheus has been unable to scrape {{ $labels.instance }} for over a
-            minute. No SLO alert will fire for this: with no requests there are no
-            events, and a ratio of zero good to zero valid is not a violation. This
-            is the alert that covers that hole.
+            minute. The SLO alerts cannot see this, because a service with no
+            requests has no errors.
 
-      # ── The one alert that is about the MODEL's inputs ────────────────────
-      #
-      # Week 5 wrote a contract; Week 9 made it hold over HTTP; this is what it
-      # looks like when somebody starts breaking it in production.
-      #
-      # WHY IT NEEDS ITS OWN ALERT: a 422 is the service working correctly, so
-      # it is not a 5xx, so it does not touch the availability SLO, so from the
-      # outside a caller who has started sending glucose in mmol/L instead of
-      # mg/dL looks like a perfectly healthy service. Availability 100%, latency
-      # fine, error budget untouched, and every patient being scored on data the
-      # model has never seen the like of. No generic web dashboard would ever
-      # show you this; you only get it because YOU decided this service should
-      # report it.
-      #
-      # The threshold is a RATE, not a count. "More than 0.2 rejected fields per
-      # second, sustained for five minutes" survives a single fat-fingered
-      # curl and catches a client deployment. A count would fire on the first
-      # test request anyone ever sends.
+      # A 422 is not a 5xx, so contract rejections do not touch the error budget.
+      # A rate, not a count, so one bad test request does not fire it.
       - alert: ContractViolationSpike
         expr: sum(rate(model_contract_violations_total{job="diabetes-api"}[5m])) > 0.2
         for: 5m
@@ -72,45 +32,15 @@ groups:
         annotations:
           summary: "Callers are sending data the model-input contract rejects"
           description: >-
-            The rejection rate has been above 0.2/s for five minutes. This is NOT a
-            service failure and deliberately does not consume the error budget - the
-            contract is doing its job. It means a caller changed. Look at
-            model_contract_violations_total by `check` to see which rule is being
-            broken, then find out who deployed what.
+            More than 0.2 fields per second have failed the input contract for five
+            minutes. The service is working, so this does not use the error budget.
+            A caller has probably changed: check model_contract_violations_total by
+            `check`.
 
-# ── What we deliberately did NOT alert on ───────────────────────────────────
-#
-# Exercise 5 (optional) asks you for this list. Ours, with reasons:
-#
-#   CPU / memory / disk on the container
-#       CAUSES, not symptoms. High CPU with every request served inside its
-#       latency budget is not an incident, it is a machine doing work. If it
-#       ever matters, it matters because latency or errors moved — and those
-#       already page. Alert on the symptom; keep the cause on the dashboard for
-#       whoever is diagnosing.
-#
-#   Container restarts
-#       Same argument, plus a specific trap: a restart alert fires during every
-#       normal deploy, which teaches the team that this alert means "somebody
-#       shipped" and can be ignored. That is how an alert becomes furniture.
-#
-#   Any individual slow request
-#       Not actionable. There is always a slowest request. The SLO already says
-#       how many slow requests are too many, which is the only version of this
-#       question with an answer.
-#
-#   "Prediction rate changed"
-#       Almost always traffic, not the model. Wednesday afternoon looks nothing
-#       like Sunday night, and an alert that fires every weekend is worse than
-#       no alert. Deciding whether a change in what the model PREDICTS is real
-#       needs a reference distribution and a statistic - that is drift, and
-#       drift is Week 12.
-#
-#   Model accuracy
-#       We cannot compute it. There are no labels at serving time, and there
-#       will not be any until somebody is diagnosed. Every honest monitoring
-#       setup for a model has this hole in it; pretending otherwise is worse
-#       than naming it.
-#
-# The general rule, and it is the whole of the alert-fatigue lecture in one
-# sentence: ALERT ON WHAT YOUR USER FEELS, LINK TO EVERYTHING ELSE.
+# Not alerted on, and why:
+#   CPU, memory, disk    causes, not symptoms: they matter when latency or errors move
+#   container restarts   every normal deploy restarts containers, so people learn to ignore it
+#   one slow request     there is always a slowest request; the latency SLO says how many are too many
+#   prediction rate      it moves with traffic; a real change needs a reference window
+#   accuracy             there are no labels at serving time
+# Alert on what the user feels, and keep the rest on the dashboard.

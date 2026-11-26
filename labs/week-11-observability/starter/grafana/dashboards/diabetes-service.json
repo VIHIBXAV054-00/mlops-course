@@ -1,7 +1,7 @@
 {
   "uid": "diabetes-service",
   "title": "Diabetes prediction service",
-  "description": "Week 11 starter. Exercise 3 adds the \"Predictions by outcome\" panel in the Grafana UI. Panel descriptions carry the notes, because JSON has no comments; hover the (i) on any panel.",
+  "description": "The prediction service. Every panel is a PromQL query to Prometheus. In Exercise 3 you add the \"Predictions by outcome\" panel in the Grafana UI. Hover the (i) on a panel for a note on how to read it.",
   "tags": [
     "mlops",
     "week-11",
@@ -27,7 +27,7 @@
       "id": 1,
       "type": "stat",
       "title": "Which model is this?",
-      "description": "The info-metric pattern: model_info is a gauge that is always 1, and its LABELS are the payload. This is link ten of the course's traceability chain \u2014 the dashboard can name the model behind every other panel, so a latency step change can be attributed to a deployment without leaving the browser. Note what would have gone wrong if model_version had been a label on http_requests_total instead: a deploy would look like a traffic drop, because the old series stops and a new one starts at zero.",
+      "description": "model_info is always 1, and its labels name the model being served. A change of model shows here, so you can match it to a change on the other panels.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -67,7 +67,7 @@
       "id": 2,
       "type": "stat",
       "title": "Is it answering? (up)",
-      "description": "Synthesised by Prometheus on every scrape: 1 if the scrape succeeded, 0 if it did not. You get it for free from the act of scraping, and it covers the hole a ratio-based SLI structurally cannot \u2014 a service with no traffic has a perfect error ratio. This is what ServiceDown alerts on.",
+      "description": "1 if Prometheus could scrape the service, 0 if not. The SLO panels cannot show a dead service, because no requests means no errors. ServiceDown alerts on this.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -142,7 +142,7 @@
       "id": 3,
       "type": "gauge",
       "title": "Availability error budget remaining (30d)",
-      "description": "1 minus (5xx responses / the number the 99% target allows) over the rolling 30-day window. The 0.01 in the denominator is the error budget from slo.yaml, and tests/test_dashboard.py recomputes it from that file rather than trusting the literal here. Read it as a decision-making device, not a score: a budget that has never been touched means the target is too low, and reliability bought is latency headroom or velocity not bought.",
+      "description": "The share of the 30-day error budget still unspent: 1 minus the 5xx responses divided by what the 99% target allows. The 0.01 comes from slo.yaml.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -195,7 +195,7 @@
       "id": 4,
       "type": "timeseries",
       "title": "Request rate by status",
-      "description": "rate() FIRST, always. A counter's raw value depends on when the process started and is meaningless on its own; rate() also handles a restart (the counter going back to zero) as a reset rather than as a huge negative spike. The [1m] window must span at least two scrapes or the series goes empty \u2014 at this job's 5s interval that is comfortable, at a 60s interval it would not be.",
+      "description": "Requests per second, by HTTP status. A counter is always graphed through rate(), which also handles a restart that resets the counter to zero.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -234,7 +234,7 @@
       "id": 5,
       "type": "timeseries",
       "title": "Error rate (5xx as a share of prediction traffic)",
-      "description": "The availability SLI itself, on a graph. Note the numerator: 5xx only. A 422 from Week 5's contract is the service working correctly \u2014 refusing an impossible patient \u2014 so counting it here would let any caller burn our error budget by sending rubbish. The cost of that decision is that a flood of 422s is invisible on this panel, which is exactly why 'Contract violations' below exists. The `or vector(0)` is there because sum() over no matching series returns an EMPTY vector, not zero \u2014 without it a healthy service with no 5xx renders as 'No data', which looks exactly like a broken panel.",
+      "description": "The availability SLI: 5xx responses as a share of prediction requests. A 422 is the contract working, so it is not counted here (see Contract violations).",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -291,7 +291,7 @@
       "id": 6,
       "type": "timeseries",
       "title": "Latency percentiles",
-      "description": "histogram_quantile over the SUMMED bucket rates \u2014 and the order is not negotiable. rate() each bucket, sum them by le, then take the quantile. Doing it the other way (a quantile per series, then averaged) is wrong, because percentiles do not average: you cannot mean two p95s and get a p95. That is the entire reason the service reports buckets instead of computing percentiles itself. The 250ms line is the latency SLO threshold from slo.yaml, and it is a bucket boundary so the SLI counting it is exact rather than interpolated.",
+      "description": "p50, p95 and p99 latency, computed from the summed bucket rates, because percentiles cannot be averaged. The red line is the 250 ms threshold from slo.yaml.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -362,7 +362,7 @@
       "id": 7,
       "type": "timeseries",
       "title": "Requests in flight",
-      "description": "A GAUGE, because it goes both ways \u2014 the one thing a counter structurally cannot tell you. This is the panel that distinguishes a saturated service from a slow one: when throughput stops rising while this and latency keep climbing, the extra requests are queued rather than served. Week 10's in-cluster load test showed exactly that shape at concurrency 64.",
+      "description": "Requests being served right now. When throughput stops rising while this and latency keep climbing, the service is saturated.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -399,7 +399,7 @@
       "id": 9,
       "type": "timeseries",
       "title": "Median predicted probability",
-      "description": "The shape of what the model says, not whether it is right. A model that has started answering 0.5 to everything is broken in a way no latency or error-rate graph can show \u2014 and this is the panel that would show it. The comparison against a reference window that turns this from a curiosity into a signal is drift detection: Week 12.",
+      "description": "The median predicted probability. A model that answers about the same value for everyone shows up here before anywhere else.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -437,7 +437,7 @@
       "id": 10,
       "type": "timeseries",
       "title": "Contract violations by check",
-      "description": "Week 5's contract, aggregated \u2014 and the panel that catches what the error-rate panel deliberately cannot. A caller who starts sending glucose in the wrong unit produces a service with 100% availability, latency well inside budget, an untouched error budget, and every patient scored on data the model has never seen. The label is the CHECK NAME, a small closed set fixed by the pandera schema; the failing VALUE is attacker-controlled and would be unbounded cardinality.",
+      "description": "Requests rejected by the model-input contract, by check. A caller sending data in the wrong unit shows here, while the availability panels stay green.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"

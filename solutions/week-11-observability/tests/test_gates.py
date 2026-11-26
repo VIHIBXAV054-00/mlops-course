@@ -1,14 +1,7 @@
-"""The acceptance criteria, one kind of check at a time.
+"""The acceptance gate, one kind of check at a time.
 
-`gates.evaluate_gate` is a pure function over four plain dicts — metrics,
-slices, baseline, acceptance — so this whole file needs no model, no data, no
-filesystem, no network and no Docker. That is not an accident of testing; it is
-why the function was written that way. A release decision you cannot unit-test
-is a release decision you cannot argue about.
-
-The theme running through these tests: **the difference between "we looked and
-it was fine" and "we did not look"**. Every SKIPPED assertion here is defending
-that distinction.
+`evaluate_gate` is a pure function of four dicts, so no model, data or network is needed.
+A check that could not run is "skipped", never "pass".
 """
 
 from __future__ import annotations
@@ -92,7 +85,7 @@ def test_a_metric_below_its_floor_is_a_no_go():
 
 
 def test_the_floor_is_inclusive():
-    """`>=`, not `>`. Stated by a test so nobody has to guess from the code."""
+    """`>=`, not `>`."""
     report = evaluate_gate(dict(GOOD_METRICS, f1=0.55), HEALTHY, BASELINE, ACCEPTANCE)
     assert by_id(report)["minimum.f1"]["status"] == "pass"
 
@@ -106,13 +99,7 @@ def test_a_metric_the_evaluate_stage_never_wrote_is_skipped_not_passed():
 
 
 def test_the_all_negative_classifier_is_caught_by_f1_and_not_by_roc_auc():
-    """The week's thesis, as an executable test.
-
-    Measured on this lab's own data with `train.C: 0.001`: logistic regression
-    predicts "no diabetes" for all 192 test patients. Accuracy 0.6510 (the
-    majority-class rate), F1 0.0000 — and ROC-AUC 0.8407, HIGHER than the
-    shipped model's. A gate that looked only at ROC-AUC would ship it.
-    """
+    """With `train.C: 0.001` the model predicts no positives: F1 0.0, ROC-AUC 0.8407."""
     degenerate = {"accuracy": 0.6510, "precision": 0.0, "recall": 0.0,
                   "f1": 0.0, "roc_auc": 0.8407}
 
@@ -142,24 +129,18 @@ def test_a_drop_inside_the_tolerance_is_not_a_regression():
 
 
 def test_no_baseline_is_skipped_and_emphatically_not_passed():
-    """"The first model is always fine" is how a ratchet starts at the bottom."""
+    """No baseline means the regression check did not run, so it is skipped."""
     report = evaluate_gate(GOOD_METRICS, HEALTHY, {}, ACCEPTANCE)
     check = by_id(report)["regression.f1"]
     assert check["status"] == "skipped"
     assert "no baseline" in check["reason"]
-    # The floors still ran, so the verdict is a real GO — earned by the checks
-    # that happened, with the one that did not visible in the summary.
+    # The floors still ran, so the verdict is GO with the skip in the summary.
     assert report["verdict"] == "GO"
     assert report["summary"]["skipped"] >= 1
 
 
 def test_the_primary_metric_choice_flips_the_verdict_on_the_same_model():
-    """`C: 0.01` on this lab's data: F1 down 0.0254, ROC-AUC UP 0.0100.
-
-    Gate on F1 and it is a regression. Gate on ROC-AUC and it is an improvement.
-    Same model, same rows, same run. Which metric is primary is a decision
-    somebody has to make and defend.
-    """
+    """With `C: 0.01`, F1 drops 0.0254 and ROC-AUC rises 0.0100: the primary metric decides."""
     observed = dict(GOOD_METRICS, f1=0.6087, roc_auc=0.8445, accuracy=0.7656)
 
     on_f1 = evaluate_gate(observed, HEALTHY, BASELINE,
@@ -185,7 +166,7 @@ def test_a_slice_below_min_support_is_skipped_with_the_numbers_in_the_reason():
 
 
 def test_a_slice_with_enough_rows_but_too_few_positives_is_also_skipped():
-    """The second support rule, and the one this dataset forces on us."""
+    """The second support rule: too few positives to measure F1."""
     degenerate = slices({"under_normal": {"n": 30, "n_positives": 1, "f1": 0.0}})
     report = evaluate_gate(GOOD_METRICS, degenerate, BASELINE, ACCEPTANCE)
     check = by_id(report)["slice.grp.under_normal"]
@@ -195,11 +176,7 @@ def test_a_slice_with_enough_rows_but_too_few_positives_is_also_skipped():
 
 
 def test_dropping_min_positives_makes_that_same_slice_fail_for_a_meaningless_reason():
-    """The argument FOR the rule, made from the other side.
-
-    With `min_positives: 1` the 30-row / 1-positive slice starts being gated and
-    the model is refused because of an F1 computed over a single patient.
-    """
+    """With `min_positives: 1`, an F1 over a single patient refuses the model."""
     degenerate = slices({"under_normal": {"n": 30, "n_positives": 1, "f1": 0.0}})
     loose = dict(ACCEPTANCE, slice_rules=dict(ACCEPTANCE["slice_rules"],
                                               min_positives=1))
@@ -216,15 +193,7 @@ def test_a_gated_slice_below_the_floor_fails():
 
 
 def test_a_slice_far_below_the_aggregate_fails_even_above_the_floor():
-    """The gap rule catches "good enough in isolation, much worse than average".
-
-    Note that the two slice rules are not independent: with an aggregate F1 of
-    0.6341 and `min_f1: 0.50`, no slice can be more than 0.1341 below the
-    aggregate without already failing the floor. The gap rule only does work
-    when it is TIGHTER than that difference — which is why the shipped
-    `max_f1_gap` is 0.10 and not 0.15. A criterion that cannot fire is not a
-    safeguard; it is a comment.
-    """
+    """The gap rule catches a slice above the floor but far below the aggregate."""
     lagging = slices({"older": {"n": 40, "n_positives": 15, "f1": 0.52}})
     report = evaluate_gate(GOOD_METRICS, lagging, BASELINE, ACCEPTANCE)
     check = by_id(report)["slice.grp.older"]
@@ -254,8 +223,7 @@ def test_a_gap_over_its_limit_is_a_no_go():
     report = evaluate_gate(GOOD_METRICS, unfair, BASELINE, ACCEPTANCE)
     assert report["verdict"] == "NO-GO"
     assert by_id(report)["fairness.grp.tpr_gap"]["status"] == "fail"
-    # Demographic parity was fine on the very same model. That disagreement is
-    # the reason both limits are configured rather than one.
+    # The selection-rate gap passes on the same model, so both limits are needed.
     assert by_id(report)["fairness.grp.selection_rate_gap"]["status"] == "pass"
 
 
@@ -292,7 +260,7 @@ def test_an_axis_that_was_never_measured_is_skipped_not_ignored():
 
 
 def test_the_headline_names_the_skipped_count():
-    """A guard whose failure mode is a green tick is worse than no guard."""
+    """Skipped checks are visible in the first line."""
     report = evaluate_gate(GOOD_METRICS, {}, {}, ACCEPTANCE)
     headline = format_gate(report).splitlines()[0]
     assert "SKIPPED" in headline
@@ -307,7 +275,7 @@ def test_a_no_go_names_the_failing_checks_before_anything_else():
 
 
 def test_the_verdict_is_a_pure_function_of_its_four_inputs():
-    """Same inputs, same bytes. This is what makes the DVC output stable."""
+    """Same inputs, same bytes, so the DVC output is stable."""
     import json
 
     a = json.dumps(evaluate_gate(GOOD_METRICS, HEALTHY, BASELINE, ACCEPTANCE))

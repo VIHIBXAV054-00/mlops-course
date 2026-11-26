@@ -20,6 +20,7 @@ import pytest
 from week_11_observability.loadtest import (
     LoadResult,
     format_split,
+    format_against_release,
     percentile,
     summarise,
 )
@@ -105,8 +106,8 @@ def test_the_split_report_quotes_its_own_sampling_error():
     rather than print "11.1%" as though it were a measurement of the policy.
     """
     text = format_split(summarise(_result()), declared=10)
-    assert "declared canary share: 10%" in text
-    assert "±" in text, "a measured share without its sampling spread invites over-reading"
+    assert "declared canary percentage: 10%" in text
+    assert "±" in text, "a measured percentage without its sampling spread invites over-reading"
     assert "errors: 1 of 10" in text
 
 
@@ -121,3 +122,14 @@ def test_responses_that_do_not_identify_themselves_are_still_counted():
     result.served_by = Counter({(None, None): 2})
     summary = summarise(result)
     assert summary["served_by"]["?/?"] == 2
+
+
+def test_the_release_comparison_marks_a_level_over_the_limit():
+    rows = [
+        {"concurrency": 1, "throughput_rps": 120.0, "p95_ms": 9.0, "error_rate": 0.0},
+        {"concurrency": 64, "throughput_rps": 98.0, "p95_ms": 1657.0, "error_rate": 0.0},
+    ]
+    text = format_against_release(rows, max_p95_ms=300, max_error_rate=0.01)
+    lines = [line for line in text.splitlines() if "concurrency" in line]
+    assert lines[0].endswith("within")
+    assert lines[1].endswith("OVER")

@@ -1,20 +1,7 @@
-"""The flow, its retry policy, and the assertion that keeps it honest.
+"""The Prefect flow's tasks, their retry policy and the parameter check.
 
-Two testing strategies, and the choice between them is measured rather than
-assumed (numbers from this lab, prefect 3.8.2):
-
-    task.fn(...)                      0.000s   — the undecorated function
-    prefect_test_harness() setup      ~4.3s    — once, session-scoped
-    a flow run inside the harness     ~1.1s    — each
-
-So: `task.fn()` for anything that is really about the function's logic, and a
-small number of real flow runs for the things that are about Prefect actually
-doing something — retries actually retrying, state actually recorded.
-
-A bare flow call with no harness also works, because Prefect starts a temporary
-server; it costs ~8s of process startup. That is fine once and ruinous fifty
-times, and it fails by being SLOW rather than by failing, which is the worst
-shape for a time budget.
+`task.fn()` tests a task's logic with no Prefect run. The few tests about Prefect
+itself (retries, failures) use the `prefect_harness` fixture.
 """
 
 from __future__ import annotations
@@ -27,16 +14,11 @@ from week_11_observability import tasks
 pytestmark = pytest.mark.unit
 
 
-# ── Retry policy: where it is, and where it deliberately is not ─────────────
+# ── Retry policy ────────────────────────────────────────────────────────────
 
 
 def test_only_the_network_tasks_carry_retries():
-    """The retry map IS the map of where this pipeline touches the network.
-
-    If a future edit adds `retries=` to a local, deterministic task, this fails
-    — which is the point. The policy is an architectural claim, so it gets an
-    assertion rather than a comment.
-    """
+    """Retries go on the tasks that call the network, and nowhere else."""
     retrying = {
         name: getattr(tasks, name).retries
         for name in dir(tasks)
@@ -50,28 +32,19 @@ def test_only_the_network_tasks_carry_retries():
 
 
 def test_train_and_repro_have_no_retries():
-    """Exercise 3's first question, as an assertion.
-
-    `run_pipeline` is deterministic and local. If it raised once it will raise
-    three times, and `retries=3` buys only a traceback that arrives ninety
-    seconds later with the real bug buried under two retry lines.
-    """
+    """A local, deterministic task that failed once will fail again, so a retry only delays it."""
     assert not tasks.run_pipeline.retries
     assert not tasks.build_dataset.retries
     assert not tasks.write_params.retries
 
 
 def test_the_network_retries_use_backoff_and_jitter():
-    """A fixed delay makes every failed task retry in lockstep.
-
-    Which means a service that fell over under load gets hit by the identical
-    burst that felled it. Jitter is not decoration.
-    """
+    """Without jitter, every failed task retries at the same moment and hits the service again."""
     assert tasks.pull_data.retry_jitter_factor
     assert tasks.pull_data.retry_delay_seconds
 
 
-# ── The parameter trap (Exercise 4) ────────────────────────────────────────
+# ── Flow parameters and params.yaml ────────────────────────────────────────
 
 
 def test_write_params_edits_the_file_dvc_actually_hashes(tmp_path, settings):
@@ -103,12 +76,7 @@ def test_verify_params_applied_accepts_a_lock_that_agrees(tmp_path, settings):
 def test_verify_params_applied_catches_a_pipeline_that_never_saw_the_override(
     tmp_path, settings
 ):
-    """The load-bearing test of the week.
-
-    Without this, forgetting `write_params` produces a run that reports success
-    and ships the PREVIOUS model — correct caching, wrong result, exactly the
-    Week 4 undeclared-dependency failure wearing a different hat.
-    """
+    """Without `write_params`, the run succeeds and ships the previous model."""
     import dataclasses
 
     (tmp_path / "dvc.lock").write_text(
@@ -132,10 +100,6 @@ def test_verify_params_is_a_no_op_when_nothing_was_overridden(tmp_path, settings
 
 
 def test_a_transient_failure_is_retried_and_then_succeeds(prefect_harness):
-    """Proves the policy is real, not decorative.
-
-    A retry policy that has never been observed retrying is a comment.
-    """
     from prefect import task
 
     calls = {"n": 0}
@@ -177,17 +141,11 @@ def test_a_permanent_failure_still_fails_after_its_retries(prefect_harness):
     assert calls["n"] == 3, "should have tried once and retried twice"
 
 
-# ── Partial failure (Exercise 5) ───────────────────────────────────────────
+# ── Partial failure ────────────────────────────────────────────────────────
 
 
 def test_a_failing_task_stops_the_tasks_after_it(prefect_harness):
-    """What a partial failure leaves behind.
-
-    The tasks downstream of a failure never start. Which means the workspace is
-    in a state that is neither the old one nor the new one — and nothing in the
-    filesystem records which. That is what a run history is for, and it is
-    Exercise 5's written question.
-    """
+    """The tasks after a failure never start, so only the run history shows where it stopped."""
     from prefect import flow, task
 
     ran: list[str] = []
@@ -233,7 +191,7 @@ def test_notify_records_a_verdict(tmp_path, settings):
 
 
 def test_notify_records_a_failure_too(tmp_path, settings):
-    """A flow that only reports its successes is the Toy Story 2 backup."""
+    """`notify` also runs when the flow fails."""
     import dataclasses
 
     sandbox = dataclasses.replace(settings, project_root=tmp_path)

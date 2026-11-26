@@ -1,10 +1,6 @@
 # Files Git must not track: secrets, caches, build outputs and generated data.
 .env
 
-# Backups made by `make gate-fail`, `make data-gate-fail` and `make ratchet`.
-.gate-fail.bak
-.baseline.bak
-
 # Python virtual environment and caches
 .venv/
 __pycache__/

@@ -1,9 +1,6 @@
-"""The serving side of the contract — Exercise 6.
+"""The contract at serving time: one schema guards both training data and requests.
 
-One schema guards both boundaries. These tests are the proof, and they need
-neither a running model nor a running stack for the validation half: a rejected
-payload never reaches the model, so `predict_one` can prove the rejection with no
-model file present at all.
+A rejected payload never reaches the model, so most tests need no model file.
 """
 
 from __future__ import annotations
@@ -21,12 +18,7 @@ def test_the_example_payload_is_legal():
 
 
 def test_a_sentinel_zero_is_rejected_at_serving_time():
-    """The same lie the training data told, arriving as a request.
-
-    A model cannot tell you its input was nonsense. It returns a probability
-    computed from a physiologically impossible patient, and no metric anywhere
-    will ever mention it.
-    """
+    """A model would score an impossible patient without complaint, so the contract rejects it."""
     report = inference.validate_payload(inference.ILLEGAL_PAYLOAD)
     assert not report["passed"]
     assert "greater_than(0)" in report["by_check"]
@@ -34,13 +26,7 @@ def test_a_sentinel_zero_is_rejected_at_serving_time():
 
 
 def test_two_swapped_features_are_caught_by_a_range_bound():
-    """And be honest about WHY this one is caught.
-
-    `insulin` and `bmi` swapped is caught only because an insulin reading of 155
-    is impossible in a column bounded at `bmi <= 100`. Swap two features with
-    overlapping plausible ranges and no schema in this lab notices. A contract
-    catches implausible values, not wrong ones.
-    """
+    """Caught only because 155 breaks `bmi <= 100`: a contract catches implausible values, not wrong ones."""
     report = inference.validate_payload(inference.SWAPPED_PAYLOAD)
     assert not report["passed"]
     assert list(report["by_column"]) == ["bmi"]
@@ -48,14 +34,7 @@ def test_two_swapped_features_are_caught_by_a_range_bound():
 
 
 def test_a_missing_feature_is_named():
-    """Note the check name, and that it is NOT the same as the one below.
-
-    `column_in_dataframe` — a column the contract declares is absent.
-    `column_in_schema`    — a column the contract does not declare is present.
-
-    Two opposite failures, two distinct names. Worth learning, because a report
-    full of one of them means something completely different from the other.
-    """
+    """`column_in_dataframe`: a declared column is absent (the next test is the opposite)."""
     report = inference.validate_payload(inference.INCOMPLETE_PAYLOAD)
     assert not report["passed"]
     assert "column_in_dataframe" in report["by_check"]
@@ -69,12 +48,7 @@ def test_an_undeclared_feature_is_rejected():
 
 
 def test_the_payload_frame_is_built_in_the_contract_order():
-    """Ordering is imposed here rather than asserted by the schema.
-
-    A JSON object has no column order, so `PredictionInput` deliberately does not
-    set `ordered = True` — it would only be testing this function. `ModelInput`
-    does set it, because a CSV's column order is the producer's choice.
-    """
+    """A JSON object has no column order, so this function imposes the contract order."""
     frame = inference.payload_to_frame(
         {k: inference.EXAMPLE_PAYLOAD[k] for k in reversed(list(FEATURE_COLUMNS))}
     )
@@ -82,11 +56,7 @@ def test_the_payload_frame_is_built_in_the_contract_order():
 
 
 def test_a_rejected_payload_never_reaches_the_model(tmp_path):
-    """The gate property, on the serving side.
-
-    `model.pkl` does not exist in tmp_path. If validation ran after the model
-    load, this would raise FileNotFoundError instead of returning a report.
-    """
+    """Validation runs before the model load, so a missing model.pkl is never reached."""
     result = inference.predict_one(
         inference.ILLEGAL_PAYLOAD, tmp_path / "model.pkl"
     )
@@ -110,11 +80,7 @@ def test_load_payload_accepts_a_file(tmp_path):
 
 
 def test_prediction_against_the_trained_model(settings):
-    """The end-to-end serving path, once `make repro` has produced a model.
-
-    A fixture-style guard rather than a static skip, so this becomes a real test
-    the moment the model exists.
-    """
+    """The end-to-end serving path, once `make repro` has produced a model."""
     model_path = settings.models_dir / "model.pkl"
     if not model_path.exists():
         pytest.skip("No model yet — run `make repro` first.")
@@ -126,13 +92,7 @@ def test_prediction_against_the_trained_model(settings):
 
 
 def test_a_null_feature_is_accepted_and_imputed_by_the_model(settings):
-    """The payoff of putting the imputer inside the Pipeline.
-
-    A request that honestly reports "insulin was not measured" is legal, and the
-    model fills it with the median it learned during training. Impute outside the
-    Pipeline and this request either crashes or gets a different fill value than
-    training used — which is training-serving skew, arriving as a 200 OK.
-    """
+    """The imputer inside the Pipeline fills a null with the median learned in training."""
     model_path = settings.models_dir / "model.pkl"
     if not model_path.exists():
         pytest.skip("No model yet — run `make repro` first.")

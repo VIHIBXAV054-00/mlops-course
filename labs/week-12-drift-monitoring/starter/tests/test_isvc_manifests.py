@@ -8,6 +8,8 @@ from typing import Any
 import pytest
 import yaml
 
+from week_12_drift_monitoring.release import load_release, problems
+
 pytestmark = pytest.mark.unit
 
 K8S = Path(__file__).resolve().parents[1] / "k8s"
@@ -29,7 +31,7 @@ OUT_OF_SCOPE_FIELDS = {
 
 def _load(path: Path) -> dict[str, Any]:
     if not path.exists():
-        pytest.skip(f"{path.name} is missing: restore it with `git checkout k8s/{path.name}`.")
+        pytest.skip(f"{path.name} is missing")
     return yaml.safe_load(path.read_text())
 
 
@@ -63,13 +65,15 @@ def test_both_manifests_are_inferenceservices(base, canary):
 
 
 def test_the_user_container_is_named_kserve_container(base, canary):
-    """KServe finds the container by this name. Any other name leaves /mnt/models empty."""
+    """KServe finds the user container by name. With another name, `/mnt/models` stays empty
+    and the pod never becomes ready."""
     for isvc in (base, canary):
         assert _container(isvc)["name"] == "kserve-container"
 
 
 def test_the_model_is_fetched_not_baked(base, canary):
-    """The `STORAGE_URI` env var makes KServe mount the model into a custom container."""
+    """`STORAGE_URI` (not the `storageUri` field, which is for KServe's built-in runtimes)
+    makes KServe copy the model into a custom container, so one image serves many models."""
     for isvc in (base, canary):
         env = _env(isvc)
         assert env["STORAGE_URI"].startswith("pvc://"), (
@@ -81,9 +85,9 @@ def test_the_model_is_fetched_not_baked(base, canary):
 
 
 def test_the_canary_differs_from_the_base_in_exactly_two_places(base, canary):
-    """A canary tests one change, the model: only STORAGE_URI and the percentage differ."""
+    """A canary tests one change: the model. Only STORAGE_URI and canaryTrafficPercent differ."""
     assert _container(base)["image"] == _container(canary)["image"], (
-        "keep the base image: only the model may change between revisions"
+        "the image must not change between revisions: one image serves many models"
     )
 
     base_env, canary_env = _env(base), _env(canary)
@@ -108,29 +112,40 @@ def test_the_canary_differs_from_the_base_in_exactly_two_places(base, canary):
 
 
 def test_only_the_canary_declares_a_traffic_split(base, canary):
-    """The base manifest is also the rollback, so it must not declare a split.
-
-    `canaryTrafficPercent` absent means "the latest revision takes everything".
-    Re-applying this file is therefore one way to roll back.
-    """
+    """The base manifest is also the rollback: without `canaryTrafficPercent`, the latest
+    revision takes all traffic."""
     assert "canaryTrafficPercent" not in _predictor(base)
     percent = _predictor(canary)["canaryTrafficPercent"]
     assert isinstance(percent, int)
     assert 0 <= percent <= 100, "a percentage outside [0, 100] is rejected by the webhook"
-    assert percent < 50, (
-        "a canary takes a small share of traffic. Over half is a full deploy."
+    assert percent <= 50, (
+        "a canary gets a small share of the traffic; over 50% is a full deploy"
+    )
+
+
+def test_the_canary_percentage_is_the_one_in_the_rollout_plan(canary):
+    release = load_release()
+    if problems(release):
+        pytest.skip("release.yaml is not complete")
+    assert _predictor(canary)["canaryTrafficPercent"] == release["canary"]["percent"], (
+        "canaryTrafficPercent must match canary.percent in release.yaml"
+    )
+    assert _env(canary)["STORAGE_URI"].endswith("/" + release["model"]["candidate"]), (
+        "the canary's STORAGE_URI must name model.candidate in release.yaml"
     )
 
 
 def test_tag_routing_is_enabled_so_a_revision_can_be_addressed_directly(base, canary):
-    """With tags, each revision has its own hostname, so the smoke test can target the canary."""
+    """With tags, each revision has its own address, so the smoke test reaches the canary
+    directly instead of through the split."""
     for isvc in (base, canary):
         annotations = isvc["metadata"].get("annotations", {})
         assert annotations.get("serving.kserve.io/enable-tag-routing") == "true"
 
 
 def test_the_probe_still_asks_the_app_a_question(base, canary):
-    """The readiness probe proves only that the model loaded, which is why `make smoke` exists."""
+    """A readiness probe shows that the model loaded, not that it predicts well; that is
+    what `make smoke` checks."""
     for isvc in (base, canary):
         probe = _container(isvc)["readinessProbe"]["httpGet"]
         assert probe["path"] == "/health"
@@ -138,7 +153,7 @@ def test_the_probe_still_asks_the_app_a_question(base, canary):
 
 
 def test_no_out_of_scope_fields_have_crept_in(base, canary):
-    """Checked on the parsed documents, so a comment cannot trip it."""
+    """Checked on the parsed YAML, not the text, so a comment cannot trip it."""
     def walk(node: Any) -> list[str]:
         found = []
         if isinstance(node, dict):
@@ -159,9 +174,13 @@ def test_no_out_of_scope_fields_have_crept_in(base, canary):
 
 
 def test_the_store_is_a_read_only_volume_the_node_actually_has(base):
-    """The kind config, the PV and the PVC line up. A mismatch gives an empty /mnt/models, not an error.
+    """PV and PVC agree with each other, and with the kind config.
 
-    Without `storageClassName: ""`, kind provisions a new empty volume instead.
+    Three files have to line up (`kind-cluster.yaml` mounts the host directory
+    into the node, the PV points at that path in the node, the PVC binds the
+    PV by name), and a mismatch produces an empty /mnt/models rather than an
+    error. `storageClassName: ""` is load-bearing: omit it and kind's default
+    StorageClass provisions an empty volume instead.
     """
     docs = list(yaml.safe_load_all((K8S / "model-store.yaml").read_text()))
     pv = next(d for d in docs if d["kind"] == "PersistentVolume")
@@ -181,12 +200,17 @@ def test_the_store_is_a_read_only_volume_the_node_actually_has(base):
 
     claim = pvc["metadata"]["name"]
     assert _env(base)["STORAGE_URI"].startswith(f"pvc://{claim}/"), (
-        "STORAGE_URI names the claim, and a typo leaves the pod stuck at startup"
+        "storageUri names the CLAIM; a typo here is a pod stuck at startup"
     )
 
 
 def test_the_measurement_job_runs_the_services_own_image(base):
-    """The load generator runs from the serving image, so you measure the code you ship."""
+    """The load generator is not a different program.
+
+    Measuring with the same image that serves means there is no chance of
+    testing one version of the code and shipping another — and no second
+    dependency set to keep in step.
+    """
     job = yaml.safe_load((K8S / "job.yaml").read_text())
     assert job["kind"] == "Job"
     spec = job["spec"]["template"]["spec"]

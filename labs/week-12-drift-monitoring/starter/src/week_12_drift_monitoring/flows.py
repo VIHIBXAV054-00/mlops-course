@@ -88,7 +88,7 @@ def scheduled_flow() -> dict:
 
 
 def demo_parameterised(settings: Settings, **overrides) -> dict:
-    """`make flow-params`: run with overrides, then restore params.yaml.
+    """Run the flow with overrides, then restore params.yaml.
 
     The restore keeps the lab's working tree clean. A real scheduled run keeps the change.
     """

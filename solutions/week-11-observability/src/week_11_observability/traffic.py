@@ -1,36 +1,14 @@
-"""A traffic generator, so there is something to observe.
+"""A traffic generator: a steady, seeded mix of requests so the dashboards and alerts have data.
 
-A dashboard with no data on it teaches nothing, and neither does an alert that
-cannot be made to fire. This module produces a controlled, reproducible mix of
-requests against the running service so that every panel has a shape and every
-rule has something to evaluate.
+It is not a load test (`loadtest.py` is). It sends requests at a modest rate with a known mix:
 
-IT IS NOT A LOAD TEST. `loadtest.py` (Week 10) answers "how fast, at what
-concurrency, before it falls over"; it drives the service as hard as it can and
-reports percentiles. This one deliberately drives it at a MODEST, STEADY RATE
-and controls the MIX — some fraction of requests violating Week 5's contract,
-some fraction hitting a route that does not exist — because what the observability
-half of the week needs is not throughput but a signal with known composition.
+    valid       POST /predict, fills latency, request rate and the prediction histogram
+    violation   glucose = 0, a 422 that counts as a contract violation, not a 5xx
+    v1          the same patient through the V1 route
+    notfound    a 404 on a different path every time, to test the route label
+    health      GET /health
 
-Knowing the composition is the whole point. When the error-rate panel reads 5%
-you want to be able to say "yes, because I asked for 5%" — otherwise you are
-looking at a graph and hoping, which is the state this week exists to end.
-
-WHY THE MIX MATTERS, one line each:
-
-  * **valid** requests populate latency, RPS and the prediction histogram.
-  * **contract violations** (glucose = 0, the sentinel Week 5 outlawed) produce
-    422s. They are NOT 5xx, so they must leave the availability SLI untouched
-    while lighting up `model_contract_violations_total` — the clearest possible
-    demonstration that "error rate" is a decision about what counts, not a fact.
-  * **not-found** requests produce 404s on an unmatched route. They are the
-    cardinality experiment's ammunition: every one of them has a different path,
-    and `route_label` collapses them all to one series. Turn that off and watch
-    what happens.
-
-Determinism: one seeded `random.Random`, so the same `--seed` and `--mix`
-produce the same sequence of request kinds. A demonstration you cannot repeat is
-an anecdote.
+The same `--seed` and `--mix` send the same sequence of request kinds.
 """
 
 from __future__ import annotations
@@ -45,10 +23,7 @@ import httpx
 
 from .loadtest import PROBE_PATIENT
 
-# A patient that fails the model-input contract in exactly one way: `glucose: 0`
-# is the sentinel Week 5 identified as "missing, in disguise" and declared
-# illegal with `pa.Field(gt=0, nullable=True)`. The 422 names the check
-# (`greater_than(0)`), which becomes the `check` label on the violation counter.
+# fails one contract check: glucose 0 is a missing value, so the API returns 422
 ILLEGAL_PATIENT = {**PROBE_PATIENT, "glucose": 0.0}
 
 
@@ -81,18 +56,7 @@ class TrafficResult:
 
 
 def plan(count: int, mix: dict[str, float], seed: int = 42) -> list[str]:
-    """Decide the kind of every request before sending any of them.
-
-    Separated from the sending on purpose: it makes the composition a pure
-    function of `(count, mix, seed)`, so `tests/test_traffic.py` can assert the
-    proportions exactly without a server, a socket or a clock. The same split
-    `loadtest.percentile` uses, and for the same reason — arithmetic that a test
-    can reach is arithmetic you can trust.
-
-    The mix is normalised rather than required to sum to 1, because a student
-    typing `--mix valid=9,violation=1` should get 90/10 and not an error about
-    fractions.
-    """
+    """Decide the kind of every request before sending any. Weights need not sum to 1."""
     if count <= 0:
         return []
     kinds = sorted(mix)
@@ -114,7 +78,7 @@ def _request_for(kind: str, index: int) -> tuple[str, str, dict[str, Any] | None
         return "POST", "/v1/models/diabetes:predict", {"instances": [PROBE_PATIENT]}
     if kind == "notfound":
         # A different path every time. With `route_label` returning the route
-        # template these collapse to one series; with the raw path as a label
+        # template these collapse to one series. With the raw path as a label
         # they are `index` separate series.
         return "GET", f"/does-not-exist/{index}", None
     if kind == "health":
@@ -135,16 +99,7 @@ def generate(
 ) -> TrafficResult:
     """Send `count` requests at roughly `rate` per second and report the mix.
 
-    SYNCHRONOUS AND PACED, which is the opposite of `loadtest.py` and is the
-    right choice here. A load test wants to saturate; this wants a steady,
-    boring stream that makes a graph legible and a rate-based alerting rule
-    evaluate against something realistic. Firing 300 requests as fast as
-    possible would put them all inside one scrape interval, and Prometheus would
-    show a single spike rather than a rate.
-
-    The pacing is deliberately naive — sleep out whatever is left of each
-    request's slot. It drifts under load and that is fine: the target is
-    "roughly 20 a second for fifteen seconds", not a benchmark.
+    Paced, not as fast as possible, so the requests spread over many scrapes.
     """
     mix = mix or {"valid": 0.9, "violation": 0.1}
     kinds = plan(count, mix, seed=seed)
@@ -160,9 +115,7 @@ def generate(
                 response = client.request(method, path, json=body)
                 result.statuses[response.status_code] += 1
             except httpx.HTTPError as exc:
-                # A transport failure is NOT a status code, and conflating the
-                # two is how a load generator reports 100% availability for a
-                # service that is not running. Counted separately and printed.
+                # a transport failure is not a status code, so it is counted separately
                 result.errors.append(f"{type(exc).__name__}: {exc}")
                 result.statuses["transport-error"] += 1
             result.kinds[kind] += 1

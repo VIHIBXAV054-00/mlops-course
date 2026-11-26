@@ -38,8 +38,8 @@ CLEARLY_NEGATIVE = {
 }
 ILLEGAL = {**CLEARLY_POSITIVE, "glucose": 0.0}
 
-# A model that gives nearly the same probability to both patients is not making a prediction.
-MIN_PROBABILITY_SPREAD = 0.10
+# Used when no rollout plan is given, for example by `make smoke-local` without one.
+DEFAULT_MIN_SPREAD = 0.10
 
 
 class Caller(Protocol):
@@ -55,10 +55,6 @@ class Check:
     passed: bool
     detail: str
 
-    @property
-    def mark(self) -> str:
-        return "pass" if self.passed else "FAIL"
-
 
 def check_identity(client: Caller, *, expect_version: str | None = None) -> list[Check]:
     """Who answered, and did it pass the gate?"""
@@ -66,7 +62,7 @@ def check_identity(client: Caller, *, expect_version: str | None = None) -> list
     if response.status_code != 200:
         return [
             Check("identity.health", False, f"/health returned {response.status_code}"),
-            Check("identity.gate", False, "not checked — /health did not answer"),
+            Check("identity.gate", False, "not checked: /health did not answer"),
         ]
     body = response.json()
     checks = [
@@ -87,11 +83,7 @@ def check_identity(client: Caller, *, expect_version: str | None = None) -> list
         )
     verdict = body.get("gate_verdict")
     checks.append(
-        Check(
-            "identity.gate",
-            verdict == "GO",
-            f"gate_verdict={verdict} (a released model must record a GO)",
-        )
+        Check("identity.gate", verdict == "GO", f"gate_verdict={verdict} (a release needs GO)")
     )
     return checks
 
@@ -118,45 +110,36 @@ def check_contract(client: Caller) -> list[Check]:
     ]
 
 
-def check_behaviour(client: Caller) -> list[Check]:
+def check_behaviour(client: Caller, *, min_spread: float = DEFAULT_MIN_SPREAD) -> list[Check]:
     """Does the model still tell a clearly ill patient from a healthy one?"""
-    checks: list[Check] = []
     scores: dict[str, dict[str, Any]] = {}
     for label, payload in (("positive", CLEARLY_POSITIVE), ("negative", CLEARLY_NEGATIVE)):
         response = client.post("/predict", json=payload)
         if response.status_code != 200:
             return [
-                Check(
-                    f"behaviour.{label}",
-                    False,
-                    f"a legal payload returned {response.status_code}",
-                )
+                Check(f"behaviour.{label}", False, f"a legal payload returned {response.status_code}")
             ]
         scores[label] = response.json()
 
-    checks.append(
+    positive, negative = scores["positive"], scores["negative"]
+    spread = abs(positive["probability"] - negative["probability"])
+    return [
         Check(
             "behaviour.positive_is_positive",
-            scores["positive"]["prediction"] == 1,
-            f"p={scores['positive']['probability']} -> {scores['positive']['prediction']}",
-        )
-    )
-    checks.append(
+            positive["prediction"] == 1,
+            f"p={positive['probability']} -> {positive['prediction']}",
+        ),
         Check(
             "behaviour.negative_is_negative",
-            scores["negative"]["prediction"] == 0,
-            f"p={scores['negative']['probability']} -> {scores['negative']['prediction']}",
-        )
-    )
-    spread = abs(scores["positive"]["probability"] - scores["negative"]["probability"])
-    checks.append(
+            negative["prediction"] == 0,
+            f"p={negative['probability']} -> {negative['prediction']}",
+        ),
         Check(
             "behaviour.not_a_constant",
-            spread >= MIN_PROBABILITY_SPREAD,
-            f"probability spread {spread:.4f} (minimum {MIN_PROBABILITY_SPREAD})",
-        )
-    )
-    return checks
+            spread >= min_spread,
+            f"probability spread {spread:.4f} (minimum {min_spread})",
+        ),
+    ]
 
 
 def check_protocol(client: Caller) -> list[Check]:
@@ -181,12 +164,17 @@ def check_protocol(client: Caller) -> list[Check]:
     ]
 
 
-def run_smoke(client: Caller, *, expect_version: str | None = None) -> dict[str, Any]:
+def run_smoke(
+    client: Caller,
+    *,
+    expect_version: str | None = None,
+    min_spread: float = DEFAULT_MIN_SPREAD,
+) -> dict[str, Any]:
     """Run every check, without stopping at the first failure."""
     checks = [
         *check_identity(client, expect_version=expect_version),
         *check_contract(client),
-        *check_behaviour(client),
+        *check_behaviour(client, min_spread=min_spread),
         *check_protocol(client),
     ]
     failed = [c for c in checks if not c.passed]
@@ -204,12 +192,5 @@ def format_smoke(report: dict[str, Any]) -> str:
         mark = "pass" if check["passed"] else "FAIL"
         lines.append(f"    {mark:5} {check['name']:34} {check['detail']}")
     lines.append("")
-    lines.append(
-        f"  {report['verdict']} — {report['passed']} passed, {report['failed']} failed"
-    )
-    if report["verdict"] == "FAIL":
-        lines += [
-            "",
-            "  The pod is Ready and passes both probes, but the model failed the smoke test.",
-        ]
+    lines.append(f"  {report['verdict']} — {report['passed']} passed, {report['failed']} failed")
     return "\n".join(lines)

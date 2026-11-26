@@ -153,7 +153,7 @@ def test_an_existing_log_is_counted_rather_than_re_read_per_request(tmp_path):
     assert second.record(features=PATIENT, probability=0.5, prediction=1) is False
 
 
-def test_the_window_is_rolling_and_takes_the_NEWEST_rows(tmp_path):
+def test_the_window_is_rolling_and_takes_the_newest_rows(tmp_path):
     """The window holds the newest rows, so the question is "is it drifting now"."""
     path = tmp_path / "p.jsonl"
     log = PredictionLog(path)
@@ -202,7 +202,7 @@ def test_a_scored_request_is_logged_and_carries_the_middlewares_request_id(
     )
 
 
-def test_a_contract_violation_is_NOT_in_the_prediction_log(tmp_path, monkeypatch, scoring_model):
+def test_a_contract_violation_is_not_in_the_prediction_log(tmp_path, monkeypatch, scoring_model):
     """A rejected request was never scored, so it does not belong in the drift window."""
     monkeypatch.setenv(PATH_ENV, str(tmp_path / "p.jsonl"))
     app = create_app(CollectorRegistry())

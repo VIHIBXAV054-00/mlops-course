@@ -1,24 +1,7 @@
-"""The alerting configuration, checked without a Prometheus server.
+"""Checks the Prometheus configuration and alerting rules, with no Prometheus running.
 
-TWO KINDS OF CHECK, AND THE README SAYS WHICH IS WHICH — because claiming more
-than you verify is exactly the failure this course keeps naming:
-
-  * **`make alerts-test`** runs Prometheus's own `promtool test rules` against
-    synthetic time series and proves the alerts FIRE WHEN THEY SHOULD. That is
-    the real test, and it needs the Prometheus image.
-  * **This file** proves the configuration is well-formed and CONSISTENT WITH
-    `slo.yaml`. It needs nothing at all, so it runs in the autograder, on a
-    laptop with Docker off, and on a fresh clone.
-
-Neither subsumes the other. A rule can be perfectly well-formed and never fire;
-a rule can fire correctly against a threshold that no longer matches the promise
-the team made.
-
-THE STAR ASSERTION IS `test_every_threshold_is_derived_from_slo_yaml`. The SLO
-is written down twice — once as a document humans argue about, once as a number
-inside a PromQL expression — because a rule engine cannot read a YAML document
-that is not a rule file. Duplication you cannot detect is a bug. Duplication a
-test watches is a translation.
+`make alerts-test` checks that the alerts fire. These tests check that the rules
+are complete, use exported metrics and agree with slo.yaml.
 """
 
 from __future__ import annotations
@@ -69,15 +52,9 @@ def recordings() -> list[tuple[Path, dict]]:
 
 
 def exported_metric_names() -> set[str]:
-    """Every metric name this application actually exposes.
+    """Every metric name the application exports, read from a live registry.
 
-    Read from a LIVE REGISTRY rather than a hard-coded list, which is the whole
-    point: a hard-coded list is a third copy that would need maintaining, and it
-    would keep agreeing with the rules long after the code stopped agreeing with
-    both.
-
-    Histogram and counter suffixes are added because that is how the series are
-    named on the wire, and it is the wire that PromQL queries.
+    Counter and histogram suffixes are added, because PromQL queries those names.
     """
     registry = CollectorRegistry()
     build_metrics(registry)
@@ -90,15 +67,12 @@ def exported_metric_names() -> set[str]:
                 names.add(f"{name}_total")
             elif kind == "histogram":
                 names |= {f"{name}_bucket", f"{name}_sum", f"{name}_count"}
-    # Synthesised by Prometheus on every scrape rather than by us. It is the one
-    # metric you get without instrumenting anything, and ServiceDown needs it.
+    # Added by Prometheus on every scrape. ServiceDown uses it.
     names.add("up")
     return names
 
 
-# The identifiers that appear in a PromQL expression and are NOT metric names:
-# functions, operators and aggregation keywords. Anything else that looks like a
-# bare identifier is being read as a series.
+# Identifiers in PromQL that are not metric names: functions, operators and labels.
 PROMQL_KEYWORDS = {
     "rate", "irate", "increase", "sum", "avg", "min", "max", "count", "by", "without",
     "and", "or", "unless", "on", "ignoring", "group_left", "group_right", "offset",
@@ -108,17 +82,8 @@ PROMQL_KEYWORDS = {
 
 
 def metric_names_in(expr: str) -> set[str]:
-    """Series names referenced by an expression.
-
-    Deliberately crude — a regex, not a parser — and honest about it. It finds
-    identifiers that are followed by `{`, `[`, `)` or whitespace and are not
-    PromQL keywords, which is enough to catch the failure this guards against: a
-    metric renamed in the code and not in the rules.
-
-    A real PromQL parser would be better. It would also be a dependency, and the
-    thing being defended here is a rename, which this catches.
-    """
-    # Strip label matchers first, so label VALUES are never mistaken for metrics.
+    """Series names referenced by an expression. A regex, not a parser: enough to catch a rename."""
+    # Strip label matchers first, so label values are never read as metrics.
     without_labels = re.sub(r"\{[^}]*\}", " ", expr)
     without_durations = re.sub(r"\[[^\]]*\]", " ", without_labels)
     candidates = set(re.findall(r"\b[a-zA-Z_:][a-zA-Z0-9_:]*\b", without_durations))
@@ -147,23 +112,12 @@ def test_prometheus_config_parses_and_scrapes_our_service():
 
 
 def test_no_alertmanager_is_configured():
-    """Deliberately absent, and asserted so it stays that way on purpose.
-
-    Routing, grouping, silences and on-call are about what happens to a HUMAN
-    after an alert fires, which is Week 13's subject. Prometheus shows
-    pending/firing on its own /alerts page, which is enough to watch the
-    machinery work.
-    """
+    """Prometheus shows pending and firing alerts on its own /alerts page."""
     assert "alerting" not in load(CONFIG)
 
 
 def test_the_rule_glob_cannot_pick_up_a_test_file():
-    """A layout constraint that would otherwise be found by a crash.
-
-    `rule_files: /etc/prometheus/rules/*.yml` would happily try to load a
-    promtool TEST file as a rule file, and Prometheus REFUSES TO START on an
-    unparseable rule file. Hence tests/ next to rules/, not inside it.
-    """
+    """Prometheus does not start if `rules/*.yml` matches a promtool test file."""
     assert TESTS_DIR.exists()
     assert not list(RULES_DIR.glob("*_test.yml"))
     assert list(TESTS_DIR.glob("*_test.yml")), "the promtool test file is missing"
@@ -174,14 +128,7 @@ def test_the_rule_glob_cannot_pick_up_a_test_file():
 
 @pytest.mark.parametrize("path,rule", alerts(), ids=lambda v: getattr(v, "name", None))
 def test_every_alert_is_actionable(path, rule):
-    """`for`, a severity, and prose a woken human can act on.
-
-    None of this is bureaucracy. An alert without `for:` fires on a single
-    scrape gap; an alert without a severity cannot be routed; an alert whose
-    only text is its own name tells the person it woke nothing at all — and an
-    alert nobody can act on is the mechanism by which every other alert stops
-    being read.
-    """
+    """Every alert has a `for:`, a severity, a summary and a useful description."""
     name = rule["alert"]
     where = f"{path.name}:{name}"
 
@@ -203,16 +150,9 @@ def test_every_alert_is_actionable(path, rule):
 
 @pytest.mark.parametrize("path,rule", all_rules(), ids=lambda v: getattr(v, "name", None))
 def test_every_expression_references_a_metric_we_actually_export(path, rule):
-    """THE DRIFT GUARD.
+    """A rule that queries a renamed metric selects nothing and never fires.
 
-    Rename a metric in `metrics.py` and every rule that mentions it stops
-    matching anything. Prometheus does not complain — an expression that selects
-    no series is a perfectly valid expression that evaluates to nothing — so the
-    alert simply never fires again. That is a monitoring system that has silently
-    stopped monitoring, and nothing about it looks wrong.
-
-    Recording-rule outputs (the `slo:` prefix) are legitimate inputs to later
-    rules, so they are added to the allowed set.
+    Recording-rule outputs (the `slo:` prefix) are allowed as inputs.
     """
     exported = exported_metric_names() | {r["record"] for _, r in recordings()}
     referenced = metric_names_in(rule.get("expr", ""))
@@ -228,14 +168,7 @@ def test_every_expression_references_a_metric_we_actually_export(path, rule):
 
 
 def test_every_threshold_is_derived_from_slo_yaml():
-    """The alert thresholds must equal `burn_rate x error_budget`, recomputed.
-
-    This is why writing the SLO twice is acceptable. The document is the source
-    of truth; the rules are a translation of it; and this test is the compiler
-    that checks the translation. Loosen a target in slo.yaml without touching
-    the rules and the suite goes red, rather than the promise and the alerting
-    quietly parting company.
-    """
+    """Each alert threshold equals `burn_rate x error_budget` from slo.yaml."""
     doc = load_slo()
     by_rate = {alert.name: alert for alert in doc.burn_alerts}
 
@@ -273,10 +206,7 @@ def test_every_threshold_is_derived_from_slo_yaml():
 
 
 def test_both_windows_appear_in_every_burn_rate_alert():
-    """Long AND short, ANDed. Without the short window an alert that fires on a
-    1-hour average stays firing for another hour after the incident ends — which
-    is how a team learns that this alert means "something happened recently" and
-    stops reading it."""
+    """Each burn-rate alert checks both the long and the short window from slo.yaml."""
     doc = load_slo()
     by_rate = {alert.name: alert for alert in doc.burn_alerts}
     mapping = {
@@ -299,12 +229,7 @@ def test_both_windows_appear_in_every_burn_rate_alert():
 
 
 def test_the_latency_rule_selects_the_declared_bucket_boundary():
-    """`le="0.25"` must be the threshold slo.yaml promises.
-
-    Prometheus matches label values as STRINGS. If the two ever disagree the
-    expression selects no series, the ratio is empty, and the alert can never
-    fire — broken in the direction nobody investigates.
-    """
+    """`le="0.25"` is the slo.yaml threshold. Label values match as strings."""
     threshold = load_slo().objective("latency").threshold_seconds
     text = (RULES_DIR / "slo.yml").read_text()
     assert f'le="{threshold}"' in text, (
@@ -316,16 +241,7 @@ def test_the_latency_rule_selects_the_declared_bucket_boundary():
 
 
 def test_every_alert_is_covered_by_a_promtool_test():
-    """An alert that has never fired is not known to work.
-
-    Week 4's `check_locks.sh`, Week 7's `ci-fail` and Week 10's `make smoke` all
-    reported success while checking nothing, and all three were believed until
-    somebody made them fail. An alerting rule is the purest case: its failure
-    mode is silence.
-
-    This asserts every alert is NAMED in the promtool suite. `make alerts-test`
-    then asserts it actually fires.
-    """
+    """Every alert is named in the promtool suite. `make alerts-test` checks that it fires."""
     covered = set()
     for path in TESTS_DIR.glob("*_test.yml"):
         document = load(path)
@@ -344,11 +260,7 @@ def test_every_alert_is_covered_by_a_promtool_test():
 
 
 def test_the_promtool_suite_points_at_the_real_rule_files():
-    """`rule_files` in a promtool test are resolved relative to the TEST file.
-
-    Getting this wrong is the standard first-time failure, and it produces
-    "0 rules loaded, all tests passed" — a green run that checked nothing.
-    """
+    """`rule_files` resolve relative to the test file. A wrong path loads no rules and still passes."""
     for path in TESTS_DIR.glob("*_test.yml"):
         referenced = load(path).get("rule_files", [])
         assert referenced, f"{path.name} loads no rule files, so it tests nothing"
@@ -359,14 +271,7 @@ def test_the_promtool_suite_points_at_the_real_rule_files():
 
 
 def test_the_rule_set_is_deliberately_small():
-    """Six alerts is not an accident and not an omission.
-
-    The Joint Commission's estimate for hospital alarms is that 85-99% of them
-    require no intervention, and the outcome is that people stop hearing them.
-    The software version is the same. If this number ever climbs, the question
-    to ask is not "is each new alert reasonable?" but "would I be willing to be
-    woken by it?"
-    """
+    """At most six alerts and at most four pages."""
     declared = {rule["alert"] for _, rule in alerts()}
     assert len(declared) <= 6, (
         f"{len(declared)} alerts: {sorted(declared)}. Every one of them is an "

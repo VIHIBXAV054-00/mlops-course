@@ -1,9 +1,6 @@
-"""The model store: publishing, provenance, and the gate on the fourth door.
+"""The model store: publishing a version, its provenance, and the gate check before it.
 
-Everything here runs offline, against a temporary store, in milliseconds. No
-cluster, no registry, no Docker — which is the point, because the interesting
-assertions are about a REFUSAL and about what a published model claims to be,
-and neither of those needs a platform to check.
+Runs offline against a temporary store.
 """
 
 from __future__ import annotations
@@ -24,13 +21,7 @@ pytestmark = pytest.mark.eval
 
 @pytest.fixture
 def workspace(tmp_path, settings):
-    """A settings object pointing at a throwaway project root.
-
-    `model.pkl` is trained here rather than read from `models/` — the Week 9
-    lesson: a fixture that reads a git-ignored artifact skips its most important
-    assertions on a fresh clone, which is the failure mode this course keeps
-    naming.
-    """
+    """Settings for a throwaway project root, with a model trained here."""
     (tmp_path / "models").mkdir()
     (tmp_path / "metrics").mkdir()
     (tmp_path / "reports").mkdir()
@@ -53,7 +44,7 @@ def workspace(tmp_path, settings):
         run_id_path=tmp_path / "models" / "mlflow_run_id.json",
         gate_report_path=tmp_path / "reports" / "gate.json",
         measurements_path=tmp_path / "data" / "measurements.csv",
-        # Nothing may reach for a tracking server in a unit test.
+        # Unreachable, so no test touches a tracking server.
         mlflow_tracking_uri="http://127.0.0.1:1",
     )
 
@@ -78,12 +69,7 @@ def test_publishing_writes_the_model_and_its_provenance(workspace):
 
 
 def test_the_store_is_the_fourth_door_and_it_is_locked(workspace):
-    """Week 6 gave the gate teeth at `register`; Week 9 at `docker build`.
-
-    A store is the fourth way a model reaches users and the cheapest to walk
-    through — it is a file copy. Every new path to production is a new place the
-    gate has to be consulted, or the gate quietly stops applying.
-    """
+    """Publishing is a path to production, so it checks the gate and refuses a NO-GO."""
     _record_verdict(workspace, "NO-GO")
     with pytest.raises(SystemExit) as refusal:
         rollout.publish_version("v3", settings=workspace)
@@ -94,13 +80,7 @@ def test_the_store_is_the_fourth_door_and_it_is_locked(workspace):
 
 
 def test_a_forced_publish_records_the_truth(workspace):
-    """Exercise 4's exhibit, and why it is teachable rather than merely broken.
-
-    `FORCE=1` exists because the interesting failure is a model that *is*
-    serving traffic without approval. What makes it a lesson instead of a lie is
-    that the recorded verdict is the real one — so the pod, asked at `/health`,
-    admits it, and the smoke test can refuse on those grounds.
-    """
+    """`FORCE=1` publishes anyway but records the real verdict, so `/health` shows it."""
     _record_verdict(workspace, "NO-GO")
     result = rollout.publish_version("v3", settings=workspace, force=True)
 
@@ -117,13 +97,7 @@ def test_publishing_without_a_model_fails_before_it_writes_anything(workspace):
 
 
 def test_the_registry_version_is_never_guessed(workspace):
-    """With no reachable registry, `model_version` is null rather than invented.
-
-    Week 9's rule, one indirection out: a container never claims a provenance it
-    does not have. It matters more here, because a canary is by definition NOT
-    the champion — stamping the champion's version on it would make `/health`
-    lie about exactly the model the rollout is asking about.
-    """
+    """With no reachable registry, `model_version` is null rather than invented."""
     _record_verdict(workspace, "GO")
     result = rollout.publish_version("v2", settings=workspace)
     assert result.provenance["model_version"] is None

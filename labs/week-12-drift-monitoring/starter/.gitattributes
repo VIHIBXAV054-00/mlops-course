@@ -1,15 +1,4 @@
-# DVC 3 hashes RAW BYTES.
-#
-# DVC 2 normalised CRLF -> LF before hashing text files. DVC 3 removed that and
-# treats every file as binary, so a CSV checked out on Windows with
-# core.autocrlf=true gets a DIFFERENT md5 than the same file on macOS or Linux.
-# In a mixed classroom that silently invalidates every .dvc pointer and every
-# dvc.lock entry, and the symptom — "dvc status says modified but I changed
-# nothing" — is painful to diagnose.
-#
-# Forcing LF makes the checkout byte-identical on every platform.
-# See https://doc.dvc.org/user-guide/upgrade
-#
-# Belt and braces: the dataset generator also writes with lineterminator="\n",
-# so the DVC-tracked file is LF regardless of how git checked out its inputs.
+# Check out CSV files with LF line endings on every platform. DVC 3 hashes the
+# raw bytes, so a CRLF checkout on Windows would change every md5 in the .dvc
+# pointers and in dvc.lock. See https://doc.dvc.org/user-guide/upgrade
 *.csv text eol=lf

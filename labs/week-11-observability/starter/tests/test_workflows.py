@@ -1,14 +1,6 @@
-"""The workflows, checked as data.
+"""The GitHub Actions workflows, checked as YAML on your machine instead of after a push.
 
-A workflow file is code that runs on a machine you do not own, and the usual
-way to find out whether it is right is to push and wait. These tests move most
-of that feedback to your laptop: they parse the YAML and assert its structure,
-so a missing `needs:` or an unpinned action fails in milliseconds instead of
-after a commit, a push and a two-minute queue.
-
-What they deliberately do NOT do is assert on formatting, comments or key
-order. A test that breaks when someone reflows a YAML block is exactly the kind
-of test this course has spent six weeks arguing against.
+They check structure (triggers, `needs:`, pins), not formatting or key order.
 """
 
 from __future__ import annotations
@@ -50,15 +42,10 @@ def ct() -> dict:
 
 
 def test_workflows_live_in_a_github_workflows_directory():
-    """Authored under `.github/workflows/`, even though that is not where they run.
-
-    Keeping the lab's own path convention identical to the real one is what
-    makes `make install-ci` a copy rather than a translation.
-    """
+    """The lab uses GitHub's own path, so `make install-ci` only copies the files."""
     assert WORKFLOW_DIR.is_dir(), (
-        f"expected {WORKFLOW_DIR} — Exercise 4 authors the workflows there, and "
-        "`make install-ci` copies them to the repository root, which is the only "
-        "place GitHub executes them from."
+        f"expected {WORKFLOW_DIR}: `make install-ci` copies the workflows from there "
+        "to the repository root, where GitHub runs them."
     )
 
 
@@ -72,14 +59,9 @@ def test_ci_is_triggered_by_code_changing(ci):
 
 
 def test_ct_is_triggered_by_time_or_a_human_not_by_code(ct):
-    """The whole distinction, in one assertion.
-
-    CT must NOT fire on push. If it did it would just be a slower CI, and the
-    lesson — that a model can reach production without a code change — would be
-    invisible.
-    """
+    """CT runs on a schedule or by hand. On push it would only be a slower CI."""
     fired_by = triggers(ct)
-    assert "schedule" in fired_by, "CT needs a clock"
+    assert "schedule" in fired_by, "CT needs a schedule"
     assert "workflow_dispatch" in fired_by, "CT needs a human override"
     assert "push" not in fired_by, (
         "ct.yml fires on push, which makes it a duplicate of ci.yml. CT exists "
@@ -114,11 +96,11 @@ def test_the_test_job_fans_out_over_the_pyramid_layers(ci):
 
 
 def test_the_matrix_does_not_fail_fast(ci):
-    """You want to know whether eval is ALSO broken, not just that data failed first."""
+    """You want to know whether eval is also broken, not only that data failed first."""
     assert ci["jobs"]["test"]["strategy"]["fail-fast"] is False
 
 
-# ── The anti-drift property: one build definition, two callers ───────────────
+# ── One build definition, two callers ────────────────────────────────────────
 
 
 def test_both_workflows_invoke_the_project_makefile(ci, ct):
@@ -133,13 +115,7 @@ def test_ci_and_ct_share_a_gate_summary_step(ci, ct):
 
 
 def test_neither_workflow_reimplements_the_pipeline(ci, ct):
-    """The load-bearing assertion of Exercise 2.
-
-    A workflow that spells out `uv run python src/main.py prepare && ... train
-    && ... evaluate` is a second copy of the build. It drifts from the Makefile
-    silently, and you discover it when CI and your laptop disagree about
-    whether the code works.
-    """
+    """A workflow that calls `src/main.py` itself is a second copy of the build, and it drifts."""
     from week_11_observability.workflows import run_commands
 
     for name, workflow in (("ci.yml", ci), ("ct.yml", ct)):
@@ -151,17 +127,7 @@ def test_neither_workflow_reimplements_the_pipeline(ci, ct):
 
 
 def test_every_make_target_a_workflow_calls_actually_exists(ci, ct):
-    """The gap that a green local suite still let through to a real runner.
-
-    `test_ci_and_ct_share_a_gate_summary_step` asserts the workflows CALL
-    `make gate-summary`. It passed while no such target existed, because it
-    parses the workflow and never looks at the Makefile — so the build died at
-    `make: *** No rule to make target 'gate-summary'` after four green jobs and
-    two minutes of runner time.
-
-    Checking one artifact against another is the whole idea here: an assertion
-    about a file, made by reading only that file, is a spell-check.
-    """
+    """Each `make` target a workflow calls is defined in the Makefile."""
     makefile = (Path(__file__).resolve().parents[1] / "Makefile").read_text()
     declared = {
         line.split(":", 1)[0].strip()
@@ -170,8 +136,7 @@ def test_every_make_target_a_workflow_calls_actually_exists(ci, ct):
     }
     for name, workflow in (("ci.yml", ci), ("ct.yml", ct)):
         for target in make_targets(workflow):
-            # `make test-${{ matrix.layer }}` expands at runtime; check the
-            # three real targets it can become.
+            # `make test-${{ matrix.layer }}` expands at run time to one of three targets.
             candidates = (
                 [f"test-{layer}" for layer in ("unit", "data", "eval")]
                 if "${{" in target or target == "test-"
@@ -205,13 +170,7 @@ def test_every_action_is_pinned_to_a_version_not_a_branch(ci, ct):
 
 
 def test_the_labs_own_actions_are_not_stale(ci, ct):
-    """Against the snapshot recorded in workflows.py.
-
-    This is the test that will one day fail for a reason that is not your
-    fault, and that is the point: the snapshot goes stale, somebody re-verifies
-    it, and the pins move. A pin nobody revisits is how this repository ended
-    up four majors behind on `astral-sh/setup-uv`.
-    """
+    """Pins are checked against the release snapshot in workflows.py."""
     stale = []
     for name, workflow in (("ci.yml", ci), ("ct.yml", ct)):
         for action, ref in uses_refs(workflow):
@@ -225,8 +184,7 @@ def test_the_labs_own_actions_are_not_stale(ci, ct):
 
 
 def test_workflows_run_inside_this_lab(ci, ct):
-    """A monorepo workflow that forgets `working-directory` runs at the root and
-    fails with something unhelpful about a missing pyproject.toml."""
+    """Without `working-directory`, a monorepo workflow runs at the root and finds no pyproject.toml."""
     for name, workflow in (("ci.yml", ci), ("ct.yml", ct)):
         working = workflow.get("defaults", {}).get("run", {}).get("working-directory")
         assert working and "week-11-observability" in working, (
@@ -235,12 +193,7 @@ def test_workflows_run_inside_this_lab(ci, ct):
 
 
 def test_the_evidence_is_uploaded_even_when_the_gate_refuses(ci):
-    """`if: always()` on the artifact step.
-
-    A gate that blocks a release and leaves nothing behind is untriageable —
-    the artifact naming which check failed is the whole reason the run was
-    worth doing.
-    """
+    """`if: always()` on the upload step keeps the report that names the failed check."""
     steps = ci["jobs"]["pipeline"]["steps"]
     uploads = [s for s in steps if "upload-artifact" in str(s.get("uses", ""))]
     assert uploads, "pipeline uploads no artifacts"
@@ -249,21 +202,11 @@ def test_the_evidence_is_uploaded_even_when_the_gate_refuses(ci):
     )
 
 
-# ── The finding that cost this lab a red build ───────────────────────────────
+# ── Tags that do not exist ───────────────────────────────────────────────────
 
 
 def test_a_major_tag_that_does_not_exist_is_reported_as_unresolvable():
-    """`astral-sh/setup-uv@v9` fails on a real runner, and the API will not tell you.
-
-    Measured 2026-08-06: setup-uv's newest release is v9.0.0, and there is no
-    `v8` or `v9` tag in the repository at all. `uses: astral-sh/setup-uv@v9`
-    therefore dies at "Set up job" with
-
-        Unable to resolve action `astral-sh/setup-uv@v9`, unable to find version `v9`
-
-    before a single step runs. "What is the latest release" and "what can I pin
-    to" are different questions, and only one of them has an API endpoint.
-    """
+    """setup-uv has a v9.0.0 release but no `v9` tag, so `@v9` fails at "Set up job"."""
     status, detail = pin_status("astral-sh/setup-uv", "v9")
     assert status == "unresolvable"
     assert "v7" in detail
@@ -273,7 +216,7 @@ def test_a_major_tag_that_does_not_exist_is_reported_as_unresolvable():
 
 
 def test_a_stale_pin_is_still_reported_as_stale():
-    """The repo's own autograde.yml pinned this four majors back."""
+    """A pin several majors behind the newest release is stale."""
     status, detail = pin_status("astral-sh/setup-uv", "v5")
     assert status == "stale"
     assert "v7" in detail

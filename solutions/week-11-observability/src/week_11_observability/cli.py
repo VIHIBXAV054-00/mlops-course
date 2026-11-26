@@ -1,32 +1,6 @@
-"""Command-line entry point — one subcommand per pipeline stage and exercise.
+"""Command-line entry point: one subcommand per pipeline stage and lab command.
 
-    uv run python src/main.py validate                 # Ex 1/4: DVC stage 0 - the gate
-    uv run python src/main.py check-file --path P      # Ex 2: validate any CSV
-    uv run python src/main.py model-input              # Ex 3: the training contract
-    uv run python src/main.py prepare                  # DVC stage 1
-    uv run python src/main.py train                    # DVC stage 2
-    uv run python src/main.py evaluate                 # Ex 1: DVC stage 3 + slices
-    uv run python src/main.py slices                   # Ex 1/2: read the slice table
-    uv run python src/main.py gate                     # Ex 3/4: DVC stage 4 - go/no-go
-    uv run python src/main.py fairness                 # Ex 5: the three gaps
-    uv run python src/main.py baseline                 # Ex 6: the recorded champion
-    uv run python src/main.py baseline-sync            # Ex 6: raise the bar
-    uv run python src/main.py predict [--payload ...]  # Week 5 mechanics
-    uv run python src/main.py build-data --version N   # Week 4 mechanics
-    uv run python src/main.py verify-data              # Week 4 mechanics
-    uv run python src/main.py runs-for-data            # Week 4 mechanics
-    uv run python src/main.py register                 # gate-aware since Week 6
-    uv run python src/main.py promote [--champion]     # gate-aware since Week 6
-    uv run python src/main.py trace                    # the full chain, 8 steps
-
-The `validate`/`prepare`/`train`/`evaluate`/`gate` subcommands are what
-`dvc.yaml` invokes, so the pipeline and a human run exactly the same code.
-
-Two of these deliberately exit NON-ZERO on a bad outcome — `validate` and
-`gate` — because DVC runs them as stages and a stage that swallowed its own
-failure would let `dvc repro` report success on a pipeline that refused. The
-informational ones (`slices`, `fairness`, `baseline`, `check-file`) exit 0 even
-when the news is bad: inspecting a problem is not itself a problem.
+`dvc.yaml` and the Makefile call these subcommands. Run with `--help` for the list.
 """
 
 from __future__ import annotations
@@ -116,11 +90,7 @@ def cmd_verify_data(settings: Settings, args) -> None:
 
 
 def cmd_validate(settings: Settings, args) -> None:
-    """DVC stage 0 — run the ingestion contract and write the verdict.
-
-    Raises (and therefore exits 1) when the data fails, which is what makes this
-    a gate. The report is written either way.
-    """
+    """DVC stage 0: run the ingestion contract, write the report, exit 1 on failure."""
     report = pipeline.validate(settings)
     print(format_report(report))
     print()
@@ -128,18 +98,13 @@ def cmd_validate(settings: Settings, args) -> None:
     zeros = report.get("sentinel_zeros") or {}
     if zeros:
         print(f"  sentinel zeros still present: {zeros}")
-        print("  The ingestion contract TOLERATES these (ge=0). The training")
-        print("  contract does not — see `model-input`.")
+        print("  The ingestion contract allows these (ge=0). The training")
+        print("  contract does not: see `model-input`.")
     print()
 
 
 def cmd_check_file(settings: Settings, args) -> None:
-    """Validate any CSV against the ingestion contract, without writing a report.
-
-    Exercise 2 points this at the deliberately corrupted batch. It exits 0 even
-    when the file fails, because inspecting a broken file is not itself an error
-    — the point is to READ the report.
-    """
+    """Validate any CSV against the ingestion contract. Exits 0 even when it fails."""
     path = Path(args.path) if args.path else settings.quality_dir / "broken_batch.csv"
     if not path.is_absolute():
         candidate = settings.project_root / path
@@ -160,18 +125,10 @@ def cmd_check_file(settings: Settings, args) -> None:
         print("  by check :", json.dumps(report["by_check"]))
         print("  by column:", json.dumps(report["by_column"]))
         print()
-        print("  Two summaries because they answer different questions:")
-        print("  'what rule broke' tells you how to fix the data;")
-        print("  'which column'    tells you who to talk to.")
-        print()
 
 
 def cmd_model_input(settings: Settings, args) -> None:
-    """Show the training contract failing, then passing, on the same data.
-
-    This is Exercise 3's proof: the only difference between the two runs is
-    `to_nullable`, and it changes 652 violations into none.
-    """
+    """Show the training contract failing, then passing, on the same data."""
     source = settings.measurements_path
     if not source.exists():
         raise FileNotFoundError(
@@ -183,12 +140,12 @@ def cmd_model_input(settings: Settings, args) -> None:
     print(f"  (columns treated as sentinel-bearing: {list(SENTINEL_COLUMNS)})")
     print()
 
-    print("1. ModelInput on the RAW frame — zeros intact")
+    print("1. ModelInput on the raw frame, zeros intact")
     before = validate_frame(frame, ModelInput, source=f"{source.name} (raw)")
     print(format_report(before, limit=5))
     print()
 
-    print("2. ModelInput after to_nullable — the same zeros, now nulls")
+    print("2. ModelInput after to_nullable, the same zeros now nulls")
     after = validate_frame(
         to_nullable(frame), ModelInput, source=f"{source.name} (nullable)"
     )
@@ -197,14 +154,12 @@ def cmd_model_input(settings: Settings, args) -> None:
     if not before or not after:
         return
     print(f"  {before['n_failure_cases']} violations -> "
-          f"{after['n_failure_cases']}. Nothing was invented and nothing was")
-    print("  filled in: `gt=0, nullable=True` means missing is honest, zero is")
-    print("  a lie. Filling the nulls is the MODEL's job — see model.py.")
+          f"{after['n_failure_cases']}. The model's imputer fills the nulls (model.py).")
     print()
 
 
 def cmd_predict(settings: Settings, args) -> None:
-    """Validate a request payload, then predict — in that order."""
+    """Validate a request payload, then predict."""
     named = {
         "example": inference.EXAMPLE_PAYLOAD,
         "illegal": inference.ILLEGAL_PAYLOAD,
@@ -232,13 +187,8 @@ def cmd_predict(settings: Settings, args) -> None:
     if result["report"]["passed"]:
         print(f"  prediction  : {result['prediction']}")
         print(f"  probability : {result['probability']}")
-        print()
-        print("  The same schema object guarded the training data. That is the")
-        print("  whole point — one contract, both boundaries.")
     else:
         print("  REJECTED. The model was never called.")
-        print("  A model cannot tell you its input was nonsense; it answers")
-        print("  anyway, confidently, and the metrics never mention it.")
     print()
 
 
@@ -261,16 +211,10 @@ def cmd_train(settings: Settings, args) -> None:
 
             md5 = pointer_md5(settings.measurements_path)
             print(f"  DVC md5       : {md5}")
-            print()
-            print("  These describe the same file and they do not match.")
-            print("  MLflow's digest hashes PARSED VALUES of the first 10,000")
-            print("  rows plus the row count and column names, truncated to 8")
-            print("  characters. DVC's md5 hashes the FILE'S BYTES, all 32.")
-            print("  Only one of them proves 'these exact bytes'.")
         except FileNotFoundError:
-            print("  (no DVC pointer yet — run `dvc add data/measurements.csv`)")
+            print("  (no DVC pointer yet: run `dvc add data/measurements.csv`)")
     else:
-        print("  MLflow not reachable — model written, no run recorded.")
+        print("  MLflow not reachable: model written, no run recorded.")
         print("  Start the stack with `make up` and re-run `make link`.")
     print()
 
@@ -293,13 +237,7 @@ def cmd_evaluate(settings: Settings, args) -> None:
 
 
 def cmd_slices(settings: Settings, args) -> None:
-    """Exercise 1/2 — the slice table. Informational, always exits 0.
-
-    Reads what `evaluate` already wrote rather than recomputing it, so the table
-    a student reads is byte-for-byte the one the gate acted on. Recomputing here
-    would be one line shorter and would let the two drift apart, which is the
-    class of bug this whole course is about.
-    """
+    """Print the slice table that `evaluate` wrote. Always exits 0."""
     report = pipeline.read_slices(settings)
     metrics = pipeline.read_metrics(settings)
     if not report and not metrics:
@@ -314,7 +252,7 @@ def cmd_slices(settings: Settings, args) -> None:
 
 
 def cmd_fairness(settings: Settings, args) -> None:
-    """Exercise 5 — the three gaps, per axis. Informational, always exits 0."""
+    """Print the three fairness gaps per axis. Always exits 0."""
     report = pipeline.read_slices(settings)
     if not report:
         print("No evaluation on record. Run `make repro` first.")
@@ -323,24 +261,10 @@ def cmd_fairness(settings: Settings, args) -> None:
     gated = settings.acceptance.get("fairness") or {}
     print(format_fairness(report.get("fairness") or {}, gated_axes=gated))
     print()
-    print("  Three gaps, and they disagree on purpose. Demographic parity asks")
-    print("  whether we ACT equally often; equal opportunity asks whether we")
-    print("  FIND the true cases equally often. A model can pass one and fail")
-    print("  the other on the same rows, and no library will tell you which one")
-    print("  your problem needs — that is a judgement about consequences.")
-    print()
-    print("  And the axes you cannot check: this dataset has no sex, ethnicity,")
-    print("  income or clinic column. Every subject is female, of Pima heritage,")
-    print("  at least 21. You cannot audit a group you did not record.")
-    print()
 
 
 def cmd_gate(settings: Settings, args) -> None:
-    """Exercise 3/4 — DVC stage 4. The go/no-go decision.
-
-    Exits NON-ZERO on a NO-GO, which is what stops `dvc repro` and what a CI job
-    would notice. The report is written either way.
-    """
+    """DVC stage 4: the go/no-go decision. Exits 1 on a NO-GO."""
     report = pipeline.gate(settings)
     print(format_gate(report))
     print()
@@ -349,26 +273,17 @@ def cmd_gate(settings: Settings, args) -> None:
 
 
 def cmd_baseline(settings: Settings, args) -> None:
-    """Exercise 6 — what "worse than what we have" is measured against."""
+    """Print the recorded champion baseline the gate compares against."""
     print(format_baseline(read_baseline(settings.baseline_path)))
     print()
     print(f"  file: {_rel(settings, settings.baseline_path)}")
-    print("  The pipeline reads this FILE, never the registry. A stage whose")
-    print("  result depends on a database in another container is not")
-    print("  reproducible, and `dvc.lock` would be recording a lie.")
     print()
 
 
 def cmd_baseline_sync(settings: Settings, args) -> None:
-    """Exercise 6 — raise the bar, deliberately, from the current champion.
-
-    The only place in this lab that reads the registry to decide something. It
-    is a human command precisely because promoting a champion is a human
-    decision: the new baseline lands in a file, in a commit, next to the data
-    pointer and the metrics that justify it.
-    """
+    """Write the current champion's scores into metrics/baseline.json."""
     if not mlflow_available(settings):
-        print("MLflow not reachable — start the stack with `make up`.")
+        print("MLflow not reachable: start the stack with `make up`.")
         print()
         return
     previous = read_baseline(settings.baseline_path)
@@ -395,9 +310,7 @@ def cmd_baseline_sync(settings: Settings, args) -> None:
         else:
             print(f"  {key:<12} {before:.4f} -> {after:.4f}  ({after - before:+.4f})")
     print()
-    print("  The bar has moved. Re-run `make gate` and the SAME model can now")
-    print("  be a NO-GO against a champion it used to beat. That is a ratchet,")
-    print("  and it only turns one way — which is the point and also the risk.")
+    print("  The bar has moved. Re-run `make gate` to compare against it.")
     print()
 
 
@@ -406,7 +319,7 @@ def cmd_runs_for_data(settings: Settings, args) -> None:
     from .dvc_meta import pointer_md5
 
     if not mlflow_available(settings):
-        print("MLflow not reachable — start the stack with `make up`.")
+        print("MLflow not reachable: start the stack with `make up`.")
         print()
         return
     md5 = pointer_md5(settings.measurements_path)
@@ -420,8 +333,7 @@ def cmd_runs_for_data(settings: Settings, args) -> None:
                            "metrics.f1", "tags.git_commit"] if c in frame.columns]
     print(frame[columns].to_string(index=False))
     print()
-    print(f"  {len(frame)} run(s). This is the question Week 3 could not ask:")
-    print("  not 'which run scored best' but 'which runs saw THIS data'.")
+    print(f"  {len(frame)} run(s).")
     print()
 
 
@@ -431,8 +343,7 @@ def cmd_register(settings: Settings, args) -> None:
         print("No MLflow run recorded yet. Run `make link` first.")
         print()
         return
-    # register_best_model calls pipeline.require_go, which raises GateFailed —
-    # a RuntimeError — and main() turns that into a clean message and exit 1.
+    # Raises GateFailed (a RuntimeError) on a NO-GO; main() turns it into exit 1.
     version = register_best_model(settings, run_id)
     print(f"Registered {version.name} version {version.version}")
     print(f"  source run: {version.run_id}")
@@ -443,12 +354,10 @@ def cmd_register(settings: Settings, args) -> None:
 
 def cmd_promote(settings: Settings, args) -> None:
     if not mlflow_available(settings):
-        print("MLflow not reachable — start the stack with `make up`.")
+        print("MLflow not reachable: start the stack with `make up`.")
         print()
         return
-    # The gate is checked FIRST, before looking for a version. Otherwise a
-    # NO-GO on a project with an empty registry reports "no versions
-    # registered", which is true, unhelpful, and hides the actual refusal.
+    # Check the gate first, so a NO-GO is reported even when the registry is empty.
     pipeline.require_go(settings)
     try:
         version = latest_version(settings)
@@ -460,22 +369,19 @@ def cmd_promote(settings: Settings, args) -> None:
     print(f"Version {promoted.version} now carries aliases: {list(promoted.aliases)}")
     if args.champion:
         print()
-        print("  `champion` moved too. That alias is the bar every future model")
-        print("  is measured against, so moving it is a deliberate act and not a")
-        print("  side effect of promoting to staging. Next: `make baseline-sync`")
-        print("  to write the new champion's scores into metrics/baseline.json,")
-        print("  which is what the gate actually reads.")
+        print("  `champion` moved too. Next: `make baseline-sync` to write its scores")
+        print("  into metrics/baseline.json, which the gate reads.")
     else:
         print()
-        print("  `staging` moved; `champion` did not. Use `make promote-champion`")
-        print("  to raise the bar — see the note in registry.promote_to_staging.")
+        print("  `staging` moved, `champion` did not. Use `make promote-champion`")
+        print("  to raise the bar.")
     print()
 
 
 def cmd_trace(settings: Settings, args) -> None:
-    """The full chain — now reaching the bytes."""
+    """Print the traceability chain from model alias back to data bytes."""
     if not mlflow_available(settings):
-        print("MLflow not reachable — start the stack with `make up`.")
+        print("MLflow not reachable: start the stack with `make up`.")
         print()
         return
     chain = trace_alias(settings)
@@ -500,49 +406,34 @@ def cmd_trace(settings: Settings, args) -> None:
           else "   Champion     : (no champion alias set)")
     print()
     if not chain["dvc_md5"]:
-        print("Step 5 is empty — the run was logged before the DVC linkage")
+        print("Step 5 is empty: the run was logged before the DVC linkage")
         print("existed. Run `make link` to create a run that records it.")
     elif not chain["data_validation"]:
-        print("Step 6 is empty — the run predates the validation linkage.")
+        print("Step 6 is empty: the run predates the validation linkage.")
         print("Run `make link` to create a run that records the verdict.")
     elif not chain["gate"]:
-        print("Step 8 is empty — the run predates the gate linkage.")
+        print("Step 8 is empty: the run predates the gate linkage.")
         print("Run `make repro` so the gate stage stamps its verdict on it.")
     else:
-        print("Steps 6 and 8 are the two gates, and they answer opposite")
-        print("questions. Step 6: was the DATA allowed IN? Step 8: is the MODEL")
-        print("allowed OUT? Step 5 sits between them and says which bytes we")
-        print("are talking about — a hash alone certifies garbage exactly as")
-        print("confidently as it certifies gold.")
-        print()
-        print("Read the SKIPPED count on step 8 before you read the verdict. A")
-        print("GO with eight unchecked criteria is a different claim from a GO")
-        print("with none, and only one of them is reassuring.")
+        print("Read the skipped count on step 8 before you read the verdict.")
     print()
 
 
 def cmd_gate_summary(settings: Settings, args) -> None:
-    """The gate verdict as markdown — for `$GITHUB_STEP_SUMMARY`.
-
-    Reads the recorded verdict rather than re-running the gate, so the summary
-    describes the run that actually happened.
-    """
+    """Print the recorded gate verdict as markdown, for `$GITHUB_STEP_SUMMARY`."""
     report = pipeline.read_gate(settings)
     print(format_gate_markdown(report))
 
 
 def cmd_flow(settings: Settings, args) -> None:
-    """Exercise 1 — run the training flow."""
+    """Run the Prefect training flow."""
     from .flows import training_flow
     from .tracking import prefect_available
 
     if not prefect_available(settings):
         raise RuntimeError(
-            f"No Prefect server at {settings.prefect_api_url} — start the stack with "
-            "`make up`.\n"
-            "  (Unsetting PREFECT_API_URL also works: Prefect then starts a temporary\n"
-            "   server, runs, and throws the history away. Fine for a smoke test, and\n"
-            "   useless for this week, whose whole point is the run record.)"
+            f"No Prefect server at {settings.prefect_api_url}: start the stack with "
+            "`make up`."
         )
 
     verdict = training_flow(
@@ -555,7 +446,7 @@ def cmd_flow(settings: Settings, args) -> None:
 
 
 def cmd_flow_params(settings: Settings, args) -> None:
-    """Exercise 4 — run with a runtime override, then restore params.yaml."""
+    """Run the flow with a runtime override, then restore params.yaml."""
     from .flows import demo_parameterised
     from .tracking import prefect_available
 
@@ -581,12 +472,7 @@ def cmd_flow_params(settings: Settings, args) -> None:
 
 
 def cmd_serve(settings: Settings, args) -> None:
-    """Exercise 6 — a scheduled deployment.
-
-    `.serve()` starts a process that listens for scheduled runs. No work pool,
-    no worker, no infrastructure block. Work pools are the production answer
-    and they are a lecture slide, not this lab.
-    """
+    """Serve the training flow as a scheduled Prefect deployment."""
     from .flows import scheduled_flow
 
     print(f"Serving `diabetes-training-with-pull` on cron `{args.cron}`.")
@@ -596,12 +482,7 @@ def cmd_serve(settings: Settings, args) -> None:
 
 
 def cmd_bake_info(settings: Settings, args) -> None:
-    """What `make image` bakes in. One line of `KEY=value`, for the shell.
-
-    Lives here rather than as inline shell in the Makefile because it has
-    branches, and a `run:` block is the one place in a project that nothing
-    tests. Same argument as Week 7's `gate-summary`.
-    """
+    """Print what `make image` bakes in, as `KEY=value` lines for the shell."""
     from . import registry
 
     verdict, run_id, version = "unknown", "unknown", "unknown"
@@ -612,8 +493,7 @@ def cmd_bake_info(settings: Settings, args) -> None:
 
     run_id = pipeline.read_run_id(settings) or "unknown"
 
-    # The registry is optional. If the stack is down we bake the local model
-    # and SAY SO, rather than claiming a provenance we cannot support.
+    # Without the registry, bake the local model and say so in MODEL_SOURCE.
     source = "local models/model.pkl"
     try:
         champion = registry.champion_version(settings)
@@ -623,10 +503,7 @@ def cmd_bake_info(settings: Settings, args) -> None:
     except Exception:  # noqa: BLE001 -- the stack being down is an ordinary state
         pass
 
-    # QUOTED. `MODEL_SOURCE=local models/model.pkl` unquoted makes `eval` assign
-    # the first word and then try to EXECUTE the second, which fails with
-    # "models/model.pkl: Permission denied" — an error that says nothing about
-    # quoting. Anything a shell will `eval` has to be quoted at the source.
+    # Quoted, because the Makefile `eval`s these lines and a value may contain spaces.
     for key, value in (
         ("MODEL_VERSION", version),
         ("RUN_ID", run_id),
@@ -637,7 +514,7 @@ def cmd_bake_info(settings: Settings, args) -> None:
 
 
 def cmd_bench(settings: Settings, args) -> None:
-    """Exercise 3 — batch versus online, on the same rows and the same model."""
+    """Compare batch and online scoring on the same rows and model."""
     from .bench import format_comparison, run_bench
 
     result = run_bench(settings)
@@ -647,7 +524,7 @@ def cmd_bench(settings: Settings, args) -> None:
 
 
 def cmd_serve_api(settings: Settings, args) -> None:
-    """Exercise 2 — run the FastAPI app with uvicorn."""
+    """Run the FastAPI app with uvicorn."""
     import uvicorn
 
     port = args.port or 5541
@@ -655,11 +532,11 @@ def cmd_serve_api(settings: Settings, args) -> None:
     uvicorn.run("week_11_observability.api:app", host="127.0.0.1", port=port, log_level="info")
 
 
-# ── Week 10 — rollout ────────────────────────────────────────────────────────
+# ── Rollout ──────────────────────────────────────────────────────────────────
 
 
 def cmd_model_publish(settings: Settings, args) -> None:
-    """Exercise 2 — put a model version in the store the cluster fetches from."""
+    """Put a model version in the store the cluster fetches from."""
     from .rollout import format_versions, list_versions, publish_version
 
     version = args.store_version or "v1"
@@ -670,9 +547,7 @@ def cmd_model_publish(settings: Settings, args) -> None:
         print()
         print("  FORCED. The recorded gate verdict is "
               f"{result.provenance.get('gate_verdict')!r}, and it has been written into")
-        print("  provenance.json, so the pod serving this model will admit it when asked.")
-        print("  A model store is the fourth door into production; this is what walking")
-        print("  through it looks like.")
+        print("  provenance.json, so the pod serving this model will admit it.")
     print()
     print(format_versions(list_versions(settings)))
     print()
@@ -690,12 +565,7 @@ def cmd_store_list(settings: Settings, args) -> None:
 
 
 def _smoke_client(args):
-    """A live endpoint if one was given, otherwise this app, in-process.
-
-    The same suite either way. Without a URL it needs no cluster, no Docker and
-    no server, which is why the smoke test is testable in the autograder — and
-    why `tests/test_smoke_suite.py` can prove it FAILS on a bad model.
-    """
+    """A live endpoint if `--url` was given, otherwise this app, in-process."""
     if args.url:
         import httpx
 
@@ -709,21 +579,53 @@ def _smoke_client(args):
 
 
 def cmd_smoke(settings: Settings, args) -> None:
-    """Exercise 4 — the check a probe cannot perform."""
-    from .smoke import format_smoke, run_smoke
+    """Run the smoke test against the endpoint. Exits 1 unless it passes."""
+    from .smoke import DEFAULT_MIN_SPREAD, format_smoke, run_smoke
 
     client, where = _smoke_client(args)
+    min_spread = args.min_spread if args.min_spread is not None else DEFAULT_MIN_SPREAD
     print()
     print(f"  target: {where}")
-    report = run_smoke(client, expect_version=args.store_version)
+    report = run_smoke(client, expect_version=args.store_version, min_spread=min_spread)
     print(format_smoke(report))
     print()
     if report["verdict"] != "PASS":
         raise SystemExit(1)
 
 
+def cmd_release_check(settings: Settings, args) -> None:
+    """Is release.yaml complete?"""
+    from .release import load_release, problems, release_path
+
+    path = release_path(settings.project_root.resolve())
+    release = load_release(path)
+    found = problems(release)
+    candidate = (release.get("model") or {}).get("candidate")
+    provenance = settings.project_root / "model-store" / str(candidate) / "provenance.json"
+    if not found and provenance.exists():
+        verdict = json.loads(provenance.read_text()).get("gate_verdict")
+        if verdict != "GO":
+            found.append(f"`model.candidate` {candidate} has the gate verdict {verdict!r} in the store")
+    print()
+    if found:
+        print(f"  {path.name} is not ready:")
+        for problem in found:
+            print(f"    - {problem}")
+        print()
+        raise SystemExit(1)
+    print(f"  {path.name} is complete.")
+    print()
+
+
+def cmd_release_value(settings: Settings, args) -> None:
+    """Print one value from release.yaml, for the Makefile."""
+    from .release import load_release, release_path, value
+
+    print(value(load_release(release_path(settings.project_root.resolve())), args.key))
+
+
 def cmd_split_measure(settings: Settings, args) -> None:
-    """Exercise 3 — count which revision answered, one request at a time."""
+    """Count which revision answered, one request at a time."""
     from .loadtest import format_split, run_load, summarise
 
     url = args.url or "http://127.0.0.1:5541"
@@ -738,8 +640,8 @@ def cmd_split_measure(settings: Settings, args) -> None:
 
 
 def cmd_loadtest(settings: Settings, args) -> None:
-    """Exercise 6 — the same endpoint at rising concurrency."""
-    from .loadtest import format_load_table, format_split, run_load, summarise
+    """Send the same requests to the endpoint at rising concurrency."""
+    from .loadtest import format_against_release, format_load_table, format_split, run_load, summarise
 
     url = args.url or "http://127.0.0.1:5541"
     levels = [int(c) for c in (args.concurrency_levels or "1,4,16,64").split(",")]
@@ -752,28 +654,17 @@ def cmd_loadtest(settings: Settings, args) -> None:
     print(f"  target: {url}   {requests} requests per level")
     print(format_load_table(rows))
     print()
-    print("  p50/p95/p99, never a mean. The tail is what a user notices, and it is")
-    print("  the number that moves when concurrency rises.")
+    if args.max_p95_ms is not None and args.max_error_rate is not None:
+        print(format_against_release(rows, args.max_p95_ms, args.max_error_rate))
     print(format_split(last))
     print()
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Week 11 — observability
-# ─────────────────────────────────────────────────────────────────────────────
+# ── Observability ────────────────────────────────────────────────────────────
 
 
 def cmd_metrics_show(settings: Settings, args) -> None:
-    """Exercise 1 — read the exposition format, in-process.
-
-    Exercises the app with a `TestClient` first, so the output is not a page of
-    zeroes. Reading a counter at 0 tells you nothing; reading it at 3 after
-    three requests tells you what a counter IS.
-
-    No server, no Docker, no Prometheus. The exposition format is a text format
-    and everything Prometheus will ever know about this service arrives through
-    it — which is worth seeing once with your own eyes rather than trusting.
-    """
+    """Send a few requests in-process, then print the matching /metrics lines."""
     from fastapi.testclient import TestClient
     from prometheus_client import CollectorRegistry
 
@@ -798,26 +689,16 @@ def cmd_metrics_show(settings: Settings, args) -> None:
 
     print()
     print("  5 requests sent in-process (3 valid, 1 contract violation, 1 unmatched path).")
-    print(f"  Showing lines matching /{interesting}/ — drop --filter to see everything")
-    print("  this app declares. The SERVED app also carries prometheus_client's own")
-    print("  process_*, python_gc_* and python_info collectors for free; they live in")
-    print("  the process-global registry, and this command uses a private one.")
+    print(f"  Showing lines matching /{interesting}/. Drop --filter to see everything.")
     print()
     for line in render(registry).splitlines():
         if pattern.search(line):
             print("   ", line)
     print()
-    print("  Things to notice:")
-    print("    * `route` is the TEMPLATE, and the unmatched path collapsed to one label")
-    print("      value. That is the cardinality decision, in one function.")
-    print("    * the histogram is not one line: one `_bucket` per boundary (cumulative —")
-    print("      le=\"0.25\" counts EVERYTHING at or below 250ms), plus `_sum` and `_count`.")
-    print("    * /metrics does not appear. It does not measure itself.")
-    print()
 
 
 def cmd_traffic(settings: Settings, args) -> None:
-    """Exercise 2 — produce something to look at, with a known composition."""
+    """Exercise 2: send traffic with a known mix to a running API."""
     from .traffic import generate, parse_mix
 
     url = args.url or f"http://127.0.0.1:{args.port or 5562}"
@@ -838,14 +719,10 @@ def cmd_traffic(settings: Settings, args) -> None:
     if result.errors:
         print("  Nothing was reachable. Is the API container up? `make api-up`.")
         raise SystemExit(1)
-    print("  Now look at the dashboard. The error-rate panel should be flat at zero")
-    print("  even though a tenth of those requests were rejected — a 422 is the")
-    print("  contract working, and `error rate` is a decision about what counts.")
-    print()
 
 
 def cmd_slo_budget(settings: Settings, args) -> None:
-    """Exercise 4 — the promise, the budget, and the burn-rate table."""
+    """Print the SLOs, their error budgets and the burn-rate table."""
     from .slo import format_report, load_slo
 
     print()
@@ -854,13 +731,7 @@ def cmd_slo_budget(settings: Settings, args) -> None:
 
 
 def cmd_cardinality(settings: Settings, args) -> None:
-    """Exercise 1 — the label that costs you the monitoring system.
-
-    MEASURED, not warned about. The same requests are sent twice, once with the
-    route TEMPLATE as the label and once with the raw path, and the resulting
-    number of time series is counted both ways. The gap is the lesson, and it
-    is much larger than anyone expects from one line of code.
-    """
+    """Count time series with the route template versus the raw path as the label."""
     from fastapi.testclient import TestClient
     from prometheus_client import CollectorRegistry
 
@@ -872,8 +743,7 @@ def cmd_cardinality(settings: Settings, args) -> None:
         registry = CollectorRegistry()
         original = metrics_module.route_label
         if use_raw_path:
-            # THE ONE-LINE MISTAKE, made on purpose. Everything else is
-            # identical; only the label VALUE changes.
+            # Only the label value changes: the raw path instead of the template.
             metrics_module.route_label = lambda request: request.url.path
         try:
             client = TestClient(create_app(registry=registry))
@@ -906,33 +776,10 @@ def cmd_cardinality(settings: Settings, args) -> None:
     growth = raw_count / template_count if template_count else float("inf")
     print(f"  {growth:.0f}x, from changing one expression.")
     print()
-    print("  And that is the SMALL version. The raw-path count grows with the number")
-    print("  of distinct paths your callers invent — which for a public endpoint is")
-    print("  chosen by strangers. Each series lives in the COLLECTOR's memory, for")
-    print("  the whole retention period, whether or not it is ever observed again.")
-    print()
-    print("  The rule: a label value must come from a small set you can write down.")
-    print("  If you cannot enumerate it, it belongs in a log line — where unbounded")
-    print("  cardinality is free. That sentence is the whole logs-vs-metrics story.")
-    print()
 
 
 def cmd_alert_noise(settings: Settings, args) -> None:
-    """Not an exercise — how often would each rule have woken somebody?
-
-    Replays a synthetic day of latency measurements past two rules that both
-    claim to watch the same thing:
-
-      * the NAIVE one — "p95 above the threshold right now" — which is what
-        almost everybody writes first;
-      * the BURN-RATE one — "we are spending the budget 14.4x too fast, over an
-        hour, and still are" — which is what the SLO implies.
-
-    The synthetic day is deliberately ordinary: mostly fine, with brief spikes
-    of the kind every real service has, and one genuine sustained incident.
-    The naive rule cannot tell those apart. That is not a subtle statistical
-    point, it is the entire reason on-call rotations burn people out.
-    """
+    """Replay a simulated day past a naive latency alert and a burn-rate alert."""
     import random
 
     from .slo import load_slo
@@ -951,9 +798,7 @@ def cmd_alert_noise(settings: Settings, args) -> None:
             # The real incident: 90 minutes where most requests are slow.
             day.append(rng.uniform(0.80, 0.95))
         elif rng.random() < 0.03:
-            # An ordinary spike: one bad minute. A garbage collection, a noisy
-            # neighbour, someone's backup job. Nothing to do about it, and by
-            # the time a human has read the page it is over.
+            # A one-minute spike that is over before anyone could act.
             day.append(rng.uniform(0.60, 0.99))
         else:
             day.append(rng.uniform(0.0, 0.04))
@@ -978,25 +823,18 @@ def cmd_alert_noise(settings: Settings, args) -> None:
         burn_active = firing
 
     print()
-    print("  One simulated day (1440 minutes) against the SAME service:")
-    print("  ordinary noise, plus one genuine 90-minute incident at 10:00.")
+    print("  One simulated day (1440 minutes) against the same service:")
+    print("  short spikes, plus one 90-minute incident at 10:00.")
     print()
     print(f"    naive   : p95 miss rate > {latency_slo.error_budget:.0%} right now")
     print(f"              -> fired {naive_firings} times")
     print(f"    burn    : 1h AND 5m miss rate > {threshold:.0%} ({fast.burn_rate}x budget)")
     print(f"              -> fired {burn_firings} time(s)")
     print()
-    print("  Both caught the incident. One of them also caught every hiccup the")
-    print("  service has ever had, at three in the morning, for no available action.")
-    print()
-    print("  The Joint Commission's estimate for hospital alarms is that 85-99% of")
-    print("  them do not require intervention. This is the software version, and the")
-    print("  outcome is the same one: people stop hearing the sound.")
-    print()
 
 
 def cmd_ci_explain(settings: Settings, args) -> None:
-    """Exercise 1 — read the workflows, including the one grading you."""
+    """List the lab's workflows and the installed ones, then audit them."""
     root = Path(__file__).resolve().parents[2]
     repo = root
     while repo != repo.parent and not (repo / ".git").is_dir():
@@ -1010,16 +848,15 @@ def cmd_ci_explain(settings: Settings, args) -> None:
     for path in lab:
         print(f"  {path.relative_to(root)}")
     if not lab:
-        print("  none yet — Exercises 4 and 5.")
+        print("  none yet.")
     print()
     print("Workflows GitHub will actually run (repository root):")
     for path in installed:
         print(f"  {path.relative_to(repo)}")
     if not installed:
-        print("  none — run `make install-ci`.")
+        print("  none: run `make install-ci`.")
     print()
-    print("  GitHub only executes workflows in .github/workflows AT THE ROOT.")
-    print("  A workflow in a subdirectory is never run, and never warns you.")
+    print("  GitHub only runs workflows in .github/workflows at the repository root.")
     print()
 
     rows = audit(lab + installed + grader)
@@ -1031,7 +868,6 @@ COMMANDS = {
     "check-file": cmd_check_file,
     "model-input": cmd_model_input,
     "predict": cmd_predict,
-    # New in Week 6.
     "slices": cmd_slices,
     "fairness": cmd_fairness,
     "gate": cmd_gate,
@@ -1046,25 +882,22 @@ COMMANDS = {
     "register": cmd_register,
     "promote": cmd_promote,
     "trace": cmd_trace,
-    # New in Week 7.
     "ci-explain": cmd_ci_explain,
-    # New in Week 9.
     "bench": cmd_bench,
     "bake-info": cmd_bake_info,
     "serve-api": cmd_serve_api,
-    # New in Week 10.
     "model-publish": cmd_model_publish,
     "store-list": cmd_store_list,
     "smoke": cmd_smoke,
+    "release-check": cmd_release_check,
+    "release-value": cmd_release_value,
     "split-measure": cmd_split_measure,
     "loadtest": cmd_loadtest,
-    # New in Week 11.
     "metrics-show": cmd_metrics_show,
     "traffic": cmd_traffic,
     "slo-budget": cmd_slo_budget,
     "cardinality": cmd_cardinality,
     "alert-noise": cmd_alert_noise,
-    # New in Week 8.
     "flow": cmd_flow,
     "flow-params": cmd_flow_params,
     "serve": cmd_serve,
@@ -1075,7 +908,7 @@ COMMANDS = {
 def main() -> None:
     parser = argparse.ArgumentParser(
         prog="week-11-observability",
-        description="Week 11 lab — observability: metrics, SLIs, SLOs, error budgets, alerting.",
+        description="Week 11 lab: observability.",
     )
     parser.add_argument("command", choices=sorted(COMMANDS))
     parser.add_argument(
@@ -1097,7 +930,7 @@ def main() -> None:
     parser.add_argument(
         "--champion",
         action="store_true",
-        help="promote: move the `champion` alias too, raising the bar (Exercise 6)",
+        help="promote: move the `champion` alias too",
     )
     parser.add_argument("--push", action="store_true", help="flow: dvc push after the run")
     parser.add_argument("--register", action="store_true", help="flow: register on a GO")
@@ -1107,13 +940,11 @@ def main() -> None:
     parser.add_argument("--family", default=None, help="flow-params: override train.family")
     parser.add_argument("--port", type=int, default=None, help="serve-api: port (default 5541)")
     parser.add_argument("--cron", default="0 3 * * 1", help="serve: schedule (default Mon 03:00)")
-    # New in Week 10. `--store-version` is spelled out rather than reusing
-    # `--version`, which is already an int (the dataset version) — two meanings
-    # for one flag is how a lab command silently does the wrong thing.
+    # Separate from `--version`, which is the dataset version.
     parser.add_argument("--store-version", default=None, dest="store_version",
                         help="model-publish/smoke: the model store version, e.g. v2")
     parser.add_argument("--force", action="store_true",
-                        help="model-publish: publish a model the gate REFUSED (Exercise 4)")
+                        help="model-publish: publish a model the gate refused")
     parser.add_argument("--url", default=None,
                         help="smoke/split-measure/loadtest: endpoint (default: in-process app)")
     parser.add_argument("--host", default=None,
@@ -1125,7 +956,14 @@ def main() -> None:
                         help="loadtest: comma-separated levels (default 1,4,16,64)")
     parser.add_argument("--declared", type=int, default=None,
                         help="split-measure: the canaryTrafficPercent you asked for")
-    # New in Week 11.
+    parser.add_argument("--key", default=None,
+                        help="release-value: a dotted key, e.g. canary.percent")
+    parser.add_argument("--min-spread", type=float, default=None, dest="min_spread",
+                        help="smoke: smoke.min_probability_spread from release.yaml")
+    parser.add_argument("--max-p95-ms", type=float, default=None, dest="max_p95_ms",
+                        help="loadtest: load.max_p95_ms from release.yaml")
+    parser.add_argument("--max-error-rate", type=float, default=None, dest="max_error_rate",
+                        help="loadtest: load.max_error_rate from release.yaml")
     parser.add_argument("--filter", default=None,
                         help="metrics-show: regex of exposition lines to print")
     parser.add_argument("--mix", default=None,
@@ -1133,19 +971,15 @@ def main() -> None:
     parser.add_argument("--rate", type=float, default=None,
                         help="traffic: requests per second (default 20)")
     parser.add_argument("--seed", type=int, default=42,
-                        help="traffic/alert-noise: seed, so a demonstration repeats")
+                        help="traffic/alert-noise: random seed")
     args = parser.parse_args()
 
     settings = load_settings()
     try:
         COMMANDS[args.command](settings, args)
     except (FileNotFoundError, KeyError, RuntimeError, ValueError) as error:
-        # RuntimeError covers pipeline.ValidationFailed, which is the ordinary
-        # way this lab's gate reports itself. A failed contract is not a crash.
-        # A missing prerequisite is an ordinary state in this lab, not a crash.
-        # Print it readably and exit NON-ZERO, because dvc.yaml invokes these
-        # same subcommands as pipeline stages — a stage that swallowed its own
-        # failure would let `dvc repro` report success on a broken pipeline.
+        # A failed contract or a missing prerequisite: print it and exit 1, so a
+        # DVC stage that calls this command fails too.
         print()
         print(f"Cannot run `{args.command}` yet:")
         print(f"  {error}")
