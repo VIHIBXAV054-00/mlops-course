@@ -4,7 +4,7 @@ import json
 
 from .config import load_settings
 from .data import build_dataset, load_dataframe
-from .model import evaluate_model, train_logistic_regression
+from .model import evaluate_model, train_logistic_regression, train_random_forest
 
 
 def main() -> None:
@@ -21,5 +21,9 @@ def main() -> None:
     print(f"Test rows:      {len(x_test)}")
     print()
     print("Logistic Regression metrics:")
-    model = train_logistic_regression(x_train, y_train, settings)
-    print(json.dumps(evaluate_model(model, x_test, y_test), indent=2))
+    lr_model = train_logistic_regression(x_train, y_train, settings)
+    print(json.dumps(evaluate_model(lr_model, x_test, y_test), indent=2))
+    print()
+    print("Random Forest metrics:")
+    rf_model = train_random_forest(x_train, y_train, settings)
+    print(json.dumps(evaluate_model(rf_model, x_test, y_test), indent=2))

@@ -1,0 +1,4 @@
+{
+    "python.terminal.useEnvFile": true,
+    "makefile.configureOnOpen": true
+}

@@ -89,60 +89,44 @@ def create_app() -> FastAPI:
 
     # Loaded once, when the app starts. None when there is no model file.
     app.state.model = joblib.load(model_path) if model_path.exists() else None
-    app.state.build_info = build_info
+    app.state.baked = baked
 
-    # TODO(student) Exercise 2, step 2: make `health` the GET /health endpoint. Replace the
-    # line below with a FastAPI path operation decorator: the HTTP method in lower case, the
-    # path, and HealthResponse as the response model. Then replace each `...` in the function.
-    # Reference: https://fastapi.tiangolo.com/tutorial/first-steps/
-    # @app.<fill in>(<fill in>, response_model=<fill in>)
+    @app.get("/health", response_model=HealthResponse)
     def health() -> HealthResponse:
-        """503 until the model is loaded, so a readiness probe sends no traffic to this pod."""
-        if ...:  # no model is loaded
-            raise HTTPException(status_code=..., detail=...)  # the detail includes "not ready"
-
+        if app.state.model is None:
+            raise HTTPException(status_code=503, detail="not ready: no model loaded")
         return HealthResponse(
-            status=...,  # "ok"
-            model_version=...,  # this field and the next two come from `build_info`
-            run_id=...,
-            gate_verdict=...,
-            schema_version=...,
-            model_source=...,  # `build_info` calls it "source"
+            status="ok",
+            model_version=baked.get("model_version"),
+            run_id=baked.get("run_id"),
+            gate_verdict=baked.get("gate_verdict"),
+            schema_version=SCHEMA_VERSION,
+            model_source=baked.get("source", "working tree (not baked)"),
         )
 
-    # TODO(student) Exercise 2, step 3: make `predict` the POST /predict endpoint, with
-    # PredictionResponse as the response model, as for `health` above. Then replace each `...`.
-    # Reference: https://fastapi.tiangolo.com/tutorial/body/
-    # @app.<fill in>(<fill in>, response_model=<fill in>)
+    @app.post("/predict", response_model=PredictionResponse)
     def predict(request: PredictionRequest) -> PredictionResponse:
-        """Score one patient. FastAPI has checked the types; the contract checks the values."""
-        if app.state.model is None:
-            raise HTTPException(status_code=503, detail="model not loaded")
-
-        # `predict_one` in inference.py runs the same steps for `make predict`.
-        payload = ...  # the request as a dict
-        report = ...  # the contract's report on `payload`, from `validate_payload`
-
-        # A request that breaks the contract never reaches the model.
-        if ...:  # the report did not pass
+        payload = request.model_dump()
+        report = validate_payload(payload)
+        if not report.get("passed"):
             raise HTTPException(
-                status_code=...,
+                status_code=422,
                 detail={
-                    "message": "payload failed the model-input contract",
-                    "schema_version": ...,
-                    "failures": ...,  # the report's `by_check`
+                    "failures": report.get("by_check", {}),
+                    "schema_version": SCHEMA_VERSION,
                 },
             )
-
-        frame = ...  # `payload_to_frame`, with FEATURE_COLUMNS in that order
-        # `predict_proba` gives one row per patient and one column per class. Take class 1
-        # (diabetes) of the only row, as a float.
-        probability = ...
+        frame = payload_to_frame(payload)
+        # Convert sentinel zeros to nulls, select features in contract order,
+        # then cast to plain float64 so sklearn's SimpleImputer gets NaN not pd.NA.
+        from .validation import to_nullable
+        numeric = to_nullable(frame)[list(FEATURE_COLUMNS)].astype("float64")
+        proba = float(app.state.model.predict_proba(numeric)[0][1])
         return PredictionResponse(
-            prediction=...,  # 1 when `probability` is at least 0.5, otherwise 0
-            probability=...,  # rounded to 4 decimals
-            model_version=...,  # from `build_info`
-            schema_version=...,
+            prediction=1 if proba >= 0.5 else 0,
+            probability=round(proba, 4),
+            model_version=baked.get("model_version"),
+            schema_version=SCHEMA_VERSION,
         )
 
     return app

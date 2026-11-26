@@ -1,0 +1,164 @@
+{
+  "action": "page. The inputs moved and the model got worse on labelled data. Roll back to the previous model version (Week 10) first, because that needs no labels; then decide about retraining.",
+  "computed_at": 1795722675.7289128,
+  "current": {
+    "age_seconds": null,
+    "rows": 800,
+    "window_rows": 2000
+  },
+  "degradation": {
+    "current": {
+      "accuracy": 0.7538,
+      "f1": 0.6936,
+      "fpr": 0.2017,
+      "n": 800,
+      "n_positives": 324,
+      "precision": 0.6991,
+      "recall": 0.6883,
+      "roc_auc": 0.8265,
+      "selection_rate": 0.3987,
+      "window": "current"
+    },
+    "degraded": true,
+    "drop": 0.0496,
+    "min_drop": 0.03,
+    "predicted_positive_rate": {
+      "current": 0.3987,
+      "reference": 0.2674
+    },
+    "primary_metric": "roc_auc",
+    "reference": {
+      "accuracy": 0.809,
+      "f1": 0.6667,
+      "fpr": 0.11,
+      "n": 288,
+      "n_positives": 88,
+      "precision": 0.7143,
+      "recall": 0.625,
+      "roc_auc": 0.8761,
+      "selection_rate": 0.2674,
+      "window": "reference"
+    },
+    "roc_auc_moved": {
+      "current": 0.8265,
+      "reference": 0.8761
+    },
+    "summary": "roc_auc 0.8761 -> 0.8265 (drop +0.0496, threshold 0.03)"
+  },
+  "drifted_count": 2,
+  "drifted_gated_count": 1,
+  "evidently_share": 0.375,
+  "evidently_share_count": 3.0,
+  "evidently_share_threshold": 0.5,
+  "features": [
+    {
+      "column": "glucose",
+      "drifted": true,
+      "gated": true,
+      "method": "psi",
+      "method_used": "psi",
+      "smaller_is_drift": false,
+      "threshold": 0.235,
+      "value": 0.2505561682947816
+    },
+    {
+      "column": "insulin",
+      "drifted": true,
+      "gated": false,
+      "method": "psi",
+      "method_used": "psi",
+      "smaller_is_drift": false,
+      "threshold": 0.2,
+      "value": 0.2132522761881423
+    },
+    {
+      "column": "pregnancies",
+      "drifted": false,
+      "gated": false,
+      "method": "psi",
+      "method_used": "psi",
+      "smaller_is_drift": false,
+      "threshold": 0.2,
+      "value": 0.12484247465601099
+    },
+    {
+      "column": "blood_pressure",
+      "drifted": false,
+      "gated": false,
+      "method": "psi",
+      "method_used": "psi",
+      "smaller_is_drift": false,
+      "threshold": 0.2,
+      "value": 0.12484741447338897
+    },
+    {
+      "column": "skin_thickness",
+      "drifted": false,
+      "gated": false,
+      "method": "psi",
+      "method_used": "psi",
+      "smaller_is_drift": false,
+      "threshold": 0.2,
+      "value": 0.1521951484304675
+    },
+    {
+      "column": "bmi",
+      "drifted": false,
+      "gated": false,
+      "method": "psi",
+      "method_used": "psi",
+      "smaller_is_drift": false,
+      "threshold": 0.2,
+      "value": 0.15262473640835877
+    },
+    {
+      "column": "diabetes_pedigree",
+      "drifted": false,
+      "gated": false,
+      "method": "psi",
+      "method_used": "psi",
+      "smaller_is_drift": false,
+      "threshold": 0.2,
+      "value": 0.061281037188743184
+    },
+    {
+      "column": "age",
+      "drifted": false,
+      "gated": false,
+      "method": "psi",
+      "method_used": "psi",
+      "smaller_is_drift": false,
+      "threshold": 0.2,
+      "value": 0.07636693869068596
+    }
+  ],
+  "features_total": 8,
+  "min_samples": 500,
+  "model": {
+    "gate_verdict": "GO",
+    "model_family": null,
+    "run_id": "d1edbc5483b4489d85ccf02a7e6da32f"
+  },
+  "n_current": 800,
+  "n_reference": 288,
+  "proxy": {
+    "max_absolute_deviation": 0.1,
+    "reference_positive_rate": 0.2674,
+    "window": "6h"
+  },
+  "reasons": [
+    "glucose: psi=0.2506 > 0.235 (gated)",
+    "and measured performance fell on labelled data: roc_auc 0.8761 -> 0.8265 (drop +0.0496, threshold 0.03)"
+  ],
+  "reference": {
+    "dataset_md5": "a8fd7b4f0d6d1bc4e378a8f76c5fff0c",
+    "description": "the 75% training split of measurements.csv v2",
+    "path": "data\\processed\\train.csv",
+    "rows": 288
+  },
+  "schema": "drift-report/1",
+  "service": "diabetes-api",
+  "severity": "page",
+  "verdict": "DRIFT_WITH_DEGRADATION",
+  "window_age_seconds": null
+}

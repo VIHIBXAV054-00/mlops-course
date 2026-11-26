@@ -9,6 +9,9 @@
         isvc-health split-measure loadtest smoke smoke-local _job \
         promote-canary rollback rollback-reapply
 
+MAKE := make
+PWD ?= $(CURDIR)
+
 # The commands of the training pipeline, the CI checks, serving and the rollout lab.
 # The README's "Make targets" table lists the ones this lab uses.
 

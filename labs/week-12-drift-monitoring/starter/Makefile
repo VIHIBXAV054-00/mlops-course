@@ -15,6 +15,9 @@
         drift-alerts-test drift-alerts-test-fail drift-stale drift-protocol \
         retrain-trigger test-drift
 
+MAKE := make
+PWD ?= $(CURDIR)
+
 # The commands of the training pipeline, the CI checks, serving, the rollout, observability
 # and the drift lab.
 # The README's "Make targets" table lists the ones this lab uses.
@@ -528,7 +531,7 @@ predictions-off:
 
 ## Exercise 1 -- one request to the API. ZERO=glucose sends an impossible zero, which gets a 422.
 request:
-	@body=$$(python3 -c "import json; p={'pregnancies':6,'glucose':148,'blood_pressure':72,'skin_thickness':35,'insulin':125,'bmi':33.6,'diabetes_pedigree':0.627,'age':50}; z='$(ZERO)'; p.update({z: 0} if z else {}); print(json.dumps(p))"); \
+	@body=$$(uv run python -c "import json; p={'pregnancies':6,'glucose':148,'blood_pressure':72,'skin_thickness':35,'insulin':125,'bmi':33.6,'diabetes_pedigree':0.627,'age':50}; z='$(ZERO)'; p.update({z: 0} if z else {}); print(json.dumps(p))"); \
 	curl -s -i -X POST $(API_URL)/predict -H 'Content-Type: application/json' -d "$$body" \
 	  | grep -iE '^HTTP|^x-request-id|^\{'; echo
 
@@ -565,7 +568,7 @@ drift-open:
 	  echo "  reports/drift.html does not exist yet. Run \`make drift-report\` first."; \
 	  exit 1; }
 	@echo "  reports/drift.html"
-	@python3 -c "import webbrowser,pathlib;webbrowser.open(pathlib.Path('reports/drift.html').resolve().as_uri())" 2>/dev/null \
+	@uv run python -c "import webbrowser,pathlib;webbrowser.open(pathlib.Path('reports/drift.html').resolve().as_uri())" 2>/dev/null \
 	  || echo "  (open it yourself)"
 
 ## Exercise 3 -- the policy, parsed, with every threshold and its direction.
