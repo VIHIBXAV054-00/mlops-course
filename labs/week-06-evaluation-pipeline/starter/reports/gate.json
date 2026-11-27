@@ -1,0 +1,213 @@
+{
+  "verdict": "GO",
+  "criteria_version": "1.0.0",
+  "primary_metric": "f1",
+  "summary": {
+    "passed": 13,
+    "failed": 0,
+    "skipped": 4
+  },
+  "deltas": {
+    "f1": 0.0,
+    "accuracy": 0.0,
+    "roc_auc": 0.0
+  },
+  "checks": [
+    {
+      "id": "minimum.accuracy",
+      "kind": "minimum",
+      "metric": "accuracy",
+      "required": 0.7,
+      "observed": 0.7656,
+      "status": "pass",
+      "reason": null
+    },
+    {
+      "id": "minimum.f1",
+      "kind": "minimum",
+      "metric": "f1",
+      "required": 0.55,
+      "observed": 0.6341,
+      "status": "pass",
+      "reason": null
+    },
+    {
+      "id": "minimum.roc_auc",
+      "kind": "minimum",
+      "metric": "roc_auc",
+      "required": 0.75,
+      "observed": 0.8345,
+      "status": "pass",
+      "reason": null
+    },
+    {
+      "id": "regression.f1",
+      "kind": "regression",
+      "metric": "f1",
+      "baseline": 0.6341,
+      "observed": 0.6341,
+      "delta": 0.0,
+      "max_drop": 0.01,
+      "status": "pass",
+      "reason": null
+    },
+    {
+      "id": "slice.age_band.21-29",
+      "kind": "slice",
+      "axis": "age_band",
+      "group": "21-29",
+      "n": 94,
+      "n_positives": 21,
+      "f1": 0.6316,
+      "gap_to_aggregate": 0.0025,
+      "min_f1": 0.35,
+      "max_f1_gap": 0.25,
+      "status": "pass",
+      "reason": null
+    },
+    {
+      "id": "slice.age_band.30-39",
+      "kind": "slice",
+      "axis": "age_band",
+      "group": "30-39",
+      "n": 48,
+      "n_positives": 22,
+      "f1": 0.5946,
+      "gap_to_aggregate": 0.0395,
+      "min_f1": 0.35,
+      "max_f1_gap": 0.25,
+      "status": "pass",
+      "reason": null
+    },
+    {
+      "id": "slice.age_band.40-49",
+      "kind": "slice",
+      "axis": "age_band",
+      "group": "40-49",
+      "n": 31,
+      "n_positives": 17,
+      "f1": 0.75,
+      "gap_to_aggregate": -0.1159,
+      "min_f1": 0.35,
+      "max_f1_gap": 0.25,
+      "status": "pass",
+      "reason": null
+    },
+    {
+      "id": "slice.age_band.50+",
+      "kind": "slice",
+      "axis": "age_band",
+      "group": "50+",
+      "n": 19,
+      "n_positives": 7,
+      "f1": 0.5,
+      "status": "skipped",
+      "reason": "support 19 < min_support 20"
+    },
+    {
+      "id": "slice.bmi_band.under_normal",
+      "kind": "slice",
+      "axis": "bmi_band",
+      "group": "under_normal",
+      "n": 30,
+      "n_positives": 1,
+      "f1": 0.0,
+      "status": "skipped",
+      "reason": "positives 1 < min_positives 10"
+    },
+    {
+      "id": "slice.bmi_band.overweight",
+      "kind": "slice",
+      "axis": "bmi_band",
+      "group": "overweight",
+      "n": 48,
+      "n_positives": 9,
+      "f1": 0.4,
+      "status": "skipped",
+      "reason": "positives 9 < min_positives 10"
+    },
+    {
+      "id": "slice.bmi_band.obese",
+      "kind": "slice",
+      "axis": "bmi_band",
+      "group": "obese",
+      "n": 112,
+      "n_positives": 57,
+      "f1": 0.6792,
+      "gap_to_aggregate": -0.0451,
+      "min_f1": 0.35,
+      "max_f1_gap": 0.25,
+      "status": "pass",
+      "reason": null
+    },
+    {
+      "id": "slice.bmi_band.missing",
+      "kind": "slice",
+      "axis": "bmi_band",
+      "group": "missing",
+      "n": 2,
+      "n_positives": 0,
+      "f1": 0.0,
+      "status": "skipped",
+      "reason": "support 2 < min_support 20"
+    },
+    {
+      "id": "slice.insulin_missing.insulin_present",
+      "kind": "slice",
+      "axis": "insulin_missing",
+      "group": "insulin_present",
+      "n": 104,
+      "n_positives": 42,
+      "f1": 0.6111,
+      "gap_to_aggregate": 0.023,
+      "min_f1": 0.35,
+      "max_f1_gap": 0.25,
+      "status": "pass",
+      "reason": null
+    },
+    {
+      "id": "slice.insulin_missing.insulin_missing",
+      "kind": "slice",
+      "axis": "insulin_missing",
+      "group": "insulin_missing",
+      "n": 88,
+      "n_positives": 25,
+      "f1": 0.6667,
+      "gap_to_aggregate": -0.0326,
+      "min_f1": 0.35,
+      "max_f1_gap": 0.25,
+      "status": "pass",
+      "reason": null
+    },
+    {
+      "id": "fairness.age_band.tpr_gap",
+      "kind": "fairness",
+      "axis": "age_band",
+      "metric": "tpr_gap",
+      "limit": 0.25,
+      "observed": 0.2059,
+      "status": "pass",
+      "reason": null
+    },
+    {
+      "id": "fairness.insulin_missing.selection_rate_gap",
+      "kind": "fairness",
+      "axis": "insulin_missing",
+      "metric": "selection_rate_gap",
+      "limit": 0.1,
+      "observed": 0.007,
+      "status": "pass",
+      "reason": null
+    },
+    {
+      "id": "fairness.insulin_missing.tpr_gap",
+      "kind": "fairness",
+      "axis": "insulin_missing",
+      "metric": "tpr_gap",
+      "limit": 0.2,
+      "observed": 0.1562,
+      "status": "pass",
+      "reason": null
+    }
+  ]
+}

@@ -10,8 +10,7 @@ import pytest
 
 from week_07_ci_workflow.gates import evaluate_gate, format_gate
 
-# TODO(student) Exercise 3: mark this module's layer with `pytestmark`:
-# unit, data, eval or integration.
+pytestmark = pytest.mark.eval
 
 GOOD_METRICS = {
     "accuracy": 0.7656,

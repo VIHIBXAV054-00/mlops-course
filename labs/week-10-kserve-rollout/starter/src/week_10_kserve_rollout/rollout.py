@@ -136,10 +136,10 @@ def publish_version(
 
     provenance = build_provenance(settings, version)
     verdict = provenance.get("gate_verdict")
-    # TODO(student) Exercise 1: refuse to publish a model whose gate verdict is not "GO",
-    # unless `force` is true. Raise SystemExit with a message that starts with
-    # "REFUSING to publish" and names the version and the verdict.
-    # Raise before anything is written to the store.
+    if verdict != "GO" and not force:
+        raise SystemExit(
+            f"REFUSING to publish {version}: gate verdict is {verdict!r} (expected 'GO')."
+        )
 
     target = store_dir(settings) / version
     target.mkdir(parents=True, exist_ok=True)

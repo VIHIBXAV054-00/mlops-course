@@ -21,12 +21,10 @@ def test_load_payload_accepts_a_json_string_or_a_file(tmp_path) -> None:
 # ── The serving contract (Exercise 3) ────────────────────────────────────────
 
 
-@pytest.mark.skip(reason="Exercise 3 — write ModelInput and to_nullable, then delete this skip marker.")
 def test_the_example_request_is_legal() -> None:
     assert inference.validate_payload(inference.EXAMPLE_PAYLOAD)["passed"]
 
 
-@pytest.mark.skip(reason="Exercise 3 — write ModelInput and to_nullable, then delete this skip marker.")
 @pytest.mark.parametrize(
     "name, check",
     [
@@ -42,7 +40,6 @@ def test_each_bad_request_fails_its_check(name, check) -> None:
     )
 
 
-@pytest.mark.skip(reason="Exercise 3 — write ModelInput and to_nullable, then delete this skip marker.")
 def test_an_extra_field_is_rejected() -> None:
     report = inference.validate_payload({**inference.EXAMPLE_PAYLOAD, "smoker": 1})
     assert "column_in_schema" in report["by_check"]
@@ -51,7 +48,6 @@ def test_an_extra_field_is_rejected() -> None:
 # ── predict_one (Exercise 6) ─────────────────────────────────────────────────
 
 
-@pytest.mark.skip(reason="Exercise 6 (optional) — check the request in predict_one, then delete this skip marker.")
 @pytest.mark.parametrize("name", ["illegal", "swapped", "incomplete"])
 def test_a_rejected_request_never_reaches_the_model(name, tmp_path) -> None:
     """There is no model file in tmp_path: loading one would raise FileNotFoundError."""
@@ -66,7 +62,6 @@ def test_a_legal_request_needs_a_model(tmp_path) -> None:
         inference.predict_one(inference.EXAMPLE_PAYLOAD, tmp_path / "model.pkl")
 
 
-@pytest.mark.skip(reason="Exercise 6 (optional) — check the request in predict_one, then delete this skip marker.")
 def test_a_missing_value_is_filled_by_the_trained_model(settings) -> None:
     """A request with insulin = None is legal, and the model's imputer fills it."""
     model_path = settings.models_dir / "model.pkl"

@@ -17,7 +17,6 @@ Y_PRED = [1, 1, 1, 1, 0, 1, 0, 0, 0, 0] + [1, 1, 0, 0, 0, 1, 1, 1, 1, 0]
 GROUPS = ["a"] * 10 + ["b"] * 10
 
 
-@pytest.mark.skip(reason="Exercise 5 — implement rates_by_group and gaps in fairness.py, then delete this skip marker.")
 def test_the_report_holds_the_rates_and_the_gaps():
     report = fairness_report(Y_TRUE, Y_PRED, GROUPS)
     assert report["groups"]["a"]["tpr"] == 0.8
@@ -28,7 +27,6 @@ def test_the_report_holds_the_rates_and_the_gaps():
     assert report["equalized_odds_difference"] == 0.6  # the larger of the two gaps
 
 
-@pytest.mark.skip(reason="Exercise 5 — implement rates_by_group and gaps in fairness.py, then delete this skip marker.")
 def test_rates_are_none_when_undefined_never_zero():
     """A group with no positives has no TPR, and one with no negatives has no FPR."""
     report = fairness_report(
@@ -42,7 +40,6 @@ def test_rates_are_none_when_undefined_never_zero():
     assert report["groups"]["b"]["tpr"] == pytest.approx(2 / 3, abs=1e-4)
 
 
-@pytest.mark.skip(reason="Exercise 5 — implement rates_by_group and gaps in fairness.py, then delete this skip marker.")
 def test_a_tiny_group_is_reported_but_left_out_of_the_gaps():
     """Two patients, both missed: fairlearn alone would report a TPR gap of 0.8."""
     y_true, y_pred, groups = Y_TRUE + [1, 1], Y_PRED + [0, 0], GROUPS + ["tiny"] * 2
@@ -53,7 +50,6 @@ def test_a_tiny_group_is_reported_but_left_out_of_the_gaps():
     assert equal_opportunity_difference(y_true, y_pred, sensitive_features=groups) == 0.8
 
 
-@pytest.mark.skip(reason="Exercise 5 — implement rates_by_group and gaps in fairness.py, then delete this skip marker.")
 def test_a_group_without_positives_has_no_tpr_and_no_place_in_the_gaps():
     """fairlearn would count its TPR as 0.0 and report a TPR gap of 0.8."""
     y_true = Y_TRUE[:10] + [0] * 6

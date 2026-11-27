@@ -7,8 +7,8 @@ import pytest
 from week_07_ci_workflow import inference
 from week_07_ci_workflow.data import FEATURE_COLUMNS
 
-# TODO(student) Exercise 3: mark this module's layer with `pytestmark`:
-# unit, data, eval or integration.
+# Data: serving requests must satisfy the same feature contract before prediction.
+pytestmark = pytest.mark.data
 
 
 def test_the_example_payload_is_legal():

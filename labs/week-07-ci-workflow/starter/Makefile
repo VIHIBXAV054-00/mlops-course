@@ -283,12 +283,9 @@ ensure-data:
 	  exit 1; }
 
 ## The one entry point: lint, tests, pipeline and gate. Both workflows call it
-# TODO(student) Exercise 2: list the targets `ci` runs, in order, after the two
-# ensure-* targets. Reuse targets that already exist above; do not copy their recipes.
 # `make` stops at the first target that fails.
-ci: ensure-env ensure-data
-	@echo "make ci is not written yet (Exercise 2)."
-	@exit 1
+ci: ensure-env ensure-data lint test-unit test-data test-eval repro gate
+	@echo "CI passed: lint, tests, pipeline, gate."
 
 ## The steps of ci.yml on your machine, in the runner's order
 ci-local: ensure-env ensure-data

@@ -11,8 +11,7 @@ from week_07_ci_workflow.fairness import (
     format_fairness,
 )
 
-# TODO(student) Exercise 3: mark this module's layer with `pytestmark`:
-# unit, data, eval or integration.
+pytestmark = pytest.mark.eval
 
 # Two groups of 10 with known rates: a (TPR 0.8, FPR 0.2), b (TPR 0.4, FPR 0.8).
 Y_TRUE = [1, 1, 1, 1, 1, 0, 0, 0, 0, 0] * 2

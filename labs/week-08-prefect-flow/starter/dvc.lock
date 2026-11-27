@@ -94,11 +94,11 @@ stages:
     outs:
     - path: models/mlflow_run_id.json
       hash: md5
-      md5: 473e9901a9ccd5194191e054526d2235
+      md5: 605d5129089ee1f734b77f0c7aa28157
       size: 82
     - path: models/model.pkl
       hash: md5
-      md5: f6f7d2832bfbd795008dfc54b4be0347
+      md5: e5e8069e19bef4cdf44101c133ae93ee
       size: 2273
   evaluate:
     cmd: uv run python src/main.py evaluate
@@ -109,20 +109,20 @@ stages:
       size: 8041
     - path: models/mlflow_run_id.json
       hash: md5
-      md5: 473e9901a9ccd5194191e054526d2235
+      md5: 605d5129089ee1f734b77f0c7aa28157
       size: 82
     - path: models/model.pkl
       hash: md5
-      md5: f6f7d2832bfbd795008dfc54b4be0347
+      md5: e5e8069e19bef4cdf44101c133ae93ee
       size: 2273
     - path: src/week_08_prefect_flow/evaluation.py
       hash: md5
-      md5: ba9698cbfcc07b5f943bbbbaa79b7e39
-      size: 11297
+      md5: a5d850f4d4aece242507998dfc4cab33
+      size: 11238
     - path: src/week_08_prefect_flow/fairness.py
       hash: md5
-      md5: 5f50b88876312fc1a9f095a3231b793b
-      size: 9202
+      md5: 70b661f14b99ac29c2b0e85316bbe9f9
+      size: 5261
     - path: src/week_08_prefect_flow/model.py
       hash: md5
       md5: 11d9da4a55d1c10c194ffc238cc446b8
@@ -201,14 +201,18 @@ stages:
       hash: md5
       md5: 638d4ebe56c881bedc2491b27dbf9aa2
       size: 4975
+    - path: models/mlflow_run_id.json
+      hash: md5
+      md5: 605d5129089ee1f734b77f0c7aa28157
+      size: 82
     - path: src/week_08_prefect_flow/baseline.py
       hash: md5
-      md5: 2349c347a397b95907e75217802f9951
-      size: 5766
+      md5: 5b9e353b2ce722025c536aa9ec31b8cf
+      size: 5729
     - path: src/week_08_prefect_flow/gates.py
       hash: md5
-      md5: 35ddc4d0799ff81dbb21f7c8a9c53d62
-      size: 21639
+      md5: c31dc20530abd4f6b5661f25c266061f
+      size: 19157
     - path: src/week_08_prefect_flow/pipeline.py
       hash: md5
       md5: 306280c0c32350a83ec60c1bbb7f1e4a
@@ -233,14 +237,13 @@ stages:
             min_f1: 0.5
             max_f1_gap: 0.1
           fairness:
-            axis: insulin_missing
-            max_selection_rate_gap: 0.1
-            max_tpr_gap: 0.2
-            report_only:
-            - age_band
-            - bmi_band
+            insulin_missing:
+              max_selection_rate_gap: 0.1
+              max_tpr_gap: 0.2
+            age_band:
+              max_tpr_gap: 0.25
     outs:
     - path: reports/gate.json
       hash: md5
-      md5: 7a67838b9ad371a6035a614e9ad7a93b
-      size: 4481
+      md5: da3611123490dfb22051cde40a260498
+      size: 4706

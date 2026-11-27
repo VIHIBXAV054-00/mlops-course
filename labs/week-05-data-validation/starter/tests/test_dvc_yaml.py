@@ -25,13 +25,11 @@ def _paths(entries) -> dict:
     return result
 
 
-@pytest.mark.skip(reason="Exercise 4 — write validate, the check in prepare and the validate stage, then delete this skip marker.")
 def test_validate_stage_runs_the_validate_command(stages) -> None:
     assert "validate" in stages, "dvc.yaml has no `validate` stage."
     assert stages["validate"].get("cmd") == "uv run python src/main.py validate"
 
 
-@pytest.mark.skip(reason="Exercise 4 — write validate, the check in prepare and the validate stage, then delete this skip marker.")
 def test_validate_declares_what_it_reads_and_writes(stages) -> None:
     deps = _paths(stages["validate"].get("deps"))
     for path in (
@@ -48,7 +46,6 @@ def test_validate_declares_what_it_reads_and_writes(stages) -> None:
     )
 
 
-@pytest.mark.skip(reason="Exercise 4 — write validate, the check in prepare and the validate stage, then delete this skip marker.")
 def test_prepare_waits_for_the_report(stages) -> None:
     deps = _paths(stages["prepare"].get("deps"))
     assert "reports/validation.json" in deps, (

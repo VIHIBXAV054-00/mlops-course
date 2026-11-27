@@ -7,15 +7,22 @@
 
 stages:
 
-  # TODO(student) Exercise 4: add a stage `validate`, run as
-  # `uv run python src/main.py validate`. Its deps are the data file and the three
-  # modules whose code it runs: pipeline.py, schemas.py and validation.py. Its out
-  # is the report; keep it in Git (`cache: false`). Then make `prepare` wait for it.
+  validate:
+    cmd: uv run python src/main.py validate
+    deps:
+      - data/measurements.csv
+      - src/week_05_data_validation/pipeline.py
+      - src/week_05_data_validation/schemas.py
+      - src/week_05_data_validation/validation.py
+    outs:
+      - reports/validation.json:
+          cache: false
 
   prepare:
     cmd: uv run python src/main.py prepare
     deps:
       - data/measurements.csv
+      - reports/validation.json
       - src/week_05_data_validation/pipeline.py
       - src/week_05_data_validation/data.py
     params:
